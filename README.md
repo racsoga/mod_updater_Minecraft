@@ -1,90 +1,143 @@
-# mod-updater
+<p align="center">
+  <img src="docs/images/logo.png" width="96" height="96" alt="Logo de Mod Updater: un yunque con una flecha de actualizar">
+</p>
 
-Actualizador de mods de Minecraft para **NeoForge 1.21.1**. Identifica cada `.jar` de la carpeta de mods por su hash en **CurseForge** (fuente principal) y **Modrinth** (respaldo) y muestra qué mods tienen versión nueva.
+<h1 align="center">Mod Updater</h1>
 
-> Por defecto **no modifica nada**: solo revisa y muestra una tabla.
+<p align="center">
+  Actualiza los mods de tu Minecraft en un clic, con copia de seguridad y botón de deshacer.
+</p>
 
-## Instalación
+<p align="center">
+  <a href="https://github.com/racsoga/mod_updater_Minecraft/actions/workflows/tests.yml"><img src="https://github.com/racsoga/mod_updater_Minecraft/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licencia-MIT-357a1f" alt="Licencia MIT"></a>
+  <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-1a1b1e" alt="Windows 10 y 11">
+</p>
+
+<p align="center"><b>Español</b> · <a href="README.en.md">English</a></p>
+
+<p align="center">
+  <img src="docs/images/resultados.png" width="820" alt="Pantalla de resultados: 3 mods tienen versión nueva y falta 1 dependencia">
+</p>
+
+## Qué hace
+
+Mod Updater revisa la carpeta `mods` de tu Minecraft, reconoce cada mod por su huella en **CurseForge** y **Modrinth**, y te dice cuáles tienen versión nueva. Tú eliges qué actualizar.
+
+- **Reconoce tus mods aunque hayas renombrado los archivos**: los identifica por su contenido, no por el nombre.
+- **Respeta tu versión y tu cargador de mods**: solo propone versiones para tu Minecraft (por ejemplo 1.21.1) y tu cargador (NeoForge, Forge, Fabric o Quilt). Los deduce de tus propios mods.
+- **Instala las dependencias que faltan**: si un mod necesita otro que no tienes, lo añade y te dice por qué ("MezzConfig hace falta para Just Enough Items").
+- **No rompe tu partida**: si una dependencia no se puede descargar, ese mod no se actualiza. Si tienes la versión estable de un mod, no te propone betas (salvo que lo actives).
+- **Siempre hay vuelta atrás**: antes de cambiar nada guarda una copia de tus mods. Al terminar puedes **Deshacer**.
+- **No toca nada con Minecraft abierto.**
+- En **español, inglés y catalán** (usa el idioma de Windows).
+
+<p align="center">
+  <img src="docs/images/flujo.gif" width="720" alt="Animación: se pulsa Actualizar, cada mod pasa por descargando, verificado y actualizado, y aparece la pantalla final">
+</p>
+
+## Descarga
+
+1. Ve a [**Releases**](https://github.com/racsoga/mod_updater_Minecraft/releases/latest) y descarga `ModUpdater.exe`.
+2. Ábrelo. No hace falta instalar nada.
+
+> **Haz una copia de tu carpeta `mods` la primera vez.** La app guarda copias de seguridad y permite deshacer, pero una copia tuya nunca está de más.
+
+**Requisitos:** Windows 10 u 11 de 64 bits, conexión a internet y el componente WebView2 de Microsoft (viene con Windows 11 y con Windows 10 actualizado).
+
+## Primer uso
+
+1. **Carpeta de mods.** La app propone `%APPDATA%\.minecraft\mods`. Si usas otro launcher (CurseForge, Prism, Modrinth App…), pulsa *Cambiar carpeta* y elige la carpeta `mods` de tu instancia.
+2. **Versión y cargador de mods.** Se deducen de tus mods; revisa que sean correctos.
+3. **Key de CurseForge** (opcional, pero recomendada). Sin ella solo se consulta Modrinth y algunos mods pueden salir como *No encontrado*. Ver [cómo conseguirla](#cómo-conseguir-la-key-de-curseforge).
+4. Pulsa **Revisar mis mods**, marca lo que quieras y pulsa **Actualizar**.
+
+## Cómo conseguir la key de CurseForge
+
+CurseForge exige que cada persona use **su propia key** (no se puede compartir ni incluir en la app).
+
+1. Entra en [console.curseforge.com](https://console.curseforge.com/) e inicia sesión (o crea una cuenta).
+2. Si te lo pide, crea una organización con cualquier nombre.
+3. Abre la sección **API Keys** y copia tu key.
+4. En Mod Updater, pégala en *Key de CurseForge* y pulsa **Probar**. Si sale "Key válida", ya está.
+
+## Preguntas frecuentes
+
+<details>
+<summary><b>Windows dice "Windows protegió tu PC" (SmartScreen). ¿Es peligroso?</b></summary>
+
+Sale porque el ejecutable no está firmado con un certificado de pago, no porque se haya detectado nada. Pulsa **Más información → Ejecutar de todas formas**. Si prefieres comprobarlo antes, cada Release incluye el resumen SHA-256 del `.exe` (`ModUpdater.exe.sha256`) y el código fuente completo está en este repositorio.
+</details>
+
+<details>
+<summary><b>¿Dónde se guarda mi key? ¿Es seguro?</b></summary>
+
+- Se guarda en el **Administrador de credenciales de Windows**, no en un archivo.
+- Nunca se muestra entera: solo los últimos 4 caracteres.
+- Solo se envía a los servidores de CurseForge (`api.curseforge.com` y su CDN de descargas). Ningún otro sitio la recibe, ni siquiera si una descarga redirige a otro servidor.
+- No aparece en registros ni mensajes de error.
+- Puedes borrarla en cualquier momento desde *Ajustes → Borrar key*.
+</details>
+
+<details>
+<summary><b>¿Y si una actualización rompe algo?</b></summary>
+
+Pulsa **Deshacer** en la pantalla final, o *Ajustes → Deshacer la última actualización*. Los archivos viejos vuelven a la carpeta `mods` y los nuevos se apartan (no se borran) en `.minecraft\mods_backup\<fecha>\undo`. En cada copia hay un `cambios.txt` que explica qué cambió.
+</details>
+
+<details>
+<summary><b>Un mod sale "Al día", pero en la web hay una versión más nueva.</b></summary>
+
+Si la versión más nueva es una **beta** y tú tienes la estable, la app no la propone y te avisa con "Hay una beta más reciente". Para que se propongan las betas, actívalas en *Ajustes*.
+</details>
+
+<details>
+<summary><b>¿Qué significa "Descarga manual"? ¿Y "No encontrado"?</b></summary>
+
+- **Descarga manual:** hay versión nueva, pero el autor no permite descargarla desde otras apps. Pulsa *Abrir página* y descárgala desde la web.
+- **No encontrado:** el archivo no está en CurseForge ni en Modrinth (un mod propio o descargado de otro sitio). Se deja como está.
+</details>
+
+<details>
+<summary><b>¿Funciona con Forge, Fabric u otras versiones de Minecraft?</b></summary>
+
+Sí. Elige la versión y el cargador en *Ajustes*. La app se ha probado sobre todo con NeoForge 1.21.1.
+</details>
+
+## Privacidad
+
+- **Sin telemetría ni estadísticas.** La app no envía datos de uso a nadie.
+- Para identificar tus mods envía a CurseForge y Modrinth la **huella** (hash) de cada archivo `.jar`, no el archivo ni tus datos.
+- Solo se conecta a `api.curseforge.com`, `api.modrinth.com` y a sus servidores de descarga e imágenes (`forgecdn.net`, `modrinth.com`).
+- Lo que guarda queda en tu PC: los ajustes en `%APPDATA%\mod_updater`, la key en el Administrador de credenciales y las copias en `.minecraft\mods_backup`.
+
+## Aviso
+
+Mod Updater es un proyecto personal **no oficial**. No está afiliado, patrocinado ni aprobado por Mojang Studios, Microsoft, CurseForge (Overwolf) ni Modrinth. *Minecraft* es una marca de Mojang Studios y Microsoft. Los mods pertenecen a sus autores; la app solo los descarga de las fuentes oficiales.
+
+## Para desarrolladores
+
+<details>
+<summary>Ejecutar desde el código, línea de comandos, tests y compilación</summary>
 
 ```bat
 python -m venv .venv
-.venv\Scripts\python -m pip install -r requirements.txt
+.venv\Scripts\python -m pip install -r requirements.txt -r requirements-dev.txt
+
+.venv\Scripts\python -m mod_updater.gui        :: la app (o doble clic en ModUpdater.pyw)
+.venv\Scripts\python -m mod_updater            :: CLI: revisa sin tocar nada
+.venv\Scripts\python -m mod_updater --apply    :: CLI: actualiza (pide confirmación)
+.venv\Scripts\python -m pytest                 :: tests
+.venv\Scripts\python -m PyInstaller packaging\ModUpdater.spec --noconfirm --distpath build/dist --workpath build/work
 ```
 
-Opcional:
-- `copy .env.example .env` y pon tu `CF_API_KEY`. Sin ella solo se consulta Modrinth.
-- `copy config.example.toml config.toml` para cambiar la carpeta, la versión de Minecraft o el loader.
+En desarrollo la key puede ir en un archivo `.env` (`CF_API_KEY=…`, ver `.env.example`); está en `.gitignore`.
 
-`.env` y `config.toml` están en `.gitignore`: **la API key nunca se sube al repo**.
+**Publicar una versión:** actualiza `CHANGELOG.md` y `mod_updater/__init__.py`, y crea una etiqueta `vX.Y.Z`. GitHub Actions pasa los tests, compila `ModUpdater.exe` con el icono y crea la Release con las notas del changelog.
 
-## App de escritorio
+Estructura y decisiones técnicas: [`docs/PLAN.md`](docs/PLAN.md) y [`docs/PLAN_v2.md`](docs/PLAN_v2.md).
+</details>
 
-Doble clic en **`ModUpdater.pyw`** (o `.venv\Scripts\python -m mod_updater.gui`). La primera vez pide la carpeta de mods (la deduce sola), la versión de Minecraft y el loader (también los deduce de tus mods) y la key de CurseForge, que se guarda en el **Administrador de credenciales de Windows**. Después revisa tus mods con una barra de progreso y muestra los resultados con filtros, búsqueda y casillas.
+## Licencia
 
-La app está en **español, inglés y catalán**: por defecto usa el idioma de la interfaz de Windows (si no es ninguno de esos, inglés) y se cambia en Ajustes → Idioma. En la CLI: `--lang es|en|ca`.
-
-Los ajustes de la app se guardan en `%APPDATA%\mod_updater\settings.json`. Al pulsar **Actualizar** se muestra el progreso de cada mod; al terminar puedes **Deshacer** (los jars viejos vuelven y los nuevos se apartan en la carpeta `undo` del backup, sin borrarse), abrir la carpeta de mods o volver a revisar. Si Minecraft está abierto con esa carpeta, la app no toca nada. En Ajustes también puedes deshacer la última actualización o borrar los backups.
-
-## Uso (línea de comandos)
-
-```bat
-.venv\Scripts\python -m mod_updater                       :: revisa y muestra la tabla (no toca nada)
-.venv\Scripts\python -m mod_updater --apply               :: revisa, pide confirmación y actualiza
-.venv\Scripts\python -m mod_updater --apply --yes         :: sin confirmación
-.venv\Scripts\python -m mod_updater --apply --only balm   :: actualiza solo algunos
-.venv\Scripts\python -m mod_updater --hide-up-to-date     :: oculta los mods al día
-.venv\Scripts\python -m mod_updater --only create,jei     :: filtra por nombre
-.venv\Scripts\python -m mod_updater --allow-beta          :: propone betas aunque tengas la release
-.venv\Scripts\python -m mod_updater --mods-dir "D:\otra\carpeta\mods"
-```
-
-Estados:
-
-| Estado | Significado |
-|---|---|
-| **Actualizable** | hay una versión nueva compatible (1.21.1 + NeoForge) |
-| **Al día** | ya tienes la última versión |
-| **Descarga manual** | hay versión nueva, pero no se puede descargar automáticamente (se muestra el enlace); también si le falta una dependencia no descargable |
-| **No encontrado** | no está en CurseForge ni en Modrinth; se deja como está |
-| **Nueva dependencia** | no está en tu carpeta, pero otro mod la necesita; se instalará |
-
-**Regla de canal:** si tu archivo es *release* solo se proponen releases; si es *beta* se permiten betas; si es *alpha*, alphas. `--allow-beta` permite betas siempre.
-
-Los hashes se guardan en `.cache/scan_cache.json` (dentro del proyecto, no en la carpeta de mods), así que la primera ejecución tarda unos segundos más.
-
-## Cómo actualiza (`--apply`)
-
-También puedes hacer doble clic en `actualizar.bat`. **Cierra Minecraft antes.**
-
-1. Descarga cada jar nuevo a un `.part` en `.minecraft\mods_backup\AAAA-MM-DD_HHMM\` y verifica su hash (sha512 o sha1).
-2. Solo si coincide, mueve el jar viejo a esa carpeta de backup y coloca el nuevo en `mods`.
-3. Si algo falla, el jar viejo sigue (o vuelve) a su sitio. **Nunca se borra nada.**
-4. `cambios.txt` en la carpeta de backup lista lo que cambió, para revertir a mano.
-
-Antes de tocar nada comprueba que Minecraft no esté abierto con esa carpeta. Se guarda solo el último backup (`backups_to_keep` en `config.toml` o `--keep-backups N`). Los mods duplicados en la carpeta se saltan.
-
-## Dependencias
-
-Antes de actualizar se leen las dependencias **requeridas** de cada versión nueva y también las de los mods ya instalados (detecta carpetas rotas). Si falta alguna, se añade al plan automáticamente y se avisa: *"Se instalará MezzConfig 0.7.1 (requerida por JEI)"*. Si una dependencia no se puede descargar, el mod que la necesita no se actualiza. Las dependencias sin ninguna versión para este Minecraft/loader (p. ej. "Create Fabric" declarada por un mod multi-loader) solo generan un aviso. La API key de CurseForge solo se envía a dominios de CurseForge, incluso si la descarga redirige a otro sitio.
-
-## Estado
-
-- [x] Hito 1: esqueleto del repo
-- [x] Hito 2: escaneo + fingerprint CurseForge (MurmurHash2) con tests, validado contra la API (125/125)
-- [x] Hito 3: Modrinth, tabla en modo revisión
-- [x] Hito 4: CurseForge como fuente principal, Modrinth como respaldo
-- [x] Hito 5: descarga + backup (`--apply`)
-- [x] Hito 6: dependencias automáticas
-- [x] Plan v2 pasos 1-3: CLI mejorada, dependencias y mockup validado (`design/mockup/resultados.html`)
-- [x] Plan v2 paso 4: app pywebview (Bienvenida/Ajustes, Escaneo, Resultados)
-- [x] Plan v2 paso 5: actualizar desde la app, pantalla final y Deshacer
-- [x] Idiomas: español, inglés y catalán
-- [x] Logo propio (yunque en pixel art), acento verde y colores por estado
-- [x] Ejecutable `ModUpdater.exe` (PyInstaller): `.venv\Scripts\python -m PyInstaller packaging\ModUpdater.spec --noconfirm --distpath build/dist --workpath build/work`
-- [ ] Release en GitHub
-
-## Tests
-
-```bat
-.venv\Scripts\python -m pytest
-```
+[MIT](LICENSE) © 2026 Oscar Gonzalez

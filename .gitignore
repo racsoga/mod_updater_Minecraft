@@ -20,3 +20,11 @@ mods_backup/
 # Compilación (PyInstaller)
 build/
 dist/
+
+# Archivos de trabajo locales (no van al repo)
+apple.com-DESIGN.md
+design/references/
+design/RECURSOS_DISENO_Y_CLAUDE.md
+.impeccable/
+.playwright-mcp/
+.vscode/

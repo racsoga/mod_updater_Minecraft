@@ -53,10 +53,22 @@
         emit("progress", { phase: "cf", label: "Consultando CurseForge" });
         setTimeout(() => emit("progress", { phase: "mr", label: "Consultando Modrinth" }), 300);
         setTimeout(() => emit("progress", { phase: "deps", label: "Comprobando dependencias" }), 600);
-        setTimeout(() => emit("results", { rows: JSON.parse(JSON.stringify(rows)),
-          details: ["Create: Escalated menciona Create Fabric como necesaria, pero no hay ninguna versión de Create Fabric para tu Minecraft y cargador de mods. Suele ser la versión para otro cargador: no tienes que hacer nada."],
-          notices: keySource && settings.use_curseforge ? [] : ["Sin key de CurseForge: solo se ha consultado Modrinth, así que algunos mods pueden salir como No encontrado."],
-          env: { mods_dir: settings.mods_dir, minecraft_version: settings.minecraft_version, loader: "NeoForge", curseforge: !!keySource } }), 900);
+        // Los textos que en la app real genera Python salen aquí de las mismas traducciones.
+        setTimeout(async () => {
+          const S = await strings(settings.language);
+          const fill = (key, p = {}) => S[key].replace(/\{(\w+)\}/g, (m, k) => p[k] ?? m);
+          const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+          const data = JSON.parse(JSON.stringify(rows)).map(r => {
+            if (r.s === "manual") r.sub = cap(fill("note.no_api_download"));
+            if (r.s === "dep") r.betaNote = fill("beta.only_published", { names: r.neededBy.join(", ") });
+            if (r.s === "up" && r.beta) r.betaNote = fill("beta.already");
+            return r;
+          });
+          emit("results", { rows: data,
+            details: [fill("deps.ignored", { parent: "Create: Escalated", dep: "Create Fabric" })],
+            notices: keySource && settings.use_curseforge ? [] : [fill("notice.no_key")],
+            env: { mods_dir: settings.mods_dir, minecraft_version: settings.minecraft_version, loader: "NeoForge", curseforge: !!keySource } });
+        }, 900);
       };
       tick(); return true;
     },

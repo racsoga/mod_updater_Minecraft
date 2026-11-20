@@ -1,6 +1,6 @@
 # Reglas del proyecto mod_updater_Minecraft
 
-Actualizador de mods de Minecraft (NeoForge 1.21.1) en Python. Planes: `PLAN.md` (v1, CLI) y `PLAN_v2.md` (interfaz gráfica). Repo privado: github.com/racsoga/mod_updater_Minecraft.
+Actualizador de mods de Minecraft (NeoForge 1.21.1) en Python. Planes: `docs/PLAN.md` (v1, CLI) y `docs/PLAN_v2.md` (interfaz gráfica). Repo privado: github.com/racsoga/mod_updater_Minecraft.
 
 ## Seguridad (obligatorio)
 - **Nunca** leer, imprimir, copiar ni commitear `.env`, la API key de CurseForge ni ninguna otra credencial. Para saber si hay key, basta con que el programa la use; no mostrarla ni en parte.
@@ -35,7 +35,7 @@ Actualizador de mods de Minecraft (NeoForge 1.21.1) en Python. Planes: `PLAN.md`
 - Probar la interfaz en navegador con el simulador: servir `mod_updater/gui/web` y abrir `index.html?mock` (`dev-mock.js`, no va en el .exe).
 
 ## Diseño (interfaz v2)
-- Estilo base: `apple.com-DESIGN.md` (raíz). Las referencias de `design/references/` son solo inspiración: usar únicamente lo que diga su sección "Préstamos".
+- Estilo base: `apple.com-DESIGN.md` (raíz, **solo local**: no está en el repo; tampoco `design/references/`). Las referencias de `design/references/` son solo inspiración: usar únicamente lo que diga su sección "Préstamos".
 - Tema oscuro, un único color de acento, sin degradados morados, emojis decorativos ni tarjetas con brillo.
 - Validar el mockup con el usuario antes de programar pantallas.
 
