@@ -1,0 +1,10 @@
+# Copia este archivo como config.toml para cambiar los valores por defecto.
+
+# Carpeta de mods. Admite variables de entorno de Windows.
+mods_dir = "%APPDATA%\.minecraft\mods"
+
+minecraft_version = "1.21.1"
+loader = "neoforge"
+
+# Modrinth exige un User-Agent que identifique el programa.
+user_agent = "racsoga/mod-updater/0.1 (github.com/racsoga/mod-updater)"

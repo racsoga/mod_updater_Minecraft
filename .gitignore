@@ -1,0 +1,15 @@
+# Secretos
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Datos locales
+.cache/
+config.toml
+mods_backup/
+*.jar
+*.part
