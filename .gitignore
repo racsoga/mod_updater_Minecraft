@@ -13,3 +13,6 @@ config.toml
 mods_backup/
 *.jar
 *.part
+
+# Capturas de revisión de diseño
+.playwright-mcp/
