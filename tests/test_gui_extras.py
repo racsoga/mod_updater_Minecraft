@@ -88,5 +88,5 @@ def test_state_has_strings_and_language_choice(tmp_path, mods_dir_factory=None):
     state = res["state"]
     assert state["lang"] == "en" and state["settings"]["language"] == "en"
     assert state["strings"]["ui.all_up_to_date"] == "Everything up to date"
-    assert [l["value"] for l in state["languages"]] == ["auto", "es", "en", "ca"]
-    assert a.get_strings("ca")["strings"]["ui.all_up_to_date"] == "Tot al dia"
+    assert [l["value"] for l in state["languages"]] == ["auto", "es", "en"]
+    assert a.get_strings("es")["strings"]["ui.all_up_to_date"] == "Todo al día"

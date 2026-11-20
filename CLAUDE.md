@@ -17,9 +17,9 @@ Actualizador de mods de Minecraft (NeoForge 1.21.1) en Python. Planes: `docs/PLA
 - Los tests no usan red: clientes HTTP y sesiones falsos (ver `tests/`).
 
 ## Idioma
-- **Ningún texto visible escrito directamente en el código.** Todo texto para el usuario (interfaz, mensajes de Python, CLI, `cambios.txt`) va en `mod_updater/locales/es.json`, `en.json` y `ca.json`, y se usa con `t("clave")` (Python: `mod_updater.i18n`; JS: `t()` en `app.js`; HTML: atributos `data-i18n*`).
-- Al añadir o cambiar un texto, hacerlo en los **tres** archivos con las mismas claves y los mismos `{parámetros}`. Plurales: `clave_one` / `clave_other` con `count`. `tests/test_i18n.py` lo comprueba.
-- Idioma por defecto: el de la **interfaz** de Windows (no la región); si no es es/en/ca, inglés. Ajustes → Idioma (app) o `--lang` / `language` en `config.toml` (CLI).
+- **Ningún texto visible escrito directamente en el código.** Todo texto para el usuario (interfaz, mensajes de Python, CLI, `cambios.txt`) va en `mod_updater/locales/es.json` y `en.json`, y se usa con `t("clave")` (Python: `mod_updater.i18n`; JS: `t()` en `app.js`; HTML: atributos `data-i18n*`).
+- Solo hay **dos idiomas: español e inglés** (el catalán se retiró por decisión del usuario). Al añadir o cambiar un texto, hacerlo en los **dos** archivos con las mismas claves y los mismos `{parámetros}`. Plurales: `clave_one` / `clave_other` con `count`. `tests/test_i18n.py` lo comprueba.
+- Idioma por defecto: el de la **interfaz** de Windows (no la región). Español para cualquier variante de español y también para catalán, gallego y euskera; inglés para cualquier otro idioma. Ajustes → Idioma (app) o `--lang` / `language` en `config.toml` (CLI).
 - La lógica nunca depende del texto traducido (p. ej. duplicados usan `Resolution.duplicate`, no buscar "duplicado" en la nota).
 - Estados visibles: claves `status.up|ok|manual|missing|dep` (es: *Actualizable*, *Al día*, *Descarga manual*, *No encontrado*, *Nueva dependencia*).
 - Commits, comentarios del código y documentación del repo: en **español**.

@@ -1,7 +1,8 @@
 """Traducciones: `mod_updater/locales/<idioma>.json`, compartidas por Python y la interfaz.
 
-- Idiomas: es, en, ca. Si una clave falta en un idioma se usa la de inglés.
-- "auto" = idioma de la interfaz de Windows (no la región). Si no está soportado, inglés.
+- Idiomas: es, en. Si una clave falta en un idioma se usa la de inglés.
+- "auto" = idioma de la interfaz de Windows (no la región): español para cualquier variante
+  de español y también para catalán, gallego y euskera; inglés para cualquier otro.
 - Plurales: `t("clave", count=n)` busca `clave_one` (n == 1) o `clave_other`.
 - Parámetros con llaves: `"Leyendo mods {done}/{total}"`.
 """
@@ -15,10 +16,13 @@ from functools import lru_cache
 from pathlib import Path
 
 LOCALES_DIR = Path(__file__).resolve().parent / "locales"
-SUPPORTED = ("es", "en", "ca")
+SUPPORTED = ("es", "en")
 FALLBACK = "en"
-# Idioma principal de un LANGID de Windows -> código (ver "Language Identifier Constants").
-_WINDOWS_PRIMARY = {0x0A: "es", 0x09: "en", 0x03: "ca"}
+# Idioma principal de un LANGID de Windows -> idioma de la app ("Language Identifier Constants").
+# Español: cualquier variante de español (0x0A) y catalán (0x03), gallego (0x56) y euskera (0x2D).
+_WINDOWS_PRIMARY = {0x0A: "es", 0x03: "es", 0x56: "es", 0x2D: "es", 0x09: "en"}
+# Lo mismo para códigos ISO (fuera de Windows): es, ca, gl, eu -> español.
+_ISO_TO_APP = {"es": "es", "ca": "es", "gl": "es", "eu": "es", "en": "en"}
 
 _current = FALLBACK
 
@@ -34,11 +38,11 @@ def system_language() -> str:
         except (AttributeError, OSError):
             return FALLBACK
     code = (os.environ.get("LANGUAGE") or os.environ.get("LANG") or (locale.getlocale()[0] or "")).lower()
-    return next((c for c in SUPPORTED if code.startswith(c)), FALLBACK)
+    return _ISO_TO_APP.get(code[:2], FALLBACK)
 
 
 def resolve(preference: str | None) -> str:
-    """'auto' / None / desconocido -> idioma del sistema; 'es'/'en'/'ca' -> tal cual."""
+    """'auto' / None / desconocido -> idioma del sistema; 'es'/'en' -> tal cual."""
     return preference if preference in SUPPORTED else system_language()
 
 

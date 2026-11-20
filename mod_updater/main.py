@@ -26,7 +26,7 @@ from .report import print_report
 from .resolver import INSTALL, resolve_all
 from .scanner import scan_folder
 
-# Se aceptan en cualquier idioma: s/si/sí (español, català), y/yes (English).
+# Se aceptan en cualquier idioma: s/si/sí (español), y/yes (English).
 YES_ANSWERS = {"s", "si", "sí", "y", "yes"}
 
 

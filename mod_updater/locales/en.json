@@ -202,7 +202,7 @@
   "cli.help_apply": "download and apply the updates",
   "cli.help_yes": "don't ask for confirmation with --apply",
   "cli.help_keep": "backups to keep (default from config, 1)",
-  "cli.help_lang": "language: auto (Windows'), es, en or ca",
+  "cli.help_lang": "language: auto (from Windows), es or en",
   "cli.header": "Mods folder: [bold]{path}[/]  (MC {version}, {loader})",
   "cli.hashing": "Computing hashes…",
   "cli.hashing_file": "Computing hashes: {name}",

@@ -49,7 +49,7 @@ from ..versions import minecraft_versions
 LOADER_LABEL = {"neoforge": "NeoForge", "forge": "Forge", "fabric": "Fabric", "quilt": "Quilt"}
 SOURCE_LABEL = {"curseforge": "CurseForge", "modrinth": "Modrinth"}
 STATUS_CODE = {ACTUALIZABLE: "up", AL_DIA: "ok", DESCARGA_MANUAL: "manual", NO_ENCONTRADO: "missing"}
-LANGUAGE_NAMES = {"es": "Español", "en": "English", "ca": "Català"}  # cada idioma en su propia lengua
+LANGUAGE_NAMES = {"es": "Español", "en": "English"}  # cada idioma en su propia lengua
 
 
 def _beta_note(r: Resolution, s: str, allow_beta: bool) -> str | None:

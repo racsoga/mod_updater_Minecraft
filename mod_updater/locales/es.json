@@ -202,7 +202,7 @@
   "cli.help_apply": "descargar y aplicar las actualizaciones",
   "cli.help_yes": "no pedir confirmación con --apply",
   "cli.help_keep": "backups a conservar (por defecto el de config, 1)",
-  "cli.help_lang": "idioma: auto (el de Windows), es, en o ca",
+  "cli.help_lang": "idioma: auto (el de Windows), es o en",
   "cli.header": "Carpeta de mods: [bold]{path}[/]  (MC {version}, {loader})",
   "cli.hashing": "Calculando hashes…",
   "cli.hashing_file": "Calculando hashes: {name}",

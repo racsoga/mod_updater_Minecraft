@@ -25,12 +25,12 @@
 Mod Updater revisa la carpeta `mods` de tu Minecraft, reconoce cada mod por su huella en **CurseForge** y **Modrinth**, y te dice cuáles tienen versión nueva. Tú eliges qué actualizar.
 
 - **Reconoce tus mods aunque hayas renombrado los archivos**: los identifica por su contenido, no por el nombre.
-- **Respeta tu versión y tu cargador de mods**: solo propone versiones para tu Minecraft (por ejemplo 1.21.1) y tu cargador (NeoForge, Forge, Fabric o Quilt). Los deduce de tus propios mods.
+- **Respeta tu versión y tu cargador de mods**: solo propone versiones para tu Minecraft (por ejemplo 1.21.1) y tu cargador, que deduce de tus propios mods. Pensado para NeoForge, Forge, Fabric y Quilt; probado con NeoForge 1.21.1.
 - **Instala las dependencias que faltan**: si un mod necesita otro que no tienes, lo añade y te dice por qué ("MezzConfig hace falta para Just Enough Items").
 - **No rompe tu partida**: si una dependencia no se puede descargar, ese mod no se actualiza. Si tienes la versión estable de un mod, no te propone betas (salvo que lo actives).
 - **Siempre hay vuelta atrás**: antes de cambiar nada guarda una copia de tus mods. Al terminar puedes **Deshacer**.
 - **No toca nada con Minecraft abierto.**
-- En **español, inglés y catalán** (usa el idioma de Windows).
+- En **español e inglés** (usa el idioma de Windows).
 
 <p align="center">
   <img src="docs/images/flujo.gif" width="720" alt="Animación: se pulsa Actualizar, cada mod pasa por descargando, verificado y actualizado, y aparece la pantalla final">
@@ -101,7 +101,7 @@ Si la versión más nueva es una **beta** y tú tienes la estable, la app no la 
 <details>
 <summary><b>¿Funciona con Forge, Fabric u otras versiones de Minecraft?</b></summary>
 
-Sí. Elige la versión y el cargador en *Ajustes*. La app se ha probado sobre todo con NeoForge 1.21.1.
+Está pensada para NeoForge, Forge, Fabric y Quilt, y para cualquier versión de Minecraft que tenga mods en CurseForge o Modrinth: elige la versión y el cargador en *Ajustes*. Pero **solo se ha probado con NeoForge 1.21.1**. Con otras combinaciones debería funcionar, aunque puede haber fallos; si encuentras alguno, [avísanos](https://github.com/racsoga/mod_updater_Minecraft/issues/new/choose).
 </details>
 
 ## Privacidad

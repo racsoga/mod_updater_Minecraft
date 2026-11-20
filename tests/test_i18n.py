@@ -25,7 +25,7 @@ def test_all_languages_have_the_same_keys():
 def test_placeholders_match_across_languages():
     for key, text in LOCALES["es"].items():
         expected = set(PLACEHOLDER.findall(text))
-        for code in ("en", "ca"):
+        for code in i18n.SUPPORTED:
             assert set(PLACEHOLDER.findall(LOCALES[code][key])) == expected, f"{code}:{key}"
 
 
@@ -60,8 +60,7 @@ def test_plural_and_params():
     assert t("ui.selected", count=5, selected=3) == "3 de 5 cambios seleccionados"
     i18n.set_language("en")
     assert t("ui.selected", count=1, selected=1) == "1 of 1 change selected"
-    i18n.set_language("ca")
-    assert t("ui.go_update", count=2) == "Actualitzar 2 mods"
+    assert t("ui.go_update", count=2) == "Update 2 mods"
 
 
 def test_unknown_key_and_missing_param_do_not_crash():
@@ -70,8 +69,12 @@ def test_unknown_key_and_missing_param_do_not_crash():
 
 
 @pytest.mark.real_language
-@pytest.mark.parametrize("langid,expected", [(0x0C0A, "es"), (0x080A, "es"), (0x0409, "en"), (0x0809, "en"),
-                                             (0x0403, "ca"), (0x040C, "en"), (0x0407, "en")])
+@pytest.mark.parametrize("langid,expected", [
+    (0x0C0A, "es"), (0x080A, "es"), (0x040A, "es"),  # español (España, México, tradicional)
+    (0x0403, "es"), (0x0456, "es"), (0x042D, "es"),  # catalán, gallego y euskera -> español
+    (0x0409, "en"), (0x0809, "en"),                  # inglés
+    (0x040C, "en"), (0x0407, "en"), (0x0416, "en"),  # francés, alemán, portugués -> inglés
+])
 def test_windows_ui_language(monkeypatch, langid, expected):
     import ctypes
 
@@ -87,11 +90,28 @@ def test_windows_ui_language(monkeypatch, langid, expected):
 
 @pytest.mark.real_language
 def test_resolve_preference(monkeypatch):
-    monkeypatch.setattr(i18n, "system_language", lambda: "ca")
-    assert i18n.resolve("auto") == "ca"
-    assert i18n.resolve(None) == "ca"
-    assert i18n.resolve("xx") == "ca"
-    assert i18n.resolve("en") == "en"
+    monkeypatch.setattr(i18n, "system_language", lambda: "en")
+    assert i18n.resolve("auto") == "en"
+    assert i18n.resolve(None) == "en"
+    assert i18n.resolve("xx") == "en"
+    assert i18n.resolve("ca") == "en"  # catalán ya no es un idioma de la app: se usa el del sistema
+    assert i18n.resolve("es") == "es"
+
+
+def test_only_spanish_and_english():
+    assert i18n.SUPPORTED == ("es", "en")
+    assert sorted(p.stem for p in i18n.LOCALES_DIR.glob("*.json")) == ["en", "es"]
+
+
+@pytest.mark.real_language
+@pytest.mark.parametrize("env,expected", [("es_ES.UTF-8", "es"), ("ca_ES.UTF-8", "es"), ("gl_ES", "es"),
+                                          ("eu_ES", "es"), ("en_US.UTF-8", "en"), ("fr_FR", "en"), ("", "en")])
+def test_non_windows_language(monkeypatch, env, expected):
+    monkeypatch.setattr(i18n.os, "name", "posix")
+    monkeypatch.setenv("LANGUAGE", env)
+    monkeypatch.delenv("LANG", raising=False)
+    monkeypatch.setattr(i18n.locale, "getlocale", lambda: (None, None))
+    assert i18n.system_language() == expected
 
 
 def test_cli_help_uses_language():

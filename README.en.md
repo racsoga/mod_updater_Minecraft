@@ -25,12 +25,12 @@
 Mod Updater checks your Minecraft `mods` folder, recognises each mod by its fingerprint on **CurseForge** and **Modrinth**, and tells you which ones have a new version. You choose what to update.
 
 - **Recognises your mods even if you renamed the files**: it identifies them by their content, not their name.
-- **Respects your game version and mod loader**: it only suggests versions for your Minecraft (e.g. 1.21.1) and your loader (NeoForge, Forge, Fabric or Quilt). It works these out from your own mods.
+- **Respects your game version and mod loader**: it only suggests versions for your Minecraft (e.g. 1.21.1) and your loader, which it works out from your own mods. Designed for NeoForge, Forge, Fabric and Quilt; tested with NeoForge 1.21.1.
 - **Installs missing dependencies**: if a mod needs another one you don't have, it adds it and tells you why ("Just Enough Items needs MezzConfig").
 - **Doesn't break your game**: if a dependency can't be downloaded, that mod isn't updated. If you have a mod's stable version, it won't suggest betas (unless you enable them).
 - **There's always a way back**: a copy of your mods is saved before anything changes. When it finishes you can **Undo**.
 - **Never touches anything while Minecraft is open.**
-- In **English, Spanish and Catalan** (it follows your Windows language).
+- In **English and Spanish** (it follows your Windows language).
 
 <p align="center">
   <img src="docs/images/flujo.gif" width="720" alt="Animation (in Spanish): Update is pressed, each mod goes through downloading, verified and updated, and the final screen appears">
@@ -101,7 +101,7 @@ If the newer version is a **beta** and you have the stable one, the app doesn't 
 <details>
 <summary><b>Does it work with Forge, Fabric or other Minecraft versions?</b></summary>
 
-Yes. Choose the version and loader in *Settings*. The app has mostly been tested with NeoForge 1.21.1.
+It's designed for NeoForge, Forge, Fabric and Quilt, and for any Minecraft version that has mods on CurseForge or Modrinth: choose the version and loader in *Settings*. But **it has only been tested with NeoForge 1.21.1**. Other combinations should work, but there may be bugs; if you find one, [let us know](https://github.com/racsoga/mod_updater_Minecraft/issues/new/choose).
 </details>
 
 ## Privacy

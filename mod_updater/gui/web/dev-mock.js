@@ -6,13 +6,13 @@
   const params = new URLSearchParams(location.search);
   const CDN = "https://media.forgecdn.net/avatars/thumbnails/";
   const loaders = ["forge", "fabric", "quilt", "neoforge"].map(v => ({ value: v, label: { neoforge: "NeoForge", forge: "Forge", fabric: "Fabric", quilt: "Quilt" }[v] }));
-  const languages = [{ value: "auto", label: null }, { value: "es", label: "Español" }, { value: "en", label: "English" }, { value: "ca", label: "Català" }];
+  const languages = [{ value: "auto", label: null }, { value: "es", label: "Español" }, { value: "en", label: "English" }];
   const settings = { mods_dir: "C:\\Users\\Ana\\AppData\\Roaming\\.minecraft\\mods", minecraft_version: "1.21.1", loader: "neoforge",
     allow_beta: false, backups_to_keep: 1, setup_done: params.has("done"), use_curseforge: true, language: params.get("lang") || "auto" };
   let keySource = params.get("key") || null;   // null | "env" | "keyring"
   const cache = {};
   const load = async code => (cache[code] ??= await (await fetch(`../../locales/${code}.json`)).json());
-  const resolve = code => (["es", "en", "ca"].includes(code) ? code : "es");
+  const resolve = code => (["es", "en"].includes(code) ? code : "es");
   const strings = async code => ({ ...(await load("en")), ...(await load(resolve(code))) });
   const state = async () => ({ settings: { ...settings }, default_mods_dir: settings.mods_dir,
     folder: { exists: true, jars: 125, minecraft_version: "1.21.1", loader: "neoforge" },
@@ -24,8 +24,9 @@
   const rows = [
     { s: "dep", name: "MezzConfig", from: null, to: "0.7.1", icon: CDN + "2038/374/256/256/639246433191280078.png", beta: true,
       betaNote: "Única versión publicada; la requiere Just Enough Items (JEI)", src: "CurseForge", sub: "", neededBy: ["Just Enough Items (JEI)"], checked: true },
-    { s: "manual", name: "Sophisticated Backpacks", from: "3.26.22", to: "3.26.31", icon: CDN + "375/56/256/256/637549610342642859.png", src: "CurseForge",
-      sub: "El autor no permite descargarlo automáticamente", neededBy: [], checked: false, url: "https://www.curseforge.com/minecraft/mc-mods/sophisticated-backpacks" },
+    // Mod INVENTADO para enseñar el estado "Descarga manual" (no atribuirlo a un mod real).
+    { s: "manual", name: "Mod de ejemplo", nameEn: "Example Mod", from: "1.4.0", to: "1.5.2", icon: null, src: "CurseForge",
+      sub: "", neededBy: [], checked: false, url: "https://example.com" },
     up("Balm", "21.0.56", "21.0.67", "1107/117/256/256/638657111836546584.png"),
     up("Accessories", "1.1.0-beta.52", "1.1.0-beta.54", "948/913/256/256/638436487112587498.png", "Versión beta: ya usas la beta de este mod"),
     up("Curios API", "9.5.1", "9.6.0", "195/772/256/256/636881112930494939.png"),
@@ -59,7 +60,7 @@
           const fill = (key, p = {}) => S[key].replace(/\{(\w+)\}/g, (m, k) => p[k] ?? m);
           const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
           const data = JSON.parse(JSON.stringify(rows)).map(r => {
-            if (r.s === "manual") r.sub = cap(fill("note.no_api_download"));
+            if (r.s === "manual") { r.sub = cap(fill("note.no_api_download")); if (resolve(settings.language) === "en" && r.nameEn) r.name = r.nameEn; }
             if (r.s === "dep") r.betaNote = fill("beta.only_published", { names: r.neededBy.join(", ") });
             if (r.s === "up" && r.beta) r.betaNote = fill("beta.already");
             return r;

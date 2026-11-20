@@ -12,5 +12,5 @@ user_agent = "racsoga/mod-updater/0.1 (github.com/racsoga/mod_updater_Minecraft)
 # Cuántos backups de actualizaciones se guardan en .minecraft/mods_backup (el resto se borra).
 backups_to_keep = 1
 
-# Idioma de la CLI: "auto" (el de la interfaz de Windows), "es", "en" o "ca".
+# Idioma de la CLI: "auto" (el de la interfaz de Windows), "es" o "en".
 language = "auto"

@@ -14,7 +14,8 @@ Primera versión con ventana propia.
 - **Dependencias automáticas**: si a un mod le falta otro que necesita, se instala con él. Si no se puede descargar, el mod no se actualiza para no romper el juego.
 - Avisa si un mod al día tiene una **beta más reciente**.
 - No toca nada si **Minecraft está abierto** con esa carpeta.
-- **Idiomas**: español, inglés y catalán (usa el idioma de Windows; se cambia en Ajustes).
+- **Idiomas**: español e inglés. Usa el idioma de Windows (español si es español, catalán, gallego o euskera; inglés en el resto) y se cambia en Ajustes.
+- Pensado para NeoForge, Forge, Fabric y Quilt; **probado con NeoForge 1.21.1**.
 - Versión de Minecraft y cargador de mods **deducidos de tus mods**, con desplegable de versiones reales.
 - La key de CurseForge se guarda en el **Administrador de credenciales de Windows**.
 - Ajustes: carpeta, key, betas, número de copias que se guardan, borrar copias e idioma.
