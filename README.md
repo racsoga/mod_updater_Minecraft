@@ -23,7 +23,7 @@ Doble clic en **`ModUpdater.pyw`** (o `.venv\Scripts\python -m mod_updater.gui`)
 
 La app está en **español, inglés y catalán**: por defecto usa el idioma de la interfaz de Windows (si no es ninguno de esos, inglés) y se cambia en Ajustes → Idioma. En la CLI: `--lang es|en|ca`.
 
-Los ajustes de la app se guardan en `%APPDATA%\mod_updater\settings.json`. Actualizar desde la ventana llega en la siguiente versión; mientras, usa `actualizar.bat`.
+Los ajustes de la app se guardan en `%APPDATA%\mod_updater\settings.json`. Al pulsar **Actualizar** se muestra el progreso de cada mod; al terminar puedes **Deshacer** (los jars viejos vuelven y los nuevos se apartan en la carpeta `undo` del backup, sin borrarse), abrir la carpeta de mods o volver a revisar. Si Minecraft está abierto con esa carpeta, la app no toca nada. En Ajustes también puedes deshacer la última actualización o borrar los backups.
 
 ## Uso (línea de comandos)
 
@@ -77,7 +77,9 @@ Antes de actualizar se leen las dependencias **requeridas** de cada versión nue
 - [x] Hito 6: dependencias automáticas
 - [x] Plan v2 pasos 1-3: CLI mejorada, dependencias y mockup validado (`design/mockup/resultados.html`)
 - [x] Plan v2 paso 4: app pywebview (Bienvenida/Ajustes, Escaneo, Resultados)
-- [ ] Plan v2 paso 5: actualizar desde la app, pantalla final y Deshacer
+- [x] Plan v2 paso 5: actualizar desde la app, pantalla final y Deshacer
+- [x] Idiomas: español, inglés y catalán
+- [ ] Plan v2 pasos 6-7: ejecutable (.exe) y Release en GitHub
 
 ## Tests
 

@@ -60,7 +60,29 @@
       };
       tick(); return true;
     },
-    apply: async () => ({ ok: false, message: "La actualización desde la ventana llega en la siguiente versión." }),
+    apply: async ids => {
+      if (params.has("mcopen")) return { ok: false, reason: "minecraft", message: "Minecraft está abierto con esta carpeta. Ciérralo y vuelve a pulsar el botón." };
+      const chosen = rows.filter(r => ids.includes(r.id));
+      let done = 0;
+      const step = params.has("slow") ? 4000 : 250;
+      chosen.forEach((r, i) => {
+        const fail = r.name === "Curios API" && params.has("fail");
+        setTimeout(() => emit("apply_progress", { id: r.id, state: "downloading", done, total: chosen.length }), step * i + 50);
+        if (!fail) setTimeout(() => emit("apply_progress", { id: r.id, state: "verified", done, total: chosen.length }), step * i + 150);
+        setTimeout(() => { done++; emit("apply_progress", { id: r.id, state: fail ? "error" : r.s === "dep" ? "installed" : "done",
+          message: fail ? "descarga fallida: HTTP 503 al descargar" : "", done, total: chosen.length }); }, step * i + 240);
+      });
+      setTimeout(() => {
+        const failed = params.has("fail") ? chosen.filter(r => r.name === "Curios API").map(r => ({ name: r.name, message: "descarga fallida: HTTP 503 al descargar" })) : [];
+        const okRows = chosen.filter(r => !failed.some(f => f.name === r.name));
+        emit("apply_done", { updated: okRows.filter(r => r.s === "up").length, installed: okRows.filter(r => r.s === "dep").length, failed,
+          backup: { path: "C:\\Users\\Ana\\AppData\\Roaming\\.minecraft\\mods_backup\\2026-11-20_1930", date: "2026-11-20T19:30:00", changes: okRows.length, undone: false, undoable: okRows.length > 0 }, pruned: 1 });
+      }, step * chosen.length + 400);
+      return { ok: true, total: chosen.length };
+    },
+    undo_last: async () => ({ ok: true, restored: 3, removed: 4, errors: [], message: "Hecho: 3 mods vuelven a su versión anterior (4 archivos nuevos apartados en la copia)." }),
+    backups_info: async () => ({ count: 2, last: { path: "C:\\…\\mods_backup\\2026-11-20_1930", date: "2026-11-20T19:30:00", changes: 4, undone: false, undoable: true } }),
+    clear_backups: async () => ({ ok: true, count: 2, message: "2 backups borrados." }),
     open_url: async () => true,
     open_mods_folder: async () => true,
     quit: async () => {},

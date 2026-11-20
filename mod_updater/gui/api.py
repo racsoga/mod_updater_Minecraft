@@ -8,7 +8,7 @@ Reglas:
 - La API key nunca sale de Python: el JS solo recibe `key_hint` (••••1a2b).
 - El escaneo y las consultas van en un hilo aparte para no congelar la ventana.
 - Todos los textos salen de locales/<idioma>.json (el JS recibe las cadenas en `strings`).
-- Nada aquí modifica la carpeta de mods (eso es el paso 5, `apply`).
+- Solo `apply` y `undo_last` modifican la carpeta de mods, y nunca con Minecraft abierto.
 """
 
 from __future__ import annotations
@@ -26,10 +26,20 @@ from .. import credentials, i18n
 from ..config import DEFAULT_USER_AGENT, default_mods_dir
 from ..curseforge import LOADER_TYPES, CurseForgeAuthError, CurseForgeClient
 from ..deps import DependencyFinder, DepPlan, plan_with_dependencies
-from ..downloader import updatable
+from ..downloader import (
+    Outcome,
+    apply_updates,
+    backup_info,
+    clear_backups,
+    list_backups,
+    prune_backups,
+    undo_backup,
+    updatable,
+)
 from ..i18n import t
 from ..modrinth import ModrinthClient
 from ..net import ApiError
+from ..procs import minecraft_running
 from ..resolver import ACTUALIZABLE, AL_DIA, DESCARGA_MANUAL, INSTALL, NO_ENCONTRADO, Resolution, resolve_all
 from ..scanner import peek_folder, scan_folder
 from ..settings import Settings, app_dir, load_settings, save_settings
@@ -104,6 +114,7 @@ class Api:
         mr_factory: Callable = ModrinthClient,
         run_async: Callable | None = None,
         cache_dir: Path | None = None,
+        running: Callable = minecraft_running,
     ):
         self._settings_file = settings_file
         self._get_key = get_key
@@ -111,6 +122,9 @@ class Api:
         self._mr_factory = mr_factory
         self._run_async = run_async or (lambda fn: threading.Thread(target=fn, daemon=True).start())
         self._cache_dir = cache_dir
+        self._running = running
+        self._rows: list[Resolution] = []   # mismo orden que las filas enviadas al JS
+        self._row_s: list[str] = []         # estado de cada fila ("up", "dep", ...)
         self._window = None
         self._busy = threading.Lock()
         self._results: list[Resolution] = []
@@ -279,6 +293,8 @@ class Api:
         self._results, self._plan = results, plan
 
         data = serialize(results, plan, allow_beta=s.allow_beta)
+        self._rows = plan.installs + results
+        self._row_s = [row["s"] for row in data["rows"]]
         data["notices"] = notices
         data["env"] = {
             "mods_dir": str(s.mods_path),
@@ -291,8 +307,95 @@ class Api:
     # ------------------------------------------------------------------ acciones
 
     def apply(self, ids: list[int]) -> dict:
-        # Paso 5 del plan: descarga con progreso, pantalla final y Deshacer.
-        return {"ok": False, "message": t("apply.not_yet")}
+        """Aplica los cambios elegidos (filas "up" y "dep") en segundo plano.
+
+        Emite "apply_progress" {id, state, message?, done, total} y al final "apply_done".
+        """
+        if self._plan is None:
+            return {"ok": False, "message": t("apply.no_scan")}
+        chosen = [self._rows[i] for i in sorted(set(ids)) if 0 <= i < len(self._rows) and self._row_s[i] in ("up", "dep")]
+        if not chosen:
+            return {"ok": False, "message": t("apply.nothing")}
+        s = self._settings()
+        if self._running(s.mods_path.parent):
+            return {"ok": False, "reason": "minecraft", "message": t("apply.minecraft_open")}
+        if not self._busy.acquire(blocking=False):
+            return {"ok": False, "message": t("apply.busy")}
+        self._run_async(lambda: self._apply(chosen, s))
+        return {"ok": True, "total": len(chosen)}
+
+    def _apply(self, chosen: list[Resolution], s: Settings) -> None:
+        index = {id(r): i for i, r in enumerate(self._rows)}
+        total, done = len(chosen), 0
+        try:
+            key = self._get_key()[0] if s.use_curseforge else None
+            cf = self._cf_factory(key) if key else None
+            mr = self._mr_factory(DEFAULT_USER_AGENT)
+
+            def on_state(res: Resolution, state) -> None:
+                nonlocal done
+                payload = {"id": index[id(res)], "total": total}
+                if isinstance(state, Outcome):
+                    done += 1
+                    payload |= {"state": ("installed" if res.kind == INSTALL else "done") if state.ok else "error",
+                                "message": "" if state.ok else state.message}
+                else:
+                    payload["state"] = state
+                self._emit("apply_progress", payload | {"done": done})
+
+            backup_dir, outcomes = apply_updates(
+                chosen, s.mods_path,
+                modrinth_session=mr.session, curseforge_session=cf.session if cf else None,
+                on_state=on_state,
+            )
+            ok = [o for o in outcomes if o.ok]
+            pruned = prune_backups(s.mods_path, s.backups_to_keep) if ok else []
+            self._plan = None  # la revisión ya no refleja la carpeta: hay que volver a revisar
+            self._emit("apply_done", {
+                "updated": sum(1 for o in ok if o.resolution.kind != INSTALL),
+                "installed": sum(1 for o in ok if o.resolution.kind == INSTALL),
+                "failed": [{"name": o.resolution.name, "message": o.message} for o in outcomes if not o.ok],
+                "backup": backup_info(backup_dir) if backup_dir.exists() else None,
+                "pruned": len(pruned),
+            })
+        except Exception as exc:  # noqa: BLE001 - la ventana no debe quedarse colgada
+            self._emit("apply_done", {"updated": 0, "installed": 0, "failed": [], "backup": None, "pruned": 0,
+                                      "error": t("scan.err_unknown", error=type(exc).__name__)})
+        finally:
+            self._busy.release()
+
+    # ------------------------------------------------------------------ backups y deshacer
+
+    def backups_info(self) -> dict:
+        backups = list_backups(self._settings().mods_path)
+        return {"count": len(backups), "last": backup_info(backups[-1]) if backups else None}
+
+    def undo_last(self) -> dict:
+        """Deshace la última actualización (la del backup más reciente)."""
+        s = self._settings()
+        backups = list_backups(s.mods_path)
+        if not backups or not backup_info(backups[-1])["undoable"]:
+            return {"ok": False, "message": t("undo.none")}
+        if self._running(s.mods_path.parent):
+            return {"ok": False, "reason": "minecraft", "message": t("undo.minecraft_open")}
+        if not self._busy.acquire(blocking=False):
+            return {"ok": False, "message": t("apply.busy")}
+        try:
+            r = undo_backup(backups[-1])
+        finally:
+            self._busy.release()
+        self._plan = None
+        return {"ok": not r.errors, "restored": r.restored, "removed": r.removed, "errors": r.errors,
+                "message": t("undo.done", count=r.restored, removed=r.removed)}
+
+    def clear_backups(self) -> dict:
+        if not self._busy.acquire(blocking=False):
+            return {"ok": False, "message": t("apply.busy")}
+        try:
+            n = clear_backups(self._settings().mods_path)
+        finally:
+            self._busy.release()
+        return {"ok": True, "count": n, "message": t("backups.cleared", count=n)}
 
     def open_url(self, url: str) -> bool:
         if urlparse(url or "").scheme not in ("http", "https"):

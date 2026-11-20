@@ -256,6 +256,28 @@ a:hover { text-decoration: underline; }
 .summary .safe::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--link); margin-right: 8px; vertical-align: 2px; }
 .summary .warn { display: block; margin-top: 2px; font-size: 14px; color: var(--warn); }
 
+/* ------------------------------------------------ actualizando / final */
+.apply-row { grid-template-columns: 32px minmax(160px, 1fr) minmax(0, 300px) 150px; }
+.state { justify-self: start; display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: var(--muted-strong); }
+.state::before { content: ""; width: 8px; height: 8px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--edge); }
+.state.downloading { color: var(--text); }
+.state.downloading::before { box-shadow: inset 0 0 0 1.5px var(--link); animation: pulse 1s ease-in-out infinite; }
+.state.verified { color: var(--text); }
+.state.verified::before { box-shadow: none; background: var(--link); opacity: 0.6; }
+.state.done, .state.installed { color: var(--text); }
+.state.done::before, .state.installed::before { box-shadow: none; background: var(--accent); }
+.state.error { color: var(--error); }
+.state.error::before { box-shadow: none; background: var(--error); }
+@keyframes pulse { 50% { opacity: 0.35; } }
+.done-actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+.undo-help { margin-top: 12px; min-height: 20px; }
+.failed { margin-top: 32px; max-width: 760px; }
+.failed h3 { margin: 0 0 10px; font-size: 15px; font-weight: 600; }
+.failed ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--muted); font-size: 14px; }
+.failed li b { color: var(--text); font-weight: 500; }
+.backup-actions { margin-top: 14px; }
+.btn-small.danger { color: var(--error); border-color: rgba(255, 105, 97, 0.5); }
+
 /* ------------------------------------------------ ventanas estrechas */
 @media (max-width: 860px) {
   .app { padding: 0 16px 200px; }
@@ -272,6 +294,9 @@ a:hover { text-decoration: underline; }
   .row .badge { grid-column: 3; grid-row: 3; }
   .row .source { grid-column: 4; grid-row: 3; }
   .row:not(.manual) .source { display: none; }
+  .apply-row { grid-template-columns: 32px minmax(0, 1fr) auto; }
+  .apply-row .ver { grid-column: 2 / 4; grid-row: 2; }
+  .apply-row .state { grid-column: 3; grid-row: 1; }
   .group-head { padding: 18px 16px 6px; }
   .details { padding: 0 16px; }
   .list, .panel { border-radius: 20px; }

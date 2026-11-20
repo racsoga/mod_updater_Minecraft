@@ -43,8 +43,8 @@ let pendingFolder = null;  // carpeta elegida y aún no guardada
 /* ================================================================ pantallas */
 
 function show(screen) {
-  for (const s of ["setup", "scan", "results"]) $(`#screen-${s}`).hidden = s !== screen;
-  $("#btn-settings").hidden = screen === "setup";
+  for (const s of ["setup", "scan", "results", "apply", "done"]) $(`#screen-${s}`).hidden = s !== screen;
+  $("#btn-settings").hidden = screen === "setup" || screen === "apply";
   $("#btn-rescan").hidden = screen !== "results";
   $("#actionbar").hidden = screen !== "results";
   for (const chip of [$("#chip-folder"), $("#chip-env")]) chip.hidden = screen === "setup" || !chip.textContent.trim();
@@ -133,6 +133,7 @@ async function openSetup(mode) {
   keyStatus();
 
   $("#advanced").hidden = first;
+  if (!first) refreshBackups();
   $("#allow-beta").checked = !!s.allow_beta;
   $("#backups").value = s.backups_to_keep;
   fillLanguages(s.language || "auto");
@@ -370,10 +371,92 @@ function summary() {
     + (warn || `<span class="safe">${esc(t("ui.safe"))}</span>`);
 }
 
+/* ================================================================ actualizando / final */
+
+let APPLY = [];  // filas que se están aplicando
+
+async function startApply() {
+  const chosen = MODS.filter(m => m.checked);
+  const res = await api().apply(chosen.map(m => m.id));
+  if (!res.ok) {
+    $("#summary").innerHTML = `<span class="count">${esc(t("ui.cannot_start"))}</span><span class="warn">${esc(res.message)}</span>`;
+    return;
+  }
+  APPLY = chosen.map(m => ({ ...m, state: "queued", message: "" }));
+  $("#apply-label").textContent = t("ui.apply_count", { done: 0, count: APPLY.length });
+  $("#apply-bar > span").style.width = "0%";
+  renderApply();
+  show("apply");
+}
+
+function renderApply() {
+  $("#apply-list").innerHTML = APPLY.map(m => `<div class="row apply-row">
+    ${logo(m)}
+    <div class="name"><div class="title">${esc(m.name)}</div>${m.message ? `<div class="sub warn">${esc(m.message)}</div>` : ""}</div>
+    ${versions(m)}
+    <span class="state ${m.state}">${esc(t(`ui.state_${m.state}`))}</span>
+  </div>`).join("");
+}
+
+function onApplyProgress(p) {
+  const m = APPLY.find(x => x.id === p.id);
+  if (m) { m.state = p.state; m.message = p.message || ""; }
+  $("#apply-label").textContent = t("ui.apply_count", { done: p.done, count: p.total });
+  const pct = (p.done / p.total) * 100;
+  $("#apply-bar > span").style.width = `${pct}%`;
+  $("#apply-bar").setAttribute("aria-valuenow", String(Math.round(pct)));
+  renderApply();
+}
+
+function showDone(r) {
+  const parts = [];
+  if (r.updated) parts.push(t("ui.done_updated", { count: r.updated }));
+  if (r.installed) parts.push(t("ui.done_installed", { count: r.installed }));
+  const title = parts.length ? parts.join(t("ui.and")) : t("ui.done_none");
+  $("#done-title").textContent = title.charAt(0).toUpperCase() + title.slice(1) + ".";
+  const deck = [];
+  if (r.error) deck.push(r.error);
+  if (r.backup && r.backup.changes) deck.push(t("ui.done_backup", { path: shortPath(r.backup.path) }));
+  if (r.updated || r.installed) deck.push(t("ui.done_restart"));
+  $("#done-deck").textContent = deck.join(" ");
+  $("#btn-undo").hidden = !(r.backup && r.backup.undoable);
+  $("#btn-undo").disabled = false;
+  $("#undo-help").textContent = "";
+  $("#done-failed").hidden = !r.failed.length;
+  $("#done-failed-title").textContent = t("ui.done_failed", { count: r.failed.length });
+  $("#done-failed-list").innerHTML = r.failed.map(f => `<li><b>${esc(f.name)}</b>: ${esc(f.message)}</li>`).join("");
+  DATA = null;  // la revisión anterior ya no vale
+  show("done");
+}
+
+async function refreshBackups(clearHelp = true) {
+  const info = await api().backups_info();
+  const undo = $("#btn-undo-last"), clear = $("#btn-clear-backups");
+  undo.disabled = !(info.last && info.last.undoable);
+  undo.title = info.last && info.last.undoable
+    ? t("ui.undo_last_info", { date: formatDate(info.last.date), count: info.last.changes }) : t("ui.undo_last_none");
+  clear.disabled = !info.count;
+  clear.dataset.count = String(info.count);
+  delete clear.dataset.confirm;
+  clear.classList.remove("danger");
+  clear.textContent = t("ui.clear_backups");
+  if (clearHelp) {
+    $("#backups-help").className = "help";
+    $("#backups-help").textContent = info.count ? t("ui.backups_count", { count: info.count }) : t("ui.no_backups");
+  }
+}
+
+function formatDate(iso) {
+  if (!iso) return "";
+  try { return new Date(iso).toLocaleString(LANG, { dateStyle: "medium", timeStyle: "short" }); } catch { return iso; }
+}
+
 /* ================================================================ eventos */
 
 window.onBackend = (event, payload) => {
-  if (event === "progress") onProgress(payload);
+  if (event === "apply_progress") onApplyProgress(payload);
+  else if (event === "apply_done") showDone(payload);
+  else if (event === "progress") onProgress(payload);
   else if (event === "results") { setProgress(100); showResults(payload); }
   else if (event === "error") {
     $("#scan-error-text").textContent = payload.message;
@@ -469,10 +552,39 @@ function wire() {
     $("#key-help").className = "help";
     $("#key-help").textContent = t("ui.key_forgotten");
   });
-  $("#go").addEventListener("click", async () => {
-    const ids = MODS.filter(m => m.checked).map(m => m.id);
-    const res = await api().apply(ids);
-    if (!res.ok) $("#summary").innerHTML = `<span class="count">${esc(t("ui.not_available"))}</span><span class="warn">${esc(res.message)}</span>`;
+  $("#go").addEventListener("click", startApply);
+  $("#btn-open-folder").addEventListener("click", () => api().open_mods_folder());
+  $("#btn-check-again").addEventListener("click", startScan);
+  $("#btn-undo").addEventListener("click", async () => {
+    const btn = $("#btn-undo");
+    btn.disabled = true;
+    const res = await api().undo_last();
+    const help = $("#undo-help");
+    help.className = `help undo-help ${res.ok ? "ok" : "bad"}`;
+    help.textContent = [res.message, ...(res.errors || [])].join(" ");
+    if (res.ok || res.restored || res.removed) {
+      $("#done-title").textContent = t("ui.undone_title");
+      btn.hidden = true;
+    } else btn.disabled = false;
+  });
+  $("#btn-undo-last").addEventListener("click", async () => {
+    const res = await api().undo_last();
+    $("#backups-help").className = `help ${res.ok ? "ok" : "bad"}`;
+    $("#backups-help").textContent = [res.message, ...(res.errors || [])].join(" ");
+    refreshBackups(false);
+  });
+  $("#btn-clear-backups").addEventListener("click", async () => {
+    const btn = $("#btn-clear-backups");
+    if (!btn.dataset.confirm) {  // primer clic: pedir confirmación en el propio botón
+      btn.dataset.confirm = "1";
+      btn.textContent = t("ui.clear_confirm", { count: Number(btn.dataset.count || 0) });
+      btn.classList.add("danger");
+      return;
+    }
+    const res = await api().clear_backups();
+    $("#backups-help").className = "help ok";
+    $("#backups-help").textContent = res.message;
+    refreshBackups(false);
   });
 }
 
