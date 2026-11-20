@@ -64,6 +64,8 @@ button, input, select { font: inherit; color: inherit; }
 /* ------------------------------------------------ barra superior */
 .topbar { display: flex; align-items: center; gap: 12px; height: 64px; border-bottom: 1px solid var(--rule); }
 .brand { font-family: var(--pixel); font-size: 18px; letter-spacing: 0.02em; margin: 0; font-weight: 400; white-space: nowrap; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-logo { width: 32px; height: 32px; image-rendering: pixelated; flex: none; }
 .topbar .spacer { flex: 1; }
 .chip {
   display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 8px; line-height: 16px;

@@ -79,7 +79,9 @@ Antes de actualizar se leen las dependencias **requeridas** de cada versión nue
 - [x] Plan v2 paso 4: app pywebview (Bienvenida/Ajustes, Escaneo, Resultados)
 - [x] Plan v2 paso 5: actualizar desde la app, pantalla final y Deshacer
 - [x] Idiomas: español, inglés y catalán
-- [ ] Plan v2 pasos 6-7: ejecutable (.exe) y Release en GitHub
+- [x] Logo propio (yunque en pixel art), acento verde y colores por estado
+- [x] Ejecutable `ModUpdater.exe` (PyInstaller): `.venv\Scripts\python -m PyInstaller packaging\ModUpdater.spec --noconfirm --distpath build/dist --workpath build/work`
+- [ ] Release en GitHub
 
 ## Tests
 

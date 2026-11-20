@@ -15,6 +15,7 @@ for f in WEB.rglob("*"):
         datas.append((str(f), str(f.parent.relative_to(ROOT))))
 for f in (ROOT / "mod_updater" / "locales").glob("*.json"):
     datas.append((str(f), "mod_updater/locales"))
+datas.append((str(ICON), "assets"))  # icono de la ventana (gui/app.py lo busca en assets/)
 
 a = Analysis(  # noqa: F821
     [str(ROOT / "packaging" / "launcher.py")],
