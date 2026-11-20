@@ -84,6 +84,11 @@ class CurseForgeClient:
             raise ApiError(f"CurseForge {method} {path}: HTTP {resp.status_code} {resp.text[:200]}")
         return resp.json().get("data")
 
+    def check(self) -> None:
+        """Petición mínima para comprobar la key. Lanza CurseForgeAuthError si no vale."""
+        if self._call("GET", f"/v1/games/{MINECRAFT_GAME_ID}") is None:
+            raise ApiError("CurseForge no ha respondido como se esperaba")
+
     # ------------------------------------------------------------------ identificación
 
     def match_fingerprints(self, fingerprints: list[int]) -> dict[int, CfMatch]:

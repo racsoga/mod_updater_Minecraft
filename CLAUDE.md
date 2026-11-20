@@ -27,6 +27,8 @@ Actualizador de mods de Minecraft (NeoForge 1.21.1) en Python. Planes: `PLAN.md`
 - `deps.py` plan de dependencias requeridas (recursivo, bloquea si una dependencia no es descargable).
 - `downloader.py` descarga verificada, backup en `.minecraft\mods_backup\<fecha>\` con `cambios.json`, poda de backups.
 - `procs.py` detecta Minecraft abierto; `main.py` CLI; `report.py` tabla.
+- `gui/` app pywebview: `api.py` (puente JS↔Python, la key nunca sale de Python), `web/` (HTML/CSS/JS, fuentes incluidas). `settings.py` ajustes en `%APPDATA%\mod_updater`, `credentials.py` key en keyring.
+- Probar la interfaz en navegador con el simulador: servir `mod_updater/gui/web` y abrir `index.html?mock` (`dev-mock.js`, no va en el .exe).
 
 ## Diseño (interfaz v2)
 - Estilo base: `apple.com-DESIGN.md` (raíz). Las referencias de `design/references/` son solo inspiración: usar únicamente lo que diga su sección "Préstamos".

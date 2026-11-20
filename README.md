@@ -17,7 +17,13 @@ Opcional:
 
 `.env` y `config.toml` están en `.gitignore`: **la API key nunca se sube al repo**.
 
-## Uso
+## App de escritorio
+
+Doble clic en **`ModUpdater.pyw`** (o `.venv\Scripts\python -m mod_updater.gui`). La primera vez pide la carpeta de mods (la deduce sola), la versión de Minecraft y el loader (también los deduce de tus mods) y la key de CurseForge, que se guarda en el **Administrador de credenciales de Windows**. Después revisa tus mods con una barra de progreso y muestra los resultados con filtros, búsqueda y casillas.
+
+Los ajustes de la app se guardan en `%APPDATA%\mod_updater\settings.json`. Actualizar desde la ventana llega en la siguiente versión; mientras, usa `actualizar.bat`.
+
+## Uso (línea de comandos)
 
 ```bat
 .venv\Scripts\python -m mod_updater                       :: revisa y muestra la tabla (no toca nada)
@@ -67,7 +73,9 @@ Antes de actualizar se leen las dependencias **requeridas** de cada versión nue
 - [x] Hito 4: CurseForge como fuente principal, Modrinth como respaldo
 - [x] Hito 5: descarga + backup (`--apply`)
 - [x] Hito 6: dependencias automáticas
-- [ ] Plan v2: interfaz gráfica (ver `PLAN_v2.md`)
+- [x] Plan v2 pasos 1-3: CLI mejorada, dependencias y mockup validado (`design/mockup/resultados.html`)
+- [x] Plan v2 paso 4: app pywebview (Bienvenida/Ajustes, Escaneo, Resultados)
+- [ ] Plan v2 paso 5: actualizar desde la app, pantalla final y Deshacer
 
 ## Tests
 

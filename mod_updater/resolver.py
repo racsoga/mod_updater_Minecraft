@@ -63,6 +63,7 @@ class Resolution:
     project_name: str | None = None
     project_url: str | None = None
     slug: str | None = None
+    icon_url: str | None = None
     current_version: str | None = None
     current_channel: str | None = None
     current_date: str | None = None
@@ -187,6 +188,7 @@ def resolve_with_modrinth(
             project_name=project.get("title"),
             project_url=f"https://modrinth.com/mod/{project.get('slug') or cur.project_id}",
             slug=project.get("slug"),
+            icon_url=project.get("icon_url"),
             current_version=cur.version_number or mod.version,
             current_channel=cur.version_type,
             current_date=cur.date_published,
@@ -275,6 +277,7 @@ def resolve_with_curseforge(
             project_name=info.get("name"),
             project_url=cf_project_url(info, match.mod_id),
             slug=info.get("slug"),
+            icon_url=(info.get("logo") or {}).get("thumbnailUrl"),
             current_version=mod.version or cur.display_name,
             current_channel=cur.version_type,
             current_date=cur.date_published,
@@ -317,6 +320,7 @@ def resolve_all(
     loader: str,
     game_version: str,
     allow_beta: bool = False,
+    on_phase=None,
 ) -> list[Resolution]:
     """CurseForge como fuente principal y Modrinth como respaldo.
 
@@ -326,10 +330,14 @@ def resolve_all(
     `deps.py` usa para saber qué dependencias ya están instaladas.
     """
     opts = dict(loader=loader, game_version=game_version, allow_beta=allow_beta)
+    phase = on_phase or (lambda text: None)
     if curseforge is None:
+        phase("Consultando Modrinth")
         return resolve_with_modrinth(mods, modrinth, **opts)
 
+    phase("Consultando CurseForge")
     cf_results = resolve_with_curseforge(mods, curseforge, **opts)
+    phase("Consultando Modrinth")
     need_mr = [r.mod for r in cf_results if r.status in (NO_ENCONTRADO, DESCARGA_MANUAL)]
     mr_by_path = {r.mod.path: r for r in resolve_with_modrinth(need_mr, modrinth, **opts)} if need_mr else {}
 

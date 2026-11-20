@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter
 import re
 import tomllib
 import zipfile
@@ -20,7 +21,7 @@ from pathlib import Path
 
 from .murmur2 import curseforge_fingerprint
 
-CACHE_VERSION = 1
+CACHE_VERSION = 2  # 2: añade loader y mc_range
 
 
 @dataclass
@@ -35,6 +36,8 @@ class ModFile:
     mod_name: str | None = None
     version: str | None = None
     extra_mod_ids: list[str] = field(default_factory=list)
+    loader: str | None = None
+    mc_range: str | None = None
 
     @property
     def display_name(self) -> str:
@@ -56,25 +59,53 @@ def compute_hashes(data: bytes) -> dict:
 _MANIFEST_VERSION = re.compile(r"^Implementation-Version:\s*(.+)$", re.MULTILINE)
 
 
+def _fabric_metadata(jar: zipfile.ZipFile) -> dict:
+    try:
+        data = json.loads(jar.read("fabric.mod.json").decode("utf-8", errors="replace"))
+    except (ValueError, KeyError):
+        return {"loader": "fabric"}
+    mc = (data.get("depends") or {}).get("minecraft") if isinstance(data, dict) else None
+    return {
+        "loader": "fabric",
+        "mod_id": data.get("id"),
+        "mod_name": data.get("name"),
+        "version": data.get("version") if isinstance(data.get("version"), str) else None,
+        "mc_range": mc if isinstance(mc, str) else None,
+    }
+
+
+def _mc_range(data: dict, mod_id: str | None) -> str | None:
+    """versionRange de la dependencia `minecraft` en un mods.toml."""
+    deps = data.get("dependencies") or {}
+    groups = [deps.get(mod_id)] if mod_id and isinstance(deps.get(mod_id), list) else []
+    groups += [v for v in deps.values() if isinstance(v, list)]
+    for group in groups:
+        for d in group or []:
+            if isinstance(d, dict) and d.get("modId") == "minecraft" and isinstance(d.get("versionRange"), str):
+                return d["versionRange"]
+    return None
+
+
 def read_metadata(jar: zipfile.ZipFile) -> dict:
-    """Lee modId, nombre y versión de neoforge.mods.toml (o mods.toml)."""
+    """Lee modId, nombre, versión, loader y rango de Minecraft del jar."""
     names = set(jar.namelist())
     toml_name = next(
         (n for n in ("META-INF/neoforge.mods.toml", "META-INF/mods.toml") if n in names),
         None,
     )
     if toml_name is None:
-        return {}
+        return _fabric_metadata(jar) if "fabric.mod.json" in names else {}
+    loader = "neoforge" if toml_name.startswith("META-INF/neoforge") else "forge"
 
     try:
         raw = jar.read(toml_name).decode("utf-8", errors="replace")
         data = tomllib.loads(raw)
     except (tomllib.TOMLDecodeError, KeyError, zipfile.BadZipFile):
-        return {}
+        return {"loader": loader}
 
     mods = data.get("mods") or []
     if not isinstance(mods, list) or not mods or not isinstance(mods[0], dict):
-        return {}
+        return {"loader": loader}
     first = mods[0]
     version = first.get("version")
 
@@ -88,11 +119,54 @@ def read_metadata(jar: zipfile.ZipFile) -> dict:
                 version = m.group(1).strip()
 
     return {
+        "loader": loader,
         "mod_id": first.get("modId"),
         "mod_name": first.get("displayName"),
         "version": version if isinstance(version, str) else None,
         "extra_mod_ids": [m.get("modId") for m in mods[1:] if isinstance(m, dict) and m.get("modId")],
+        "mc_range": _mc_range(data, first.get("modId")),
     }
+
+
+# --------------------------------------------------------------------------- entorno
+
+_VERSION = re.compile(r"\d+\.\d+(?:\.\d+)?")
+
+
+def _lower_bound(version_range: str) -> str | None:
+    """`[1.21.1,1.21.2)` → `1.21.1`; `>=1.21.1` → `1.21.1`; `~1.21` → `1.21`."""
+    m = _VERSION.search(version_range or "")
+    return m.group(0) if m else None
+
+
+def peek_folder(mods_dir: Path) -> dict:
+    """Vistazo rápido (sin hashes) para la pantalla de bienvenida: cuántos jars
+    hay y qué versión de Minecraft y loader se deducen. Solo lectura."""
+    if not mods_dir.is_dir():
+        return {"exists": False, "jars": 0, "minecraft_version": None, "loader": None}
+    infos = []
+    jars = [p for p in mods_dir.iterdir() if p.is_file() and p.suffix.lower() == ".jar"]
+    for path in jars:
+        try:
+            with zipfile.ZipFile(path) as jar:
+                meta = read_metadata(jar)
+        except (zipfile.BadZipFile, OSError):
+            continue
+        infos.append(ModFile(path=path, file_name=path.name, size=0, sha1="", sha512="", cf_fingerprint=0,
+                             loader=meta.get("loader"), mc_range=meta.get("mc_range")))
+    mc, loader = detect_environment(infos)
+    return {"exists": True, "jars": len(jars), "minecraft_version": mc, "loader": loader}
+
+
+def detect_environment(mods: list["ModFile"]) -> tuple[str | None, str | None]:
+    """Deduce (versión de Minecraft, loader) a partir de los jars: el loader más
+    frecuente y la cota inferior de versión más frecuente (prefiriendo x.y.z)."""
+    loaders = Counter(m.loader for m in mods if m.loader)
+    loader = loaders.most_common(1)[0][0] if loaders else None
+    bounds = [b for b in (_lower_bound(m.mc_range) for m in mods if m.mc_range) if b]
+    full = Counter(b for b in bounds if b.count(".") == 2)
+    pick = full or Counter(bounds)
+    return (pick.most_common(1)[0][0] if pick else None), loader
 
 
 # --------------------------------------------------------------------------- caché
@@ -132,11 +206,12 @@ def scan_file(path: Path) -> dict:
     return info
 
 
-def scan_folder(mods_dir: Path, cache_path: Path | None = None, progress=None) -> list[ModFile]:
+def scan_folder(mods_dir: Path, cache_path: Path | None = None, progress=None, on_item=None) -> list[ModFile]:
     """Escanea todos los .jar de `mods_dir` (no recursivo).
 
     `progress`, si se pasa, es un callable(path) que se invoca antes de
-    procesar cada archivo que no esté en caché.
+    procesar cada archivo que no esté en caché. `on_item`, si se pasa, es un
+    callable(índice, total, path) que se invoca para cada jar (en caché o no).
     """
     if not mods_dir.is_dir():
         raise FileNotFoundError(f"No existe la carpeta de mods: {mods_dir}")
@@ -146,7 +221,9 @@ def scan_folder(mods_dir: Path, cache_path: Path | None = None, progress=None) -
     result: list[ModFile] = []
 
     jars = sorted(p for p in mods_dir.iterdir() if p.is_file() and p.suffix.lower() == ".jar")
-    for path in jars:
+    for i, path in enumerate(jars, 1):
+        if on_item:
+            on_item(i, len(jars), path)
         st = path.stat()
         key = f"{path.name}|{st.st_size}|{st.st_mtime_ns}"
         info = cache.get(key)
@@ -167,6 +244,8 @@ def scan_folder(mods_dir: Path, cache_path: Path | None = None, progress=None) -
                 mod_name=info.get("mod_name"),
                 version=info.get("version"),
                 extra_mod_ids=info.get("extra_mod_ids", []),
+                loader=info.get("loader"),
+                mc_range=info.get("mc_range"),
             )
         )
 
