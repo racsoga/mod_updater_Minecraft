@@ -34,10 +34,11 @@ Estados:
 
 | Estado | Significado |
 |---|---|
-| `actualizable` | hay una versión más nueva y compatible (1.21.1 + NeoForge) |
-| `al día` | ya tienes la última versión compatible |
-| `solo manual` | hay versión nueva pero ni CurseForge ni Modrinth permiten descargarla por API (se muestra el enlace) |
-| `desconocido` | no se ha identificado el archivo (no se toca) |
+| **Actualizable** | hay una versión nueva compatible (1.21.1 + NeoForge) |
+| **Al día** | ya tienes la última versión |
+| **Descarga manual** | hay versión nueva, pero no se puede descargar automáticamente (se muestra el enlace); también si le falta una dependencia no descargable |
+| **No encontrado** | no está en CurseForge ni en Modrinth; se deja como está |
+| **Nueva dependencia** | no está en tu carpeta, pero otro mod la necesita; se instalará |
 
 **Regla de canal:** si tu archivo es *release* solo se proponen releases; si es *beta* se permiten betas; si es *alpha*, alphas. `--allow-beta` permite betas siempre.
 
@@ -52,7 +53,11 @@ También puedes hacer doble clic en `actualizar.bat`. **Cierra Minecraft antes.*
 3. Si algo falla, el jar viejo sigue (o vuelve) a su sitio. **Nunca se borra nada.**
 4. `cambios.txt` en la carpeta de backup lista lo que cambió, para revertir a mano.
 
-Los mods duplicados en la carpeta se saltan. La API key de CurseForge solo se envía a dominios de CurseForge, incluso si la descarga redirige a otro sitio.
+Antes de tocar nada comprueba que Minecraft no esté abierto con esa carpeta. Se guarda solo el último backup (`backups_to_keep` en `config.toml` o `--keep-backups N`). Los mods duplicados en la carpeta se saltan.
+
+## Dependencias
+
+Antes de actualizar se leen las dependencias **requeridas** de cada versión nueva y también las de los mods ya instalados (detecta carpetas rotas). Si falta alguna, se añade al plan automáticamente y se avisa: *"Se instalará MezzConfig 0.7.1 (requerida por JEI)"*. Si una dependencia no se puede descargar, el mod que la necesita no se actualiza. Las dependencias sin ninguna versión para este Minecraft/loader (p. ej. "Create Fabric" declarada por un mod multi-loader) solo generan un aviso. La API key de CurseForge solo se envía a dominios de CurseForge, incluso si la descarga redirige a otro sitio.
 
 ## Estado
 
@@ -61,7 +66,8 @@ Los mods duplicados en la carpeta se saltan. La API key de CurseForge solo se en
 - [x] Hito 3: Modrinth, tabla en modo revisión
 - [x] Hito 4: CurseForge como fuente principal, Modrinth como respaldo
 - [x] Hito 5: descarga + backup (`--apply`)
-- [ ] Hito 6: dependencias
+- [x] Hito 6: dependencias automáticas
+- [ ] Plan v2: interfaz gráfica (ver `PLAN_v2.md`)
 
 ## Tests
 

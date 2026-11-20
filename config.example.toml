@@ -8,3 +8,6 @@ loader = "neoforge"
 
 # Modrinth exige un User-Agent que identifique el programa.
 user_agent = "racsoga/mod-updater/0.1 (github.com/racsoga/mod_updater_Minecraft)"
+
+# Cuántos backups de actualizaciones se guardan en .minecraft/mods_backup (el resto se borra).
+backups_to_keep = 1

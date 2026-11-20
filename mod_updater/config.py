@@ -26,6 +26,7 @@ class Config:
     loader: str = "neoforge"
     user_agent: str = DEFAULT_USER_AGENT
     cf_api_key: str | None = None
+    backups_to_keep: int = 1
     cache_dir: Path = PROJECT_ROOT / ".cache"
 
     @property
@@ -49,4 +50,5 @@ def load_config(config_path: Path | None = None) -> Config:
         loader=data.get("loader", "neoforge"),
         user_agent=data.get("user_agent", DEFAULT_USER_AGENT),
         cf_api_key=os.environ.get("CF_API_KEY") or None,
+        backups_to_keep=int(data.get("backups_to_keep", 1)),
     )

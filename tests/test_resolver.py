@@ -5,8 +5,8 @@ from mod_updater.modrinth import MrFile, MrVersion
 from mod_updater.resolver import (
     ACTUALIZABLE,
     AL_DIA,
-    DESCONOCIDO,
-    SOLO_MANUAL,
+    NO_ENCONTRADO,
+    DESCARGA_MANUAL,
     choose_update,
     max_allowed_rank,
     resolve_with_modrinth,
@@ -125,8 +125,8 @@ def test_resolve_states():
     assert r["a.jar"].new_version == "1.1"
     assert r["a.jar"].project_name == "P1"
     assert r["b.jar"].status == AL_DIA
-    assert r["c.jar"].status == SOLO_MANUAL
-    assert r["d.jar"].status == DESCONOCIDO
+    assert r["c.jar"].status == DESCARGA_MANUAL
+    assert r["d.jar"].status == NO_ENCONTRADO
 
 
 def test_resolve_falls_back_to_history_when_latest_is_beta():
@@ -211,7 +211,7 @@ def test_cf_primary_and_modrinth_fallback():
     r = run_all(cf, mr, [cf_mod("a.jar", "h1", 100), cf_mod("b.jar", "h2", 200), cf_mod("c.jar", "h3", 300)])
     assert (r["a.jar"].source, r["a.jar"].status, r["a.jar"].new_version) == ("curseforge", ACTUALIZABLE, "v11")
     assert (r["b.jar"].source, r["b.jar"].status) == ("modrinth", ACTUALIZABLE)
-    assert r["c.jar"].status == DESCONOCIDO
+    assert r["c.jar"].status == NO_ENCONTRADO
 
 
 def test_cf_without_download_url_uses_modrinth():
@@ -230,7 +230,7 @@ def test_cf_without_download_url_and_no_modrinth_is_manual():
     new = cf_file(11, 1, "release", "2024-02-01", url=None)
     cf = FakeCf(matches={100: CfMatch(1, cur)}, index={1: [11]}, files={11: new})
     r = run_all(cf, FakeClient(current={}, latest={}), [cf_mod("a.jar", "h1", 100)])
-    assert r["a.jar"].status == SOLO_MANUAL
+    assert r["a.jar"].status == DESCARGA_MANUAL
     assert "curseforge.com" in r["a.jar"].note or "mod1" in r["a.jar"].note
 
 

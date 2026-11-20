@@ -1,23 +1,32 @@
 """Decide, para cada jar, si hay una versión nueva y de dónde sacarla.
 
 CurseForge es la fuente principal y Modrinth el respaldo (ver `resolve_all`).
+Las dependencias se planifican aparte, en `deps.py`.
 """
 
 from __future__ import annotations
 
 import re
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol, Sequence, TypeVar
 
 from .curseforge import CfFile, CurseForgeClient, latest_file_ids
 from .modrinth import ModrinthClient, MrVersion
 from .scanner import ModFile
 
+# Estados (los textos para el usuario están en report.py)
 AL_DIA = "al_dia"
 ACTUALIZABLE = "actualizable"
-DESCONOCIDO = "desconocido"
-SOLO_MANUAL = "solo_manual"
+DESCARGA_MANUAL = "descarga_manual"
+NO_ENCONTRADO = "no_encontrado"
+
+# Tipo de entrada del plan
+UPDATE = "update"  # un jar instalado (se actualice o no)
+INSTALL = "install"  # una dependencia nueva que no está en la carpeta
+
+CF = "curseforge"
+MR = "modrinth"
 
 CHANNEL_RANK = {"release": 1, "beta": 2, "alpha": 3}
 
@@ -31,16 +40,32 @@ class VersionLike(Protocol):
 V = TypeVar("V", bound=VersionLike)
 
 
-@dataclass
+@dataclass(frozen=True)
+class Dep:
+    """Dependencia requerida: proyecto en una fuente, y versión mínima si la fuente la da."""
+
+    source: str
+    id: str
+    version_id: str | None = None
+
+    @property
+    def key(self) -> tuple[str, str]:
+        return (self.source, self.id)
+
+
+@dataclass(eq=False)
 class Resolution:
-    mod: ModFile
+    mod: ModFile | None
     status: str
+    kind: str = UPDATE
     source: str | None = None
     project_id: str | None = None
     project_name: str | None = None
     project_url: str | None = None
+    slug: str | None = None
     current_version: str | None = None
     current_channel: str | None = None
+    current_date: str | None = None
     new_version: str | None = None
     new_channel: str | None = None
     new_file_name: str | None = None
@@ -48,10 +73,27 @@ class Resolution:
     new_sha1: str | None = None
     new_sha512: str | None = None
     note: str = ""
+    current_deps: list[Dep] = field(default_factory=list)
+    new_deps: list[Dep] = field(default_factory=list)
+    known_ids: set[tuple[str, str]] = field(default_factory=set)
+    required_by: list[str] = field(default_factory=list)
 
     @property
     def name(self) -> str:
-        return self.project_name or self.mod.display_name
+        if self.project_name:
+            return self.project_name
+        return self.mod.display_name if self.mod else (self.new_file_name or "?")
+
+    def add_note(self, text: str) -> None:
+        self.note = "; ".join(filter(None, [self.note, text]))
+
+
+def cf_deps(file: CfFile) -> list[Dep]:
+    return [Dep(CF, str(mid)) for mid in file.required_mod_ids]
+
+
+def mr_deps(version: MrVersion) -> list[Dep]:
+    return [Dep(MR, pid, vid) for pid, vid in version.required_deps if pid]
 
 
 # --------------------------------------------------------------------------- regla de canal
@@ -81,6 +123,16 @@ def choose_update(current: VersionLike, candidates: Sequence[V], allow_beta: boo
     if best.id == current.id or best.date_published <= current.date_published:
         return None
     return best
+
+
+def choose_for_install(candidates: Sequence[V], allow_beta: bool) -> V | None:
+    """Versión para instalar algo nuevo: la release más reciente (o beta con
+    `allow_beta`). Si solo hay betas/alphas, la más reciente de ellas."""
+    if not candidates:
+        return None
+    limit = CHANNEL_RANK["beta"] if allow_beta else CHANNEL_RANK["release"]
+    allowed = [c for c in candidates if CHANNEL_RANK.get(c.version_type, 3) <= limit]
+    return max(allowed or candidates, key=lambda c: c.date_published)
 
 
 # --------------------------------------------------------------------------- versión legible
@@ -122,7 +174,7 @@ def resolve_with_modrinth(
         cur = current.get(mod.sha1)
         if cur is None:
             results.append(
-                Resolution(mod=mod, status=DESCONOCIDO, current_version=mod.version, note="no está en Modrinth")
+                Resolution(mod=mod, status=NO_ENCONTRADO, current_version=mod.version, note="no está en Modrinth")
             )
             continue
 
@@ -130,16 +182,19 @@ def resolve_with_modrinth(
         res = Resolution(
             mod=mod,
             status=AL_DIA,
-            source="modrinth",
+            source=MR,
             project_id=cur.project_id,
             project_name=project.get("title"),
             project_url=f"https://modrinth.com/mod/{project.get('slug') or cur.project_id}",
+            slug=project.get("slug"),
             current_version=cur.version_number or mod.version,
             current_channel=cur.version_type,
+            current_date=cur.date_published,
+            current_deps=mr_deps(cur),
+            known_ids={(MR, cur.project_id)},
         )
-        notes = []
         if dup_count[cur.project_id] > 1:
-            notes.append("¡duplicado en la carpeta!")
+            res.add_note("¡duplicado en la carpeta!")
 
         cand = latest.get(mod.sha1)
         candidates: list[MrVersion] = [cand] if cand else []
@@ -147,13 +202,14 @@ def resolve_with_modrinth(
             # La última es de un canal no permitido: buscar en el historial.
             candidates = client.project_versions(cur.project_id, loader, game_version)
         if not candidates:
-            notes.append(f"sin versiones para {game_version}/{loader}")
+            res.add_note(f"sin versiones para {game_version}/{loader}")
 
         new = choose_update(cur, candidates, allow_beta)
         if new is not None:
             f = new.primary_file
             res.new_version = new.version_number
             res.new_channel = new.version_type
+            res.new_deps = mr_deps(new)
             if f and f.url:
                 res.status = ACTUALIZABLE
                 res.new_file_name = f.filename
@@ -161,14 +217,19 @@ def resolve_with_modrinth(
                 res.new_sha1 = f.sha1
                 res.new_sha512 = f.sha512
             else:
-                res.status = SOLO_MANUAL
-                notes.append("sin archivo descargable")
-        res.note = "; ".join(notes)
+                res.status = DESCARGA_MANUAL
+                res.add_note("sin archivo descargable")
         results.append(res)
     return results
 
 
 # --------------------------------------------------------------------------- CurseForge
+
+def cf_project_url(info: dict, mod_id: int | str) -> str:
+    return (info.get("links") or {}).get("websiteUrl") or (
+        f"https://www.curseforge.com/minecraft/mc-mods/{info.get('slug', mod_id)}"
+    )
+
 
 def resolve_with_curseforge(
     mods: list[ModFile],
@@ -200,7 +261,7 @@ def resolve_with_curseforge(
         match = matches.get(mod.cf_fingerprint)
         if match is None:
             results.append(
-                Resolution(mod=mod, status=DESCONOCIDO, current_version=mod.version, note="no está en CurseForge")
+                Resolution(mod=mod, status=NO_ENCONTRADO, current_version=mod.version, note="no está en CurseForge")
             )
             continue
 
@@ -209,23 +270,25 @@ def resolve_with_curseforge(
         res = Resolution(
             mod=mod,
             status=AL_DIA,
-            source="curseforge",
+            source=CF,
             project_id=str(match.mod_id),
             project_name=info.get("name"),
-            project_url=(info.get("links") or {}).get("websiteUrl")
-            or f"https://www.curseforge.com/minecraft/mc-mods/{info.get('slug', match.mod_id)}",
+            project_url=cf_project_url(info, match.mod_id),
+            slug=info.get("slug"),
             current_version=mod.version or cur.display_name,
             current_channel=cur.version_type,
+            current_date=cur.date_published,
+            current_deps=cf_deps(cur),
+            known_ids={(CF, str(match.mod_id))},
         )
-        notes = []
         if dup_count[match.mod_id] > 1:
-            notes.append("¡duplicado en la carpeta!")
+            res.add_note("¡duplicado en la carpeta!")
 
         candidates = candidates_by_mod.get(match.mod_id)
         if not candidates:
             candidates = client.mod_files(match.mod_id, game_version, loader)
         if not candidates:
-            notes.append(f"sin versiones para {game_version}/{loader}")
+            res.add_note(f"sin versiones para {game_version}/{loader}")
 
         new = choose_update(cur, candidates, allow_beta)
         if new is not None:
@@ -233,13 +296,13 @@ def resolve_with_curseforge(
             res.new_channel = new.version_type
             res.new_file_name = new.file_name
             res.new_sha1 = new.sha1
+            res.new_deps = cf_deps(new)
             if new.download_url:
                 res.status = ACTUALIZABLE
                 res.download_url = new.download_url
             else:
-                res.status = SOLO_MANUAL
-                notes.append("el autor no permite descarga por API")
-        res.note = "; ".join(notes)
+                res.status = DESCARGA_MANUAL
+                res.add_note("el autor no permite descarga por API")
         results.append(res)
     return results
 
@@ -258,14 +321,16 @@ def resolve_all(
     """CurseForge como fuente principal y Modrinth como respaldo.
 
     Se usa Modrinth para los mods que CurseForge no identifica y para los que
-    tienen versión nueva pero no se pueden descargar por API.
+    tienen versión nueva pero no se pueden descargar por API. Además se anotan
+    en cada resultado los IDs del mod en ambas fuentes (`known_ids`), que
+    `deps.py` usa para saber qué dependencias ya están instaladas.
     """
     opts = dict(loader=loader, game_version=game_version, allow_beta=allow_beta)
     if curseforge is None:
         return resolve_with_modrinth(mods, modrinth, **opts)
 
     cf_results = resolve_with_curseforge(mods, curseforge, **opts)
-    need_mr = [r.mod for r in cf_results if r.status in (DESCONOCIDO, SOLO_MANUAL)]
+    need_mr = [r.mod for r in cf_results if r.status in (NO_ENCONTRADO, DESCARGA_MANUAL)]
     mr_by_path = {r.mod.path: r for r in resolve_with_modrinth(need_mr, modrinth, **opts)} if need_mr else {}
 
     merged: list[Resolution] = []
@@ -273,14 +338,25 @@ def resolve_all(
         mr = mr_by_path.get(cf.mod.path)
         if mr is None:
             merged.append(cf)
-        elif cf.status == DESCONOCIDO:
+        elif cf.status == NO_ENCONTRADO:
             merged.append(mr)
         elif mr.status == ACTUALIZABLE:
             # CurseForge no deja descargar; Modrinth sí.
-            mr.note = "; ".join(filter(None, ["CurseForge no permite descarga, se usa Modrinth", mr.note]))
+            mr.add_note("CurseForge no permite descarga, se usa Modrinth")
+            mr.known_ids |= cf.known_ids
             merged.append(mr)
         else:
             # Modrinth no ofrece la versión nueva: queda como descarga manual desde la web.
-            cf.note = "; ".join(filter(None, [cf.note, f"descárgalo a mano: {cf.project_url}"]))
+            cf.add_note(f"descárgalo a mano: {cf.project_url}")
+            cf.known_ids |= mr.known_ids
             merged.append(cf)
+
+    # IDs de Modrinth de los mods resueltos por CurseForge (una petición en lote).
+    pending = [r for r in merged if r.source == CF and not any(s == MR for s, _ in r.known_ids)]
+    if pending:
+        mr_current = modrinth.versions_from_hashes([r.mod.sha1 for r in pending])
+        for r in pending:
+            v = mr_current.get(r.mod.sha1)
+            if v:
+                r.known_ids.add((MR, v.project_id))
     return merged

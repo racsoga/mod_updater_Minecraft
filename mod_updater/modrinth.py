@@ -42,6 +42,15 @@ class MrVersion:
             return None
         return next((f for f in self.files if f.primary), self.files[0])
 
+    @property
+    def required_deps(self) -> list[tuple[str | None, str | None]]:
+        """[(project_id, version_id)] de las dependencias requeridas."""
+        return [
+            (d.get("project_id"), d.get("version_id"))
+            for d in self.dependencies
+            if d.get("dependency_type") == "required"
+        ]
+
     @classmethod
     def from_api(cls, d: dict) -> "MrVersion":
         files = [
@@ -114,6 +123,13 @@ class ModrinthClient:
         versions = [MrVersion.from_api(v) for v in data]
         versions.sort(key=lambda v: v.date_published, reverse=True)
         return versions
+
+    def project(self, id_or_slug: str) -> dict | None:
+        return self._call("GET", f"/v2/project/{id_or_slug}")
+
+    def version(self, version_id: str) -> MrVersion | None:
+        data = self._call("GET", f"/v2/version/{version_id}")
+        return MrVersion.from_api(data) if data else None
 
     def projects(self, project_ids: list[str]) -> dict[str, dict]:
         """{project_id: {title, slug, ...}}"""

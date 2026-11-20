@@ -11,7 +11,10 @@ Garantías:
 from __future__ import annotations
 
 import hashlib
+import json
 import os
+import re
+import shutil
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
@@ -109,17 +112,18 @@ def download_verified(res: Resolution, dest: Path, session_for: SessionFor) -> N
 
 
 def apply_one(res: Resolution, mods_dir: Path, backup_dir: Path, session_for: SessionFor) -> Outcome:
-    old = res.mod.path
+    """Actualiza (si hay jar viejo) o instala (si `res.mod` es None) un mod."""
+    old = res.mod.path if res.mod is not None else None
     new_name = res.new_file_name or ""
     if not res.download_url or not new_name:
         return Outcome(res, False, "sin URL de descarga")
     if Path(new_name).name != new_name or not new_name.lower().endswith(".jar"):
         return Outcome(res, False, f"nombre de archivo sospechoso: {new_name!r}")
-    if not old.exists():
+    if old is not None and not old.exists():
         return Outcome(res, False, "el jar actual ya no está en la carpeta")
 
     final = mods_dir / new_name
-    if final.exists() and final.resolve() != old.resolve():
+    if final.exists() and (old is None or final.resolve() != old.resolve()):
         return Outcome(res, False, f"ya existe otro archivo llamado {new_name}")
 
     part = backup_dir / f"{new_name}.part"
@@ -127,6 +131,14 @@ def apply_one(res: Resolution, mods_dir: Path, backup_dir: Path, session_for: Se
         download_verified(res, part, session_for)
     except (ApiError, OSError, requests.RequestException) as exc:
         return Outcome(res, False, f"descarga fallida: {exc}")
+
+    if old is None:  # instalación nueva: no hay nada que mover al backup
+        try:
+            os.replace(part, final)
+        except OSError as exc:
+            part.unlink(missing_ok=True)
+            return Outcome(res, False, f"no se pudo colocar el jar nuevo: {exc}")
+        return Outcome(res, True, "instalado", new_path=final)
 
     backup = backup_dir / old.name
     try:
@@ -154,26 +166,89 @@ def updatable(results: list[Resolution]) -> tuple[list[Resolution], list[Resolut
 
 
 def write_changelog(backup_dir: Path, mods_dir: Path, outcomes: list[Outcome]) -> Path:
+    """Escribe `cambios.json` (para Deshacer) y `cambios.txt` (para leerlo a mano)."""
+    entries = []
+    for o in outcomes:
+        r = o.resolution
+        entries.append({
+            "ok": o.ok,
+            "action": "install" if r.mod is None else "update",
+            "name": r.name,
+            "source": r.source,
+            "project_id": r.project_id,
+            "old_file": r.mod.file_name if r.mod else None,
+            "new_file": o.new_path.name if o.new_path else None,
+            "backup_file": o.backup_path.name if o.backup_path else None,
+            "old_version": r.current_version,
+            "new_version": r.new_version,
+            "required_by": r.required_by,
+            "message": o.message,
+        })
+    data = {
+        "version": 1,
+        "date": datetime.now().isoformat(timespec="seconds"),
+        "mods_dir": str(mods_dir),
+        "changes": entries,
+    }
+    (backup_dir / "cambios.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
     lines = [
         f"Actualización de mods {datetime.now():%Y-%m-%d %H:%M}",
         f"Carpeta de mods: {mods_dir}",
         "",
         "Para revertir un mod: borra el jar nuevo de la carpeta de mods y copia",
-        "a ella el jar viejo desde esta carpeta de backup.",
+        "a ella el jar viejo desde esta carpeta de backup. Los marcados [NUEVO]",
+        "no tenían versión anterior: basta con borrarlos.",
         "",
     ]
-    for o in outcomes:
-        r = o.resolution
-        if o.ok:
-            lines.append(
-                f"[OK]    {r.name}: {r.mod.file_name} -> {o.new_path.name}  "
-                f"({r.current_version} -> {r.new_version}, {r.source})"
-            )
+    for e in entries:
+        if not e["ok"]:
+            lines.append(f"[FALLO] {e['name']}: sin cambios — {e['message']}")
+        elif e["action"] == "install":
+            why = f", requerida por {', '.join(e['required_by'])}" if e["required_by"] else ""
+            lines.append(f"[NUEVO] {e['name']}: {e['new_file']}  ({e['new_version']}, {e['source']}{why})")
         else:
-            lines.append(f"[FALLO] {r.name}: {r.mod.file_name} sin cambios — {o.message}")
+            lines.append(
+                f"[OK]    {e['name']}: {e['old_file']} -> {e['new_file']}  "
+                f"({e['old_version']} -> {e['new_version']}, {e['source']})"
+            )
     path = backup_dir / "cambios.txt"
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
+
+
+_BACKUP_NAME = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{4}(_\d+)?$")
+
+
+def list_backups(mods_dir: Path) -> list[Path]:
+    """Carpetas de backup creadas por este programa, de la más vieja a la más nueva."""
+    root = backup_root(mods_dir)
+    if not root.is_dir():
+        return []
+    found = [
+        p for p in root.iterdir()
+        if p.is_dir() and _BACKUP_NAME.match(p.name)
+        and ((p / "cambios.json").exists() or (p / "cambios.txt").exists())
+    ]
+    def order(p: Path) -> tuple[str, int]:
+        stamp, _, n = p.name.partition("_")[2].partition("_")
+        return (p.name[:10] + stamp, int(n) if n else 1)
+
+    return sorted(found, key=order)
+
+
+def prune_backups(mods_dir: Path, keep: int) -> list[Path]:
+    """Borra los backups más viejos y deja los `keep` más recientes. Devuelve los borrados.
+
+    Solo toca carpetas con el formato de fecha y un `cambios.json`/`cambios.txt`
+    dentro, es decir, creadas por este programa.
+    """
+    keep = max(1, keep)
+    backups = list_backups(mods_dir)
+    to_delete = backups[:-keep] if len(backups) > keep else []
+    for p in to_delete:
+        shutil.rmtree(p)
+    return to_delete
 
 
 def apply_updates(
