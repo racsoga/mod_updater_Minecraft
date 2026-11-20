@@ -1,12 +1,40 @@
 /* Mod Updater: interfaz. Habla con Python vía window.pywebview.api (ver gui/api.py).
-   Python avisa con window.onBackend(evento, datos). */
+   Python avisa con window.onBackend(evento, datos). Textos: locales/<idioma>.json. */
 "use strict";
 
 const $ = sel => document.querySelector(sel);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const plural = (n, one, many) => (n === 1 ? one : many);
-const joinList = names => names.length < 2 ? names.join("") : names.slice(0, -1).join(", ") + " y " + names.at(-1);
 const api = () => window.pywebview.api;
+
+/* ================================================================ idioma */
+
+let STR = {};
+let LANG = "en";
+
+/** t("clave", {count, ...}): plural con clave_one / clave_other y parámetros {nombre}. */
+function t(key, params = {}) {
+  let k = key;
+  if (params.count !== undefined) {
+    const plural = params.count === 1 ? `${key}_one` : `${key}_other`;
+    if (plural in STR) k = plural;
+  }
+  const text = STR[k] ?? key;
+  return text.replace(/\{(\w+)\}/g, (m, name) => (name in params ? String(params[name]) : m));
+}
+
+function joinList(names) {
+  return names.length < 2 ? names.join("") : names.slice(0, -1).join(", ") + t("ui.and") + names.at(-1);
+}
+
+function applyStrings(lang, strings) {
+  LANG = lang;
+  STR = strings;
+  document.documentElement.lang = lang;
+  for (const el of document.querySelectorAll("[data-i18n]")) el.textContent = t(el.dataset.i18n);
+  for (const el of document.querySelectorAll("[data-i18n-placeholder]")) el.placeholder = t(el.dataset.i18nPlaceholder);
+  for (const el of document.querySelectorAll("[data-i18n-title]")) el.title = t(el.dataset.i18nTitle);
+  for (const el of document.querySelectorAll("[data-i18n-aria-label]")) el.setAttribute("aria-label", t(el.dataset.i18nAriaLabel));
+}
 
 let state = null;          // get_state() de Python
 let setupMode = "setup";   // "setup" (primera vez) o "settings"
@@ -16,17 +44,16 @@ let pendingFolder = null;  // carpeta elegida y aún no guardada
 
 function show(screen) {
   for (const s of ["setup", "scan", "results"]) $(`#screen-${s}`).hidden = s !== screen;
-  const inApp = screen !== "setup" || setupMode === "settings";
   $("#btn-settings").hidden = screen === "setup";
   $("#btn-rescan").hidden = screen !== "results";
   $("#actionbar").hidden = screen !== "results";
-  $("#chip-folder").hidden = $("#chip-env").hidden = !inApp || screen === "setup";
+  for (const chip of [$("#chip-folder"), $("#chip-env")]) chip.hidden = screen === "setup" || !chip.textContent.trim();
   window.scrollTo(0, 0);
 }
 
 function setTopbarEnv(env) {
   if (!env) return;
-  $("#chip-folder").innerHTML = `Carpeta <strong>${esc(shortPath(env.mods_dir))}</strong>`;
+  $("#chip-folder").innerHTML = `${esc(t("ui.folder_chip"))} <strong>${esc(shortPath(env.mods_dir))}</strong>`;
   $("#chip-folder").title = env.mods_dir;
   $("#chip-env").innerHTML = `${esc(env.loader)} <strong>${esc(env.minecraft_version)}</strong>`;
 }
@@ -38,87 +65,106 @@ function shortPath(p) {
 
 /* ================================================================ bienvenida / ajustes */
 
+const labelLoader = v => (state.loaders.find(l => l.value === v) || { label: v }).label;
+
 function folderHelp(folder) {
   const help = $("#folder-help");
   help.className = "help";
-  if (!folder.exists) {
-    help.textContent = "No encuentro esta carpeta. Elige la carpeta mods de tu Minecraft.";
-    help.classList.add("bad");
-  } else if (!folder.jars) {
-    help.textContent = "La carpeta existe pero no tiene archivos .jar.";
-    help.classList.add("bad");
-  } else {
-    help.textContent = `${folder.jars} ${plural(folder.jars, "mod encontrado", "mods encontrados")}.`;
-  }
+  if (!folder.exists) { help.textContent = t("ui.folder_missing"); help.classList.add("bad"); }
+  else if (!folder.jars) { help.textContent = t("ui.folder_empty"); help.classList.add("bad"); }
+  else help.textContent = t("ui.folder_found", { count: folder.jars });
 }
 
 function envHelp(folder) {
-  const v = $("#mc-version").value.trim(), l = $("#loader").value;
+  const v = $("#mc-version").value, l = $("#loader").value;
   const detected = folder.minecraft_version && folder.loader;
-  $("#env-help").textContent = !detected ? "No se ha podido deducir de tus mods: revisa que sea correcto."
-    : folder.minecraft_version === v && folder.loader === l ? "Deducido de tus mods."
-    : `Tus mods parecen de ${labelLoader(folder.loader)} ${folder.minecraft_version}.`;
+  $("#env-help").textContent = !detected ? t("ui.env_unknown")
+    : folder.minecraft_version === v && folder.loader === l ? t("ui.env_detected")
+    : t("ui.env_differs", { loader: labelLoader(folder.loader), version: folder.minecraft_version });
 }
 
-const labelLoader = v => (state.loaders.find(l => l.value === v) || { label: v }).label;
+function fillVersions(versions, selected) {
+  const list = versions.includes(selected) ? versions : [selected, ...versions];
+  $("#mc-version").innerHTML = list.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
+  $("#mc-version").value = selected;
+}
 
-function openSetup(mode) {
+function keyStatus() {
+  const el = $("#key-status");
+  el.className = "key-status";
+  if (state.key_source === "keyring") el.textContent = t("ui.key_in_use_windows", { hint: state.key_hint });
+  else if (state.key_source === "env") el.textContent = t("ui.key_in_use_env");
+  else { el.textContent = t("ui.key_none"); el.classList.add("none"); }
+  $("#cf-key").placeholder = state.has_key ? t("ui.key_placeholder_change") : t("ui.key_placeholder");
+  $("#btn-forget").hidden = state.key_source !== "keyring";
+}
+
+function fillLanguages(selected) {
+  $("#language").innerHTML = state.languages.map(l =>
+    `<option value="${esc(l.value)}">${esc(l.value === "auto" ? t("ui.language_auto") : l.label)}</option>`).join("");
+  $("#language").value = selected;
+}
+
+async function openSetup(mode) {
   setupMode = mode;
   pendingFolder = null;
   const s = state.settings, folder = state.folder;
   const first = mode === "setup";
-  $("#setup-title").textContent = first ? "Vamos a revisar tus mods." : "Ajustes";
-  $("#setup-deck").textContent = first
-    ? "Dinos dónde están y, si quieres, tu key de CurseForge. No se cambia nada hasta que tú lo confirmes."
-    : "Los cambios se aplican en la próxima revisión.";
+  $("#setup-title").textContent = first ? t("ui.setup_title") : t("ui.settings_title");
+  $("#setup-deck").textContent = first ? t("ui.setup_deck") : t("ui.settings_deck");
   $("#folder-path").textContent = s.mods_dir;
   folderHelp(folder);
 
   $("#loader").innerHTML = state.loaders.map(l => `<option value="${esc(l.value)}">${esc(l.label)}</option>`).join("");
   // Primera vez: proponer lo deducido de los mods. Después: lo guardado.
-  $("#mc-version").value = (first && folder.minecraft_version) || s.minecraft_version;
+  const version = (first && folder.minecraft_version) || s.minecraft_version;
+  fillVersions([], version);
   $("#loader").value = (first && folder.loader) || s.loader;
   envHelp(folder);
+  api().mc_versions([version, folder.minecraft_version].filter(Boolean)).then(list => {
+    const current = $("#mc-version").value;
+    fillVersions(list, current);
+    envHelp(state.folder);
+  });
 
-  const key = $("#cf-key");
-  key.value = "";
-  key.placeholder = state.has_key ? `Guardada: ${state.key_hint}. Pega otra para cambiarla` : "Pega aquí tu key";
-  $("#btn-forget").hidden = state.key_source !== "keyring";
+  $("#cf-key").value = "";
   $("#key-help").className = "help";
-  $("#key-help").textContent = state.key_source === "env" ? "Usando la key del archivo .env (modo desarrollo)." : "";
+  $("#key-help").textContent = "";
+  keyStatus();
 
   $("#advanced").hidden = first;
   $("#allow-beta").checked = !!s.allow_beta;
   $("#backups").value = s.backups_to_keep;
+  fillLanguages(s.language || "auto");
   $("#btn-nokey").hidden = $("#nokey-note").hidden = !first || state.has_key;
   $("#btn-cancel-settings").hidden = first;
-  $("#btn-save").textContent = first ? "Revisar mis mods" : "Guardar y revisar";
+  $("#btn-save").textContent = first ? t("ui.save_first") : t("ui.save_settings");
   show("setup");
 }
 
 async function saveSetup(useCurseforge) {
   const btn = $("#btn-save");
   btn.disabled = true;
-  for (const el of document.querySelectorAll("[aria-invalid]")) el.removeAttribute("aria-invalid");
   try {
     const res = await api().save_setup({
       mods_dir: pendingFolder || state.settings.mods_dir,
-      minecraft_version: $("#mc-version").value.trim(),
+      minecraft_version: $("#mc-version").value,
       loader: $("#loader").value,
       key: $("#cf-key").value.trim(),
       use_curseforge: useCurseforge,
       allow_beta: $("#allow-beta").checked,
       backups_to_keep: Number($("#backups").value) || 1,
+      language: $("#language").value,
     });
     $("#cf-key").value = "";
     if (!res.ok) {
       const target = { mods_dir: "#folder-help", minecraft_version: "#env-help", loader: "#env-help" }[res.field] || "#folder-help";
       $(target).className = "help bad";
       $(target).textContent = res.message;
-      if (res.field === "minecraft_version") $("#mc-version").setAttribute("aria-invalid", "true");
       return;
     }
     state = res.state;
+    applyStrings(state.lang, state.strings);
     startScan();
   } finally {
     btn.disabled = false;
@@ -132,11 +178,10 @@ const BASE = { read: 0, cf: 60, mr: 75, deps: 90 };
 
 function startScan() {
   $("#scan-error").hidden = true;
-  $("#scan-label").textContent = "Preparando…";
+  $("#scan-label").textContent = t("ui.scan_preparing");
   setProgress(0);
   for (const li of document.querySelectorAll("#scan-steps li")) li.className = "";
-  const cfStep = $('#scan-steps li[data-step="cf"]');
-  cfStep.lastChild.textContent = state.has_key && state.settings.use_curseforge ? "Consultar CurseForge" : "Consultar CurseForge (sin key, se omite)";
+  $(".step-cf").textContent = state.has_key && state.settings.use_curseforge ? t("ui.step_cf") : t("ui.step_cf_skipped");
   show("scan");
   api().start_scan();
 }
@@ -159,26 +204,18 @@ function onProgress(p) {
 
 /* ================================================================ resultados */
 
-const HELP = {
-  up: "Hay una versión nueva compatible.",
-  ok: "Ya tienes la última versión.",
-  manual: "Hay versión nueva, pero no se puede descargar automáticamente. Abre su página para bajarla.",
-  missing: "No está en CurseForge ni en Modrinth (un mod propio o bajado de otro sitio). Se deja como está.",
-  dep: "No está en tu carpeta, pero otro mod la necesita para funcionar. Se instalará junto a las actualizaciones.",
-};
-const BADGE = { up: "Actualizable", ok: "Al día", manual: "Descarga manual", missing: "No encontrado", dep: "Nueva dependencia" };
 const selectable = m => m.s === "up" || m.s === "dep";
 const isAttention = m => m.s === "manual" || m.s === "missing";
 const GROUPS = [
-  { key: "attention", title: "Requieren atención", match: isAttention },
-  { key: "updates", title: "Actualizaciones", match: selectable },
-  { key: "ok", title: "Al día", match: m => m.s === "ok", collapsible: true },
+  { key: "attention", title: "ui.group_attention", match: isAttention },
+  { key: "changes", title: "ui.group_changes", match: selectable },
+  { key: "ok", title: "ui.group_ok", match: m => m.s === "ok", collapsible: true },
 ];
 const FILTERS = [
-  { key: "all", label: "Todos", match: () => true },
-  { key: "updates", label: "Actualizaciones", match: selectable },
-  { key: "ok", label: "Al día", match: m => m.s === "ok" },
-  { key: "attention", label: "Requieren atención", match: isAttention },
+  { key: "all", label: "ui.filter_all", match: () => true },
+  { key: "changes", label: "ui.filter_changes", match: selectable },
+  { key: "ok", label: "ui.filter_ok", match: m => m.s === "ok" },
+  { key: "attention", label: "ui.filter_attention", match: isAttention },
 ];
 const arrow = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4.2 1.8 8.4 6l-4.2 4.2-1-1L6.4 6 3.2 2.8z"/></svg>';
 
@@ -192,12 +229,12 @@ function showResults(data) {
   filter = "all"; query = ""; okOpen = false;
   $("#q").value = "";
   setTopbarEnv(data.env);
-  const notes = [
-    ...data.broken.map(t => ({ t: `Tu carpeta ya tiene un problema: ${t}`, bad: true })),
-    ...data.notices.map(t => ({ t })),
-    ...data.ignored.map(t => ({ t: `${t}.` })),
-  ];
-  $("#notices").innerHTML = notes.map(n => `<li class="${n.bad ? "bad" : ""}">${esc(n.t)}</li>`).join("");
+  // Cabecera: solo lo que afecta a lo que ves (p. ej. revisión sin key).
+  $("#notices").innerHTML = data.notices.map(n => `<li>${esc(n)}</li>`).join("");
+  // Detalles: avisos que no requieren nada de ti.
+  $("#details").hidden = !data.details.length;
+  $("#details-summary").textContent = t("ui.details", { count: data.details.length });
+  $("#details-list").innerHTML = data.details.map(d => `<li>${esc(d)}</li>`).join("");
   show("results");
   render();
 }
@@ -220,33 +257,40 @@ function logo(m) {
   return `<span class="logo mono" aria-hidden="true">${esc(letter)}</span>`;
 }
 
+function betaTag(m) {
+  if (!m.beta) return "";
+  const note = m.betaNote || "";
+  return `<span class="tag"${note ? ` data-tip="${esc(note)}"` : ""}>${esc(t("ui.beta"))}${note ? `<span class="sr-only">: ${esc(note)}</span>` : ""}</span>`;
+}
+
 function versions(m) {
-  const beta = m.beta ? '<span class="tag">beta</span>' : "";
-  if (m.s === "ok" || m.s === "missing") return `<div class="ver"><span class="new" title="${esc(m.from)}">${esc(m.from || "?")}</span>${m.s === "ok" ? beta : ""}</div>`;
-  const from = m.from ? `<span class="old" title="${esc(m.from)}">${esc(m.from)}</span>` : `<span class="old">Sin instalar</span>`;
-  return `<div class="ver">${from}${arrow}<span class="sr-only">a</span><span class="new" title="${esc(m.to)}">${esc(m.to || "")}</span>${beta}</div>`;
+  if (!m.to) return `<div class="ver"><span class="new" title="${esc(m.from)}">${esc(m.from || "?")}</span>${betaTag(m)}</div>`;
+  const from = m.from ? `<span class="old" title="${esc(m.from)}">${esc(m.from)}</span>` : `<span class="old">${esc(t("ui.not_installed"))}</span>`;
+  return `<div class="ver">${from}${arrow}<span class="sr-only">${esc(t("ui.to"))}</span><span class="new" title="${esc(m.to)}">${esc(m.to)}</span>${betaTag(m)}</div>`;
 }
 
 function sub(m) {
   if (m.s === "dep") {
     const broken = depsBrokenBy(m);
-    if (broken.length) return `<div class="sub warn">Sin ${esc(m.name)}, ${esc(joinList(broken))} no arrancará.</div>`;
-    return `<div class="sub">La necesita ${esc(joinList(m.neededBy))}</div>`;
+    if (broken.length) return `<div class="sub warn">${esc(t("ui.dep_warning", { dep: m.name, names: joinList(broken) }))}</div>`;
+    return `<div class="sub">${esc(t("ui.needed_by", { names: joinList(m.neededBy) }))}</div>`;
   }
   return m.sub ? `<div class="sub" title="${esc(m.sub)}">${esc(m.sub)}</div>` : "";
 }
 
 function row(m) {
   const helpId = `help-${m.id}`;
+  const action = m.s === "dep" ? t("ui.install_x", { name: m.name }) : t("ui.update_x", { name: m.name });
   const cb = selectable(m)
-    ? `<input class="check" type="checkbox" data-id="${m.id}" ${m.checked ? "checked" : ""} aria-label="${m.s === "dep" ? "Instalar" : "Actualizar"} ${esc(m.name)}" aria-describedby="${helpId}">`
+    ? `<input class="check" type="checkbox" data-id="${m.id}" ${m.checked ? "checked" : ""} aria-label="${esc(action)}" aria-describedby="${helpId}">`
     : `<span class="slot" aria-hidden="true"></span>`;
-  const source = m.s === "manual" && m.url ? `<a href="${esc(m.url)}" data-external>Abrir página</a>` : esc(m.src);
+  const source = m.s === "manual" && m.url ? `<a href="${esc(m.url)}" data-external>${esc(t("ui.open_page"))}</a>` : esc(m.src);
+  const help = t(`status_help.${m.s}`);
   return `<div class="row ${m.s}">
     ${cb}${logo(m)}
     <div class="name"><div class="title">${esc(m.name)}</div>${sub(m)}</div>
     ${versions(m)}
-    <span class="badge ${m.s}" data-tip="${esc(HELP[m.s])}"><span class="dot" aria-hidden="true"></span>${BADGE[m.s]}<span class="sr-only" id="${helpId}">. ${esc(HELP[m.s])}</span></span>
+    <span class="badge ${m.s}" data-tip="${esc(help)}"><span class="dot" aria-hidden="true"></span>${esc(t(`status.${m.s}`))}<span class="sr-only" id="${helpId}">. ${esc(help)}</span></span>
     <span class="source">${source}</span>
   </div>`;
 }
@@ -264,7 +308,7 @@ function render() {
 
   $("#filters").innerHTML = FILTERS.map(f => {
     const n = MODS.filter(f.match).length;
-    return `<button type="button" data-f="${f.key}" aria-pressed="${f.key === filter}">${f.label} <span class="n">${n}</span></button>`;
+    return `<button type="button" data-f="${f.key}" aria-pressed="${f.key === filter}">${esc(t(f.label))} <span class="n">${n}</span></button>`;
   }).join("");
 
   let html = "";
@@ -274,17 +318,17 @@ function render() {
     const forced = filter === "ok" || query;
     const open = !g.collapsible || okOpen || forced;
     let extra = "";
-    if (g.key === "updates") {
+    if (g.key === "changes") {
       const n = items.filter(m => m.checked).length;
-      extra = `<label class="master"><input class="check" type="checkbox" data-all ${n === items.length ? "checked" : ""}> Todas</label>`;
+      extra = `<label class="master"><input class="check" type="checkbox" data-all ${n === items.length ? "checked" : ""}> ${esc(t("ui.select_all"))}</label>`;
     } else if (g.collapsible && !forced) {
-      extra = `<button class="linkbtn" type="button" data-ok aria-expanded="${okOpen}">${okOpen ? "Ocultar" : `Mostrar ${items.length}`}</button>`;
+      extra = `<button class="linkbtn" type="button" data-ok aria-expanded="${okOpen}">${esc(okOpen ? t("ui.hide") : t("ui.show_n", { count: items.length }))}</button>`;
     }
-    html += `<div class="group-head"><h3>${g.title}</h3><span class="count">${items.length}</span><span class="grow"></span>${extra}</div>`;
+    html += `<div class="group-head"><h3>${esc(t(g.title))}</h3><span class="count">${items.length}</span><span class="grow"></span>${extra}</div>`;
     if (open) html += items.map(row).join("");
   }
   $("#list").innerHTML = html ||
-    `<div class="empty">Ningún mod coincide con “${esc(query)}”. <button class="linkbtn" type="button" data-clear>Borrar búsqueda</button></div>`;
+    `<div class="empty">${esc(t("ui.no_match", { query }))} <button class="linkbtn" type="button" data-clear>${esc(t("ui.clear_search"))}</button></div>`;
 
   const master = $("[data-all]");
   if (master) {
@@ -301,32 +345,29 @@ function summary() {
   const okN = MODS.filter(m => m.s === "ok").length, attN = MODS.filter(isAttention).length;
 
   let head;
-  if (!ups.length && !deps.length) head = "Todo está al día.";
-  else {
-    head = ups.length ? `${ups.length} ${plural(ups.length, "mod tiene", "mods tienen")} versión nueva` : "";
-    if (deps.length) head += `${head ? " y " : ""}${plural(deps.length, "falta 1 dependencia", `faltan ${deps.length} dependencias`)}`;
-    head = head.charAt(0).toUpperCase() + head.slice(1) + ".";
-  }
-  $("#headline").textContent = head;
-  const depLines = deps.map(d => `${d.name} hace falta para ${joinList(d.neededBy)}.`).join(" ");
-  $("#deck").innerHTML = `<b>${okN} ${plural(okN, "ya está al día.", "ya están al día.")}</b> `
-    + (attN ? `${attN} ${plural(attN, "necesita", "necesitan")} que hagas algo. ` : "") + esc(depLines);
+  if (!ups.length && !deps.length) head = t("ui.head_all_ok");
+  else if (ups.length && deps.length) head = t("ui.head_both", { updates: t("ui.head_updates", { count: ups.length }), deps: t("ui.head_deps", { count: deps.length }) });
+  else head = ups.length ? t("ui.head_updates", { count: ups.length }) : t("ui.head_deps", { count: deps.length });
+  $("#headline").textContent = head.charAt(0).toUpperCase() + head.slice(1) + ".";
+  const depLines = deps.map(d => t("ui.deck_dep", { dep: d.name, names: joinList(d.neededBy) })).join(" ");
+  $("#deck").innerHTML = `<b>${esc(t("ui.deck_ok", { count: okN }))}</b> `
+    + (attN ? esc(t("ui.deck_attention", { count: attN })) + " " : "") + esc(depLines);
 
   const sel = MODS.filter(m => m.checked);
   const selUp = sel.filter(m => m.s === "up").length, selDep = sel.filter(m => m.s === "dep").length;
   const btn = $("#go");
   btn.disabled = sel.length === 0;
-  btn.textContent = !ups.length && !deps.length ? "Nada que actualizar"
-    : !sel.length ? "Elige algún mod"
-    : selDep && selUp ? `Actualizar ${selUp} e instalar ${selDep}`
-    : selDep ? `Instalar ${selDep} ${plural(selDep, "dependencia", "dependencias")}`
-    : `Actualizar ${selUp} ${plural(selUp, "mod", "mods")}`;
+  btn.textContent = !ups.length && !deps.length ? t("ui.go_nothing")
+    : !sel.length ? t("ui.go_choose")
+    : selDep && selUp ? t("ui.go_both", { updates: selUp, installs: selDep })
+    : selDep ? t("ui.go_install", { count: selDep })
+    : t("ui.go_update", { count: selUp });
 
   const broken = deps.flatMap(depsBrokenBy);
   const warn = broken.length
-    ? `<span class="warn">Sin ${esc(joinList(deps.filter(d => !d.checked).map(d => d.name)))}, ${esc(joinList(broken))} no arrancará.</span>` : "";
-  $("#summary").innerHTML = `<span class="count">${sel.length} de ${ups.length + deps.length} cambios seleccionados</span>`
-    + (warn || `<span class="safe">Antes de cambiar nada se guarda una copia de tus mods. Podrás deshacerlo al terminar.</span>`);
+    ? `<span class="warn">${esc(t("ui.dep_warning", { dep: joinList(deps.filter(d => !d.checked).map(d => d.name)), names: joinList(broken) }))}</span>` : "";
+  $("#summary").innerHTML = `<span class="count">${esc(t("ui.selected", { count: ups.length + deps.length, selected: sel.length }))}</span>`
+    + (warn || `<span class="safe">${esc(t("ui.safe"))}</span>`);
 }
 
 /* ================================================================ eventos */
@@ -337,29 +378,29 @@ window.onBackend = (event, payload) => {
   else if (event === "error") {
     $("#scan-error-text").textContent = payload.message;
     $("#scan-error").hidden = false;
-    $("#scan-label").textContent = "La revisión no ha terminado.";
+    $("#scan-label").textContent = t("ui.scan_unfinished");
   }
 };
 
 document.addEventListener("click", async e => {
-  const t = e.target;
-  const ext = t.closest("[data-external]");
+  const el = e.target;
+  const ext = el.closest("[data-external]");
   if (ext) { e.preventDefault(); api().open_url(ext.getAttribute("href")); return; }
-  const f = t.closest("[data-f]");
+  const f = el.closest("[data-f]");
   if (f) { filter = f.dataset.f; render(); return; }
-  if (t.closest("[data-ok]")) { okOpen = !okOpen; render(); return; }
-  if (t.closest("[data-clear]")) { $("#q").value = ""; query = ""; render(); $("#q").focus(); return; }
-  if (t.closest("[data-go-settings]")) { openSetup("settings"); return; }
+  if (el.closest("[data-ok]")) { okOpen = !okOpen; render(); return; }
+  if (el.closest("[data-clear]")) { $("#q").value = ""; query = ""; render(); $("#q").focus(); return; }
+  if (el.closest("[data-go-settings]")) { openSetup("settings"); return; }
 });
 
 document.addEventListener("change", e => {
-  const t = e.target;
-  if (!t.dataset) return;
-  if ("all" in t.dataset) {
-    MODS.filter(m => selectable(m) && visible(m)).forEach(m => setChecked(m, t.checked));
+  const el = e.target;
+  if (!el.dataset) return;
+  if ("all" in el.dataset) {
+    MODS.filter(m => selectable(m) && visible(m)).forEach(m => setChecked(m, el.checked));
     render(); return;
   }
-  if (t.dataset.id !== undefined && t.classList.contains("check")) { setChecked(MODS[t.dataset.id], t.checked); render(); }
+  if (el.dataset.id !== undefined && el.classList.contains("check")) { setChecked(MODS[el.dataset.id], el.checked); render(); }
 });
 
 document.addEventListener("keydown", e => {
@@ -374,11 +415,31 @@ function wire() {
   $("#btn-rescan").addEventListener("click", startScan);
   $("#btn-retry").addEventListener("click", startScan);
   $("#btn-quit").addEventListener("click", () => api().quit());
-  $("#btn-cancel-settings").addEventListener("click", () => (DATA ? show("results") : startScan()));
+  $("#btn-cancel-settings").addEventListener("click", async () => {
+    // Deshacer la vista previa del idioma si se cancela.
+    const s = await api().get_strings(state.settings.language || "auto");
+    applyStrings(s.lang, s.strings);
+    if (DATA) { showResults(DATA); } else startScan();
+  });
   $("#btn-save").addEventListener("click", () => saveSetup(true));
   $("#btn-nokey").addEventListener("click", () => saveSetup(false));
-  $("#mc-version").addEventListener("input", () => envHelp(state.folder));
+  $("#mc-version").addEventListener("change", () => envHelp(state.folder));
   $("#loader").addEventListener("change", () => envHelp(state.folder));
+  $("#language").addEventListener("change", async e => {
+    // Vista previa inmediata; se guarda con el botón principal.
+    const s = await api().get_strings(e.target.value);
+    applyStrings(s.lang, s.strings);
+    const keep = { version: $("#mc-version").value, loader: $("#loader").value, lang: e.target.value };
+    $("#setup-title").textContent = setupMode === "setup" ? t("ui.setup_title") : t("ui.settings_title");
+    $("#setup-deck").textContent = setupMode === "setup" ? t("ui.setup_deck") : t("ui.settings_deck");
+    $("#btn-save").textContent = setupMode === "setup" ? t("ui.save_first") : t("ui.save_settings");
+    folderHelp(state.folder);
+    keyStatus();
+    fillLanguages(keep.lang);
+    $("#mc-version").value = keep.version;
+    $("#loader").value = keep.loader;
+    envHelp(state.folder);
+  });
   $("#btn-folder").addEventListener("click", async () => {
     const res = await api().choose_folder();
     if (!res) return;
@@ -386,33 +447,39 @@ function wire() {
     state.folder = res.folder;
     $("#folder-path").textContent = res.path;
     folderHelp(res.folder);
-    if (res.folder.minecraft_version) $("#mc-version").value = res.folder.minecraft_version;
+    if (res.folder.minecraft_version) {
+      const list = [...$("#mc-version").options].map(o => o.value);
+      fillVersions(list, res.folder.minecraft_version);
+    }
     if (res.folder.loader) $("#loader").value = res.folder.loader;
     envHelp(res.folder);
   });
   $("#btn-test").addEventListener("click", async () => {
     const help = $("#key-help");
     help.className = "help";
-    help.textContent = "Probando…";
+    help.textContent = t("ui.key_testing");
     const res = await api().test_key($("#cf-key").value);
     help.className = `help ${res.ok ? "ok" : "bad"}`;
     help.textContent = res.message;
   });
   $("#btn-forget").addEventListener("click", async () => {
-    state = await api().forget_key();
-    openSetup(setupMode);
-    $("#key-help").textContent = "Key borrada.";
+    const fresh = await api().forget_key();
+    state = { ...state, has_key: fresh.has_key, key_hint: fresh.key_hint, key_source: fresh.key_source };
+    keyStatus();
+    $("#key-help").className = "help";
+    $("#key-help").textContent = t("ui.key_forgotten");
   });
   $("#go").addEventListener("click", async () => {
     const ids = MODS.filter(m => m.checked).map(m => m.id);
     const res = await api().apply(ids);
-    if (!res.ok) $("#summary").innerHTML = `<span class="count">Aún no disponible</span><span class="warn">${esc(res.message)}</span>`;
+    if (!res.ok) $("#summary").innerHTML = `<span class="count">${esc(t("ui.not_available"))}</span><span class="warn">${esc(res.message)}</span>`;
   });
 }
 
 async function boot() {
   wire();
   state = await api().get_state();
+  applyStrings(state.lang, state.strings);
   if (!state.settings.setup_done) openSetup("setup");
   else startScan();
 }

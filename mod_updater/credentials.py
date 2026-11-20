@@ -12,6 +12,7 @@ import os
 from dotenv import load_dotenv
 
 from .config import PROJECT_ROOT
+from .i18n import t
 
 SERVICE = "mod_updater"
 ACCOUNT = "curseforge_api_key"
@@ -40,7 +41,7 @@ def get_key() -> tuple[str | None, str | None]:
 
 def set_key(key: str) -> None:
     if keyring is None:  # pragma: no cover
-        raise RuntimeError("No se puede guardar la key: falta el Administrador de credenciales")
+        raise RuntimeError(t("err.no_keyring"))
     keyring.set_password(SERVICE, ACCOUNT, key.strip())
 
 

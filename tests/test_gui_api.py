@@ -160,7 +160,7 @@ def test_serialize_statuses_and_selection():
     ok = Resolution(mod=_mod("b"), status=AL_DIA, project_name="B", current_version="1")
     manual = Resolution(mod=_mod("c"), status=DESCARGA_MANUAL, project_name="C", note="sin archivo", project_url="https://x")
     missing = Resolution(mod=_mod("d", "d-1.0.jar"), status=NO_ENCONTRADO)
-    dup = Resolution(mod=_mod("e"), status=ACTUALIZABLE, project_name="E", note="¡duplicado en la carpeta!")
+    dup = Resolution(mod=_mod("e"), status=ACTUALIZABLE, project_name="E", duplicate=True)
     dep = Resolution(mod=None, kind=INSTALL, status=ACTUALIZABLE, project_name="MezzConfig", new_version="0.7.1", required_by=["JEI"])
     data = serialize([up, ok, manual, missing, dup], DepPlan(items=[up, dep]))
     rows = {r["name"]: r for r in data["rows"]}
@@ -191,7 +191,7 @@ def test_scan_emits_progress_and_results_without_key(make_api, monkeypatch, mods
     def fake_resolve(mods, curseforge, modrinth, on_phase, **kw):
         if curseforge is not None:
             raise CurseForgeAuthError("rechazada")
-        on_phase("Consultando Modrinth")
+        on_phase("mr")
         return [res]
 
     monkeypatch.setattr(api_mod, "scan_folder", fake_scan)

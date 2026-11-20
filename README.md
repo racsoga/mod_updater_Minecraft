@@ -21,6 +21,8 @@ Opcional:
 
 Doble clic en **`ModUpdater.pyw`** (o `.venv\Scripts\python -m mod_updater.gui`). La primera vez pide la carpeta de mods (la deduce sola), la versión de Minecraft y el loader (también los deduce de tus mods) y la key de CurseForge, que se guarda en el **Administrador de credenciales de Windows**. Después revisa tus mods con una barra de progreso y muestra los resultados con filtros, búsqueda y casillas.
 
+La app está en **español, inglés y catalán**: por defecto usa el idioma de la interfaz de Windows (si no es ninguno de esos, inglés) y se cambia en Ajustes → Idioma. En la CLI: `--lang es|en|ca`.
+
 Los ajustes de la app se guardan en `%APPDATA%\mod_updater\settings.json`. Actualizar desde la ventana llega en la siguiente versión; mientras, usa `actualizar.bat`.
 
 ## Uso (línea de comandos)

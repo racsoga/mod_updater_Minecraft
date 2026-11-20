@@ -7,6 +7,7 @@ pywebview expone al JS los métodos públicos de `Api` como
 Reglas:
 - La API key nunca sale de Python: el JS solo recibe `key_hint` (••••1a2b).
 - El escaneo y las consultas van en un hilo aparte para no congelar la ventana.
+- Todos los textos salen de locales/<idioma>.json (el JS recibe las cadenas en `strings`).
 - Nada aquí modifica la carpeta de mods (eso es el paso 5, `apply`).
 """
 
@@ -21,68 +22,76 @@ from pathlib import Path
 from typing import Callable
 from urllib.parse import urlparse
 
-from .. import credentials
+from .. import credentials, i18n
 from ..config import DEFAULT_USER_AGENT, default_mods_dir
 from ..curseforge import LOADER_TYPES, CurseForgeAuthError, CurseForgeClient
 from ..deps import DependencyFinder, DepPlan, plan_with_dependencies
 from ..downloader import updatable
+from ..i18n import t
 from ..modrinth import ModrinthClient
 from ..net import ApiError
-from ..resolver import (
-    ACTUALIZABLE,
-    AL_DIA,
-    CF,
-    DESCARGA_MANUAL,
-    INSTALL,
-    NO_ENCONTRADO,
-    Resolution,
-    resolve_all,
-)
+from ..resolver import ACTUALIZABLE, AL_DIA, DESCARGA_MANUAL, INSTALL, NO_ENCONTRADO, Resolution, resolve_all
 from ..scanner import peek_folder, scan_folder
 from ..settings import Settings, app_dir, load_settings, save_settings
+from ..versions import minecraft_versions
 
 LOADER_LABEL = {"neoforge": "NeoForge", "forge": "Forge", "fabric": "Fabric", "quilt": "Quilt"}
 SOURCE_LABEL = {"curseforge": "CurseForge", "modrinth": "Modrinth"}
 STATUS_CODE = {ACTUALIZABLE: "up", AL_DIA: "ok", DESCARGA_MANUAL: "manual", NO_ENCONTRADO: "missing"}
+LANGUAGE_NAMES = {"es": "Español", "en": "English", "ca": "Català"}  # cada idioma en su propia lengua
 
 
-def serialize(results: list[Resolution], plan: DepPlan) -> dict:
+def _beta_note(r: Resolution, s: str, allow_beta: bool) -> str | None:
+    """Por qué se propone una beta (tooltip de la etiqueta "beta")."""
+    channel = r.new_channel if s in ("up", "dep") else r.current_channel
+    if channel not in ("beta", "alpha"):
+        return None
+    if s == "dep":
+        names = ", ".join(r.required_by)
+        return t("beta.only_published", names=names) if r.only_prerelease else t("beta.allowed_dep", names=names)
+    if s == "up":
+        return t("beta.already") if r.current_channel in ("beta", "alpha") else t("beta.allowed")
+    return t("beta.installed")
+
+
+def serialize(results: list[Resolution], plan: DepPlan, *, allow_beta: bool = False) -> dict:
     """Convierte la revisión en datos para la pantalla de Resultados (sin secretos)."""
     in_plan = {id(r) for r in plan.items}
     added = {id(r) for r in plan.added_updates}
+    broken = {id(b.res): b for b in plan.broken}
     rows = []
     for r in plan.installs + results:
-        if r.kind == INSTALL:
-            s = "dep"
-        else:
-            s = STATUS_CODE.get(r.status, "missing")
-        sub = ""
-        if s == "up" and id(r) not in in_plan:
-            # Actualizable pero fuera del plan: hoy solo pasa con duplicados.
-            s, sub = "manual", "Está duplicado en la carpeta: deja solo uno y vuelve a revisar"
+        s = "dep" if r.kind == INSTALL else STATUS_CODE.get(r.status, "missing")
+        sub, url = "", r.project_url
+        if id(r) in broken:
+            # Instalado y ya roto: le falta algo que no se puede instalar solo. Requiere atención.
+            b = broken[id(r)]
+            s, sub, url = "manual", b.reason[:1].upper() + b.reason[1:], b.url or r.project_url
+        elif s == "up" and id(r) not in in_plan:
+            s, sub = "manual", t("row.duplicate")  # actualizable pero fuera del plan: duplicados
         elif s == "manual":
-            sub = r.note or "El autor no permite descargarlo desde aquí"
+            sub = r.note or t("row.manual_default")
         elif s == "missing":
             file_name = r.mod.file_name if r.mod else ""
-            sub = file_name if file_name != r.name else "No aparece en CurseForge ni en Modrinth"
+            sub = file_name if file_name != r.name else t("row.missing_default")
         elif id(r) in added:
-            sub = f"La necesita {', '.join(r.required_by)}"
-        channel = r.new_channel if s in ("up", "dep") else r.current_channel
+            sub = t("row.needed_by", names=", ".join(r.required_by))
         rows.append({
             "id": len(rows),
             "s": s,
             "name": r.name,
             "icon": r.icon_url,
             "from": r.current_version if r.kind != INSTALL else None,
-            "to": r.new_version,
-            "beta": channel in ("beta", "alpha"),
+            "to": r.new_version if s in ("up", "dep") or r.status == DESCARGA_MANUAL else None,
+            "beta": _beta_note(r, s, allow_beta) is not None,
+            "betaNote": _beta_note(r, s, allow_beta),
             "src": SOURCE_LABEL.get(r.source or "", ""),
-            "url": r.project_url,
+            "url": url,
             "sub": sub,
             "neededBy": list(r.required_by) if r.kind == INSTALL else [],
             "checked": id(r) in in_plan,
         })
-    return {"rows": rows, "broken": list(plan.broken), "ignored": list(plan.ignored)}
+    return {"rows": rows, "details": list(plan.ignored)}
 
 
 class Api:
@@ -94,16 +103,19 @@ class Api:
         cf_factory: Callable = CurseForgeClient,
         mr_factory: Callable = ModrinthClient,
         run_async: Callable | None = None,
+        cache_dir: Path | None = None,
     ):
         self._settings_file = settings_file
         self._get_key = get_key
         self._cf_factory = cf_factory
         self._mr_factory = mr_factory
         self._run_async = run_async or (lambda fn: threading.Thread(target=fn, daemon=True).start())
+        self._cache_dir = cache_dir
         self._window = None
         self._busy = threading.Lock()
         self._results: list[Resolution] = []
         self._plan: DepPlan | None = None
+        i18n.set_language(self._settings().language)
 
     # ------------------------------------------------------------------ infraestructura
 
@@ -117,10 +129,21 @@ class Api:
     def _settings(self) -> Settings:
         return load_settings(self._settings_file)
 
+    def _cache(self) -> Path:
+        return self._cache_dir or app_dir() / "cache"
+
+    # ------------------------------------------------------------------ idioma
+
+    def get_strings(self, language: str = "auto") -> dict:
+        """Cadenas de un idioma (para previsualizar el selector de Ajustes)."""
+        code = i18n.resolve(language)
+        return {"lang": code, "strings": i18n.strings(code)}
+
     # ------------------------------------------------------------------ configuración
 
     def get_state(self) -> dict:
         s = self._settings()
+        lang = i18n.set_language(s.language)
         key, source = self._get_key()
         return {
             "settings": asdict(s) | {"mods_dir": str(s.mods_path)},
@@ -130,7 +153,14 @@ class Api:
             "key_hint": credentials.hint(key),
             "key_source": source,
             "loaders": [{"value": k, "label": LOADER_LABEL.get(k, k)} for k in LOADER_TYPES],
+            "languages": [{"value": "auto", "label": None}] + [{"value": c, "label": LANGUAGE_NAMES[c]} for c in i18n.SUPPORTED],
+            "lang": lang,
+            "strings": i18n.strings(lang),
         }
+
+    def mc_versions(self, include: list[str] | None = None) -> list[str]:
+        """Versiones "release" de Minecraft para el desplegable (con caché y respaldo sin red)."""
+        return minecraft_versions(self._mr_factory(DEFAULT_USER_AGENT), self._cache() / "mc_versions.json", include=include)
 
     def peek(self, path: str) -> dict:
         return peek_folder(Path(path))
@@ -148,30 +178,33 @@ class Api:
         return {"path": path, "folder": peek_folder(Path(path))}
 
     def test_key(self, key: str = "") -> dict:
-        """Prueba la key escrita (o la guardada si viene vacía). Nunca la devuelve."""
+        """Prueba la key escrita (o la que está en uso si viene vacía). Nunca la devuelve."""
         key = (key or "").strip() or (self._get_key()[0] or "")
         if not key:
-            return {"ok": False, "message": "Pega primero tu key de CurseForge."}
+            return {"ok": False, "message": t("key.paste_first")}
         try:
             self._cf_factory(key).check()
         except CurseForgeAuthError:
-            return {"ok": False, "message": "CurseForge no acepta esta key. Comprueba que la has copiado entera."}
+            return {"ok": False, "message": t("key.rejected")}
         except (ApiError, OSError):
-            return {"ok": False, "message": "No se pudo conectar con CurseForge. Comprueba tu conexión a internet."}
-        return {"ok": True, "message": "Key válida. CurseForge responde."}
+            return {"ok": False, "message": t("key.offline")}
+        return {"ok": True, "message": t("key.valid")}
 
     def save_setup(self, data: dict) -> dict:
         """Guarda la pantalla de bienvenida / ajustes. Devuelve {ok, message?, state?}."""
         s = self._settings()
+        if data.get("language") in ("auto", *i18n.SUPPORTED):
+            s.language = data["language"]
+            i18n.set_language(s.language)
         mods_dir = Path(str(data.get("mods_dir") or s.mods_path))
         if not mods_dir.is_dir():
-            return {"ok": False, "field": "mods_dir", "message": f"No existe la carpeta {mods_dir}. Elige la carpeta mods de tu Minecraft."}
+            return {"ok": False, "field": "mods_dir", "message": t("setup.err_folder", path=mods_dir)}
         loader = data.get("loader") or s.loader
         if loader not in LOADER_TYPES:
-            return {"ok": False, "field": "loader", "message": "Elige un loader de la lista."}
+            return {"ok": False, "field": "loader", "message": t("setup.err_loader")}
         version = str(data.get("minecraft_version") or s.minecraft_version).strip()
         if not version or not version[0].isdigit():
-            return {"ok": False, "field": "minecraft_version", "message": "Escribe la versión de Minecraft, por ejemplo 1.21.1."}
+            return {"ok": False, "field": "minecraft_version", "message": t("setup.err_version")}
 
         key = str(data.get("key") or "").strip()
         if key:
@@ -202,49 +235,50 @@ class Api:
         try:
             self._emit("results", self._do_scan())
         except FileNotFoundError as exc:
-            self._emit("error", {"message": f"{exc}. Revisa la carpeta en Ajustes."})
+            self._emit("error", {"message": t("scan.err_folder", error=exc)})
         except ApiError:
-            self._emit("error", {"message": "No se pudo conectar con CurseForge ni con Modrinth. Comprueba tu conexión e inténtalo otra vez."})
+            self._emit("error", {"message": t("scan.err_network")})
         except Exception as exc:  # noqa: BLE001 - la ventana no debe quedarse colgada
-            self._emit("error", {"message": f"Algo salió mal durante la revisión: {type(exc).__name__}."})
+            self._emit("error", {"message": t("scan.err_unknown", error=type(exc).__name__)})
         finally:
             self._busy.release()
 
     def _do_scan(self) -> dict:
         s = self._settings()
+        i18n.set_language(s.language)
         notices: list[str] = []
 
         def progress(phase: str, label: str, done: int = 0, total: int = 0) -> None:
             self._emit("progress", {"phase": phase, "label": label, "done": done, "total": total})
 
-        progress("read", "Leyendo mods")
+        progress("read", t("scan.reading"))
         mods = scan_folder(
             s.mods_path,
-            cache_path=app_dir() / "cache" / "scan_cache.json",
-            on_item=lambda i, n, p: progress("read", f"Leyendo mods {i}/{n}", i, n),
+            cache_path=self._cache() / "scan_cache.json",
+            on_item=lambda i, n, p: progress("read", t("scan.reading_n", done=i, total=n), i, n),
         )
 
         key = self._get_key()[0] if s.use_curseforge else None
         cf = self._cf_factory(key) if key else None
         mr = self._mr_factory(DEFAULT_USER_AGENT)
         if cf is None:
-            notices.append("Sin key de CurseForge: solo se ha consultado Modrinth, así que algunos mods pueden salir como No encontrado.")
+            notices.append(t("notice.no_key"))
         opts = dict(loader=s.loader, game_version=s.minecraft_version, allow_beta=s.allow_beta)
-        phase = {"Consultando CurseForge": "cf", "Consultando Modrinth": "mr"}
-        on_phase = lambda text: progress(phase.get(text, "mr"), text)  # noqa: E731
+        labels = {"cf": t("scan.querying_cf"), "mr": t("scan.querying_mr")}
+        on_phase = lambda code: progress(code, labels.get(code, code))  # noqa: E731
         try:
             results = resolve_all(mods, curseforge=cf, modrinth=mr, on_phase=on_phase, **opts)
         except CurseForgeAuthError:
-            notices.append("CurseForge no acepta tu key: solo se ha consultado Modrinth. Cámbiala en Ajustes.")
+            notices.append(t("notice.key_rejected"))
             cf = None
             results = resolve_all(mods, curseforge=None, modrinth=mr, on_phase=on_phase, **opts)
 
-        progress("deps", "Comprobando dependencias")
+        progress("deps", t("scan.checking_deps"))
         selected, _ = updatable(results)
         plan = plan_with_dependencies(results, selected, DependencyFinder(cf, mr, **opts))
         self._results, self._plan = results, plan
 
-        data = serialize(results, plan)
+        data = serialize(results, plan, allow_beta=s.allow_beta)
         data["notices"] = notices
         data["env"] = {
             "mods_dir": str(s.mods_path),
@@ -258,7 +292,7 @@ class Api:
 
     def apply(self, ids: list[int]) -> dict:
         # Paso 5 del plan: descarga con progreso, pantalla final y Deshacer.
-        return {"ok": False, "message": "La actualización desde la ventana llega en la siguiente versión. Mientras tanto, usa actualizar.bat."}
+        return {"ok": False, "message": t("apply.not_yet")}
 
     def open_url(self, url: str) -> bool:
         if urlparse(url or "").scheme not in ("http", "https"):

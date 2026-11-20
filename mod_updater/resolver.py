@@ -11,6 +11,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Protocol, Sequence, TypeVar
 
+from .i18n import t
 from .curseforge import CfFile, CurseForgeClient, latest_file_ids
 from .modrinth import ModrinthClient, MrVersion
 from .scanner import ModFile
@@ -74,6 +75,8 @@ class Resolution:
     new_sha1: str | None = None
     new_sha512: str | None = None
     note: str = ""
+    duplicate: bool = False  # el mismo proyecto aparece varias veces en la carpeta
+    only_prerelease: bool = False  # instalación: no existe ninguna versión estable
     current_deps: list[Dep] = field(default_factory=list)
     new_deps: list[Dep] = field(default_factory=list)
     known_ids: set[tuple[str, str]] = field(default_factory=set)
@@ -175,7 +178,7 @@ def resolve_with_modrinth(
         cur = current.get(mod.sha1)
         if cur is None:
             results.append(
-                Resolution(mod=mod, status=NO_ENCONTRADO, current_version=mod.version, note="no está en Modrinth")
+                Resolution(mod=mod, status=NO_ENCONTRADO, current_version=mod.version, note=t("note.not_on_modrinth"))
             )
             continue
 
@@ -196,7 +199,8 @@ def resolve_with_modrinth(
             known_ids={(MR, cur.project_id)},
         )
         if dup_count[cur.project_id] > 1:
-            res.add_note("¡duplicado en la carpeta!")
+            res.duplicate = True
+            res.add_note(t("note.duplicate"))
 
         cand = latest.get(mod.sha1)
         candidates: list[MrVersion] = [cand] if cand else []
@@ -204,7 +208,7 @@ def resolve_with_modrinth(
             # La última es de un canal no permitido: buscar en el historial.
             candidates = client.project_versions(cur.project_id, loader, game_version)
         if not candidates:
-            res.add_note(f"sin versiones para {game_version}/{loader}")
+            res.add_note(t("note.no_versions", game_version=game_version, loader=loader))
 
         new = choose_update(cur, candidates, allow_beta)
         if new is not None:
@@ -220,7 +224,7 @@ def resolve_with_modrinth(
                 res.new_sha512 = f.sha512
             else:
                 res.status = DESCARGA_MANUAL
-                res.add_note("sin archivo descargable")
+                res.add_note(t("note.no_file"))
         results.append(res)
     return results
 
@@ -263,7 +267,7 @@ def resolve_with_curseforge(
         match = matches.get(mod.cf_fingerprint)
         if match is None:
             results.append(
-                Resolution(mod=mod, status=NO_ENCONTRADO, current_version=mod.version, note="no está en CurseForge")
+                Resolution(mod=mod, status=NO_ENCONTRADO, current_version=mod.version, note=t("note.not_on_curseforge"))
             )
             continue
 
@@ -285,13 +289,14 @@ def resolve_with_curseforge(
             known_ids={(CF, str(match.mod_id))},
         )
         if dup_count[match.mod_id] > 1:
-            res.add_note("¡duplicado en la carpeta!")
+            res.duplicate = True
+            res.add_note(t("note.duplicate"))
 
         candidates = candidates_by_mod.get(match.mod_id)
         if not candidates:
             candidates = client.mod_files(match.mod_id, game_version, loader)
         if not candidates:
-            res.add_note(f"sin versiones para {game_version}/{loader}")
+            res.add_note(t("note.no_versions", game_version=game_version, loader=loader))
 
         new = choose_update(cur, candidates, allow_beta)
         if new is not None:
@@ -305,7 +310,7 @@ def resolve_with_curseforge(
                 res.download_url = new.download_url
             else:
                 res.status = DESCARGA_MANUAL
-                res.add_note("el autor no permite descarga por API")
+                res.add_note(t("note.no_api_download"))
         results.append(res)
     return results
 
@@ -332,12 +337,12 @@ def resolve_all(
     opts = dict(loader=loader, game_version=game_version, allow_beta=allow_beta)
     phase = on_phase or (lambda text: None)
     if curseforge is None:
-        phase("Consultando Modrinth")
+        phase("mr")
         return resolve_with_modrinth(mods, modrinth, **opts)
 
-    phase("Consultando CurseForge")
+    phase("cf")
     cf_results = resolve_with_curseforge(mods, curseforge, **opts)
-    phase("Consultando Modrinth")
+    phase("mr")
     need_mr = [r.mod for r in cf_results if r.status in (NO_ENCONTRADO, DESCARGA_MANUAL)]
     mr_by_path = {r.mod.path: r for r in resolve_with_modrinth(need_mr, modrinth, **opts)} if need_mr else {}
 
@@ -350,12 +355,13 @@ def resolve_all(
             merged.append(mr)
         elif mr.status == ACTUALIZABLE:
             # CurseForge no deja descargar; Modrinth sí.
-            mr.add_note("CurseForge no permite descarga, se usa Modrinth")
+            mr.add_note(t("note.cf_blocked_use_mr"))
             mr.known_ids |= cf.known_ids
+            mr.duplicate = mr.duplicate or cf.duplicate
             merged.append(mr)
         else:
             # Modrinth no ofrece la versión nueva: queda como descarga manual desde la web.
-            cf.add_note(f"descárgalo a mano: {cf.project_url}")
+            cf.add_note(t("note.download_manually", url=cf.project_url))
             cf.known_ids |= mr.known_ids
             merged.append(cf)
 

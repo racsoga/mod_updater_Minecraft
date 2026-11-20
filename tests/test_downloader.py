@@ -191,7 +191,8 @@ def test_backup_dir_gets_suffix_if_exists(mods_dir):
 
 def test_updatable_skips_duplicates_and_non_updatable(mods_dir):
     r1 = make_res(mods_dir, old_name="a.jar", project="p1")
-    r2 = make_res(mods_dir, old_name="b.jar", project="p2", note="¡duplicado en la carpeta!")
+    r2 = make_res(mods_dir, old_name="b.jar", project="p2")
+    r2.duplicate = True
     r3 = make_res(mods_dir, old_name="c.jar", project="p3")
     r3.status = AL_DIA
     ok, skipped = updatable([r1, r2, r3])

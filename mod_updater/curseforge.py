@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 
 import requests
 
+from .i18n import t
 from .net import ApiError, request_with_retry
 
 BASE_URL = "https://api.curseforge.com"
@@ -77,7 +78,7 @@ class CurseForgeClient:
     def _call(self, method: str, path: str, **kwargs):
         resp = request_with_retry(self.session, method, BASE_URL + path, min_interval=0.1, **kwargs)
         if resp.status_code in (401, 403):
-            raise CurseForgeAuthError(f"CurseForge rechazó la API key (HTTP {resp.status_code}). Revisa CF_API_KEY en .env")
+            raise CurseForgeAuthError(t("cf.key_rejected", status=resp.status_code))
         if resp.status_code == 404:
             return None
         if not resp.ok:
@@ -87,7 +88,7 @@ class CurseForgeClient:
     def check(self) -> None:
         """Petición mínima para comprobar la key. Lanza CurseForgeAuthError si no vale."""
         if self._call("GET", f"/v1/games/{MINECRAFT_GAME_ID}") is None:
-            raise ApiError("CurseForge no ha respondido como se esperaba")
+            raise ApiError(t("cf.unexpected"))
 
     # ------------------------------------------------------------------ identificación
 

@@ -19,6 +19,7 @@ import zipfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from .i18n import t
 from .murmur2 import curseforge_fingerprint
 
 CACHE_VERSION = 2  # 2: añade loader y mc_range
@@ -214,7 +215,7 @@ def scan_folder(mods_dir: Path, cache_path: Path | None = None, progress=None, o
     callable(índice, total, path) que se invoca para cada jar (en caché o no).
     """
     if not mods_dir.is_dir():
-        raise FileNotFoundError(f"No existe la carpeta de mods: {mods_dir}")
+        raise FileNotFoundError(t("scan.no_folder", path=mods_dir))
 
     cache = _load_cache(cache_path)
     new_cache: dict = {}

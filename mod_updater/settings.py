@@ -28,6 +28,7 @@ class Settings:
     backups_to_keep: int = 1
     setup_done: bool = False  # ya pasó por la pantalla de bienvenida
     use_curseforge: bool = True  # False = "continuar sin key (solo Modrinth)"
+    language: str = "auto"  # "auto" = idioma de la interfaz de Windows; o "es", "en", "ca"
 
     @property
     def mods_path(self) -> Path:

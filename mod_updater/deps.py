@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from .curseforge import CfFile, CurseForgeClient, latest_file_ids
+from .i18n import t
 from .modrinth import ModrinthClient
 from .resolver import (
     ACTUALIZABLE,
@@ -48,10 +49,19 @@ class Finder(Protocol):
 
 
 @dataclass
+class Broken:
+    """Mod instalado (que no se va a actualizar) al que le falta algo que no se puede instalar solo."""
+
+    res: Resolution
+    reason: str
+    url: str | None = None
+
+
+@dataclass
 class DepPlan:
     items: list[Resolution]  # lo que se va a aplicar: actualizaciones + instalaciones
     blocked: list[Resolution] = field(default_factory=list)  # actualizaciones bloqueadas
-    broken: list[str] = field(default_factory=list)  # avisos de mods instalados ya rotos
+    broken: list[Broken] = field(default_factory=list)  # mods instalados que ya están rotos
     ignored: list[str] = field(default_factory=list)  # dependencias sin versión para este loader
 
     @property
@@ -100,13 +110,13 @@ def plan_with_dependencies(results: list[Resolution], selected: list[Resolution]
     in_plan: set[int] = {id(r) for r in plan}
     installs: dict[tuple[str, str], Resolution | None] = {}  # None = buscada y no encontrada
     edges: list[tuple[Resolution, Resolution]] = []  # (padre, dependencia que necesita)
-    blocked: dict[int, str] = {}
+    blocked: dict[int, tuple[str, str | None]] = {}  # id -> (motivo, enlace)
     origin: dict[int, Resolution] = {}
     ignored: list[str] = []
 
-    def block(res: Resolution, reason: str) -> None:
+    def block(res: Resolution, reason: str, url: str | None = None) -> None:
         if id(res) not in blocked:
-            blocked[id(res)] = reason
+            blocked[id(res)] = (reason, url)
             origin[id(res)] = res
 
     def add_to_plan(res: Resolution, parent: Resolution) -> None:
@@ -133,7 +143,7 @@ def plan_with_dependencies(results: list[Resolution], selected: list[Resolution]
                 if cand is None:
                     _ignore(ignored, parent, dep, finder)
                 elif cand.status != ACTUALIZABLE:
-                    block(parent, _missing_reason(cand, dep))
+                    block(parent, _missing_reason(cand), cand.project_url)
                 else:
                     add_to_plan(cand, parent)
                     edges.append((parent, cand))
@@ -158,7 +168,7 @@ def plan_with_dependencies(results: list[Resolution], selected: list[Resolution]
                 _ignore(ignored, parent, dep, finder)
                 continue
             if cand.status != ACTUALIZABLE:
-                block(parent, _missing_reason(cand, dep))
+                block(parent, _missing_reason(cand), cand.project_url)
                 continue
             add_to_plan(cand, parent)
             edges.append((parent, cand))
@@ -169,7 +179,8 @@ def plan_with_dependencies(results: list[Resolution], selected: list[Resolution]
         changed = False
         for parent, child in edges:
             if id(child) in blocked and id(parent) not in blocked:
-                block(parent, f"necesita {child.name}, que no se puede instalar: {blocked[id(child)]}")
+                reason, url = blocked[id(child)]
+                block(parent, t("deps.needs_blocked", name=child.name, reason=reason), url)
                 changed = True
 
     # Quitar del plan lo bloqueado y las instalaciones que ya nadie necesita.
@@ -189,28 +200,28 @@ def plan_with_dependencies(results: list[Resolution], selected: list[Resolution]
         r.required_by = [p.name for p, c in edges if c is r and id(p) not in blocked] or r.required_by
 
     out = DepPlan(items=final, ignored=ignored)
-    for rid, reason in blocked.items():
+    for rid, (reason, url) in blocked.items():
         res = origin[rid]
         if res.kind == INSTALL:
             continue
         if res in selected:
             res.status = DESCARGA_MANUAL
-            res.add_note(f"bloqueado: {reason}")
+            res.add_note(t("deps.blocked", reason=reason))
             out.blocked.append(res)
         elif rid not in final_ids:
-            out.broken.append(f"{res.name}: {reason}")
+            out.broken.append(Broken(res, reason, url))
     return out
 
 
 def _ignore(ignored: list[str], parent: Resolution, dep: Dep, finder: Finder) -> None:
     label = finder.describe(dep) if hasattr(finder, "describe") else f"{dep.source} {dep.id}"
-    msg = f"{parent.name} declara como requerida {label}, que no tiene versión para este Minecraft/loader; se ignora"
+    msg = t("deps.ignored", parent=parent.name, dep=label)
     if msg not in ignored:
         ignored.append(msg)
 
 
-def _missing_reason(cand: Resolution, dep: Dep) -> str:
-    return f"falta {cand.name}, que no se puede descargar automáticamente ({cand.project_url})"
+def _missing_reason(cand: Resolution) -> str:
+    return t("deps.missing_manual", name=cand.name)
 
 
 def _check_version(dep, have, parent, finder, add_to_plan, edges, block) -> None:
@@ -224,7 +235,12 @@ def _check_version(dep, have, parent, finder, add_to_plan, edges, block) -> None
         add_to_plan(have, parent)
         edges.append((parent, have))
     else:
-        block(parent, f"necesita una versión más nueva de {have.name}")
+        block(parent, t("deps.needs_newer", name=have.name), have.project_url)
+
+
+def _only_prerelease(chosen, candidates) -> bool:
+    """La versión elegida es beta/alpha porque no existe ninguna estable."""
+    return chosen.version_type != "release" and not any(c.version_type == "release" for c in candidates)
 
 
 # --------------------------------------------------------------------------- búsqueda real
@@ -270,7 +286,7 @@ class DependencyFinder:
                 alt = self._find_mr(res.slug)
                 if alt is not None and alt.status == ACTUALIZABLE:
                     alt.known_ids |= res.known_ids
-                    alt.add_note("CurseForge no permite descarga, se usa Modrinth")
+                    alt.add_note(t("note.cf_blocked_use_mr"))
                     return alt
             return res
         return self._find_mr(dep.id)
@@ -303,6 +319,7 @@ class DependencyFinder:
             new_sha1=f.sha1,
             new_deps=cf_deps(f),
             known_ids={(CF, str(mod_id))},
+            only_prerelease=_only_prerelease(f, candidates),
         )
 
     def _find_mr(self, id_or_slug: str) -> Resolution | None:
@@ -332,4 +349,5 @@ class DependencyFinder:
             new_sha512=f.sha512 if f else None,
             new_deps=mr_deps(v),
             known_ids={(MR, project["id"])},
+            only_prerelease=_only_prerelease(v, versions),
         )

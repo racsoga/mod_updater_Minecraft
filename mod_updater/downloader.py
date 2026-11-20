@@ -24,6 +24,7 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 
+from .i18n import t
 from .net import ApiError, request_with_retry
 from .resolver import ACTUALIZABLE, Resolution
 
@@ -78,14 +79,14 @@ def _get_following_redirects(url: str, session_for: SessionFor) -> requests.Resp
     las cabeceras) en cada salto: la key de CurseForge solo va a sus dominios."""
     for _ in range(MAX_REDIRECTS + 1):
         if urlparse(url).scheme != "https":
-            raise ApiError(f"URL no segura: {url}")
+            raise ApiError(t("dl.insecure_url", url=url))
         resp = request_with_retry(session_for(url), "GET", url, stream=True, timeout=60, allow_redirects=False)
         if resp.is_redirect:
             url = urljoin(url, resp.headers["Location"])
             resp.close()
             continue
         return resp
-    raise ApiError("demasiadas redirecciones")
+    raise ApiError(t("dl.too_many_redirects"))
 
 
 def download_verified(res: Resolution, dest: Path, session_for: SessionFor) -> None:
@@ -93,19 +94,19 @@ def download_verified(res: Resolution, dest: Path, session_for: SessionFor) -> N
     (y en ese caso no deja `dest`)."""
     expected = _expected_hash(res)
     if expected is None:
-        raise ApiError("la fuente no da hash para verificar la descarga")
+        raise ApiError(t("dl.no_hash"))
     algo, want = expected
     h = hashlib.new(algo)
     try:
         resp = _get_following_redirects(res.download_url, session_for)
         if not resp.ok:
-            raise ApiError(f"HTTP {resp.status_code} al descargar")
+            raise ApiError(t("dl.http_error", status=resp.status_code))
         with resp, dest.open("wb") as f:
             for chunk in resp.iter_content(CHUNK):
                 f.write(chunk)
                 h.update(chunk)
         if h.hexdigest() != want:
-            raise ApiError(f"el {algo} de la descarga no coincide")
+            raise ApiError(t("dl.hash_mismatch", algo=algo))
     except BaseException:
         dest.unlink(missing_ok=True)
         raise
@@ -116,43 +117,43 @@ def apply_one(res: Resolution, mods_dir: Path, backup_dir: Path, session_for: Se
     old = res.mod.path if res.mod is not None else None
     new_name = res.new_file_name or ""
     if not res.download_url or not new_name:
-        return Outcome(res, False, "sin URL de descarga")
+        return Outcome(res, False, t("dl.no_url"))
     if Path(new_name).name != new_name or not new_name.lower().endswith(".jar"):
-        return Outcome(res, False, f"nombre de archivo sospechoso: {new_name!r}")
+        return Outcome(res, False, t("dl.bad_name", name=new_name))
     if old is not None and not old.exists():
-        return Outcome(res, False, "el jar actual ya no está en la carpeta")
+        return Outcome(res, False, t("dl.old_missing"))
 
     final = mods_dir / new_name
     if final.exists() and (old is None or final.resolve() != old.resolve()):
-        return Outcome(res, False, f"ya existe otro archivo llamado {new_name}")
+        return Outcome(res, False, t("dl.exists", name=new_name))
 
     part = backup_dir / f"{new_name}.part"
     try:
         download_verified(res, part, session_for)
     except (ApiError, OSError, requests.RequestException) as exc:
-        return Outcome(res, False, f"descarga fallida: {exc}")
+        return Outcome(res, False, t("dl.failed", error=exc))
 
     if old is None:  # instalación nueva: no hay nada que mover al backup
         try:
             os.replace(part, final)
         except OSError as exc:
             part.unlink(missing_ok=True)
-            return Outcome(res, False, f"no se pudo colocar el jar nuevo: {exc}")
-        return Outcome(res, True, "instalado", new_path=final)
+            return Outcome(res, False, t("dl.place_failed", error=exc))
+        return Outcome(res, True, t("dl.installed"), new_path=final)
 
     backup = backup_dir / old.name
     try:
         os.replace(old, backup)  # 1. viejo → backup
     except OSError as exc:
         part.unlink(missing_ok=True)
-        return Outcome(res, False, f"no se pudo mover el jar viejo (¿el juego está abierto?): {exc}")
+        return Outcome(res, False, t("dl.move_old_failed", error=exc))
     try:
         os.replace(part, final)  # 2. nuevo → mods
     except OSError as exc:
         os.replace(backup, old)  # deshacer: el viejo vuelve a su sitio
         part.unlink(missing_ok=True)
-        return Outcome(res, False, f"no se pudo colocar el jar nuevo, se ha restaurado el viejo: {exc}")
-    return Outcome(res, True, "actualizado", new_path=final, backup_path=backup)
+        return Outcome(res, False, t("dl.restored", error=exc))
+    return Outcome(res, True, t("dl.updated"), new_path=final, backup_path=backup)
 
 
 def updatable(results: list[Resolution]) -> tuple[list[Resolution], list[Resolution]]:
@@ -160,7 +161,7 @@ def updatable(results: list[Resolution]) -> tuple[list[Resolution], list[Resolut
     (proyectos duplicados en la carpeta: actualizarlos chocaría)."""
     cands = [r for r in results if r.status == ACTUALIZABLE]
     count = Counter((r.source, r.project_id) for r in cands)
-    ok = [r for r in cands if count[(r.source, r.project_id)] == 1 and "duplicado" not in r.note]
+    ok = [r for r in cands if count[(r.source, r.project_id)] == 1 and not r.duplicate]
     skipped = [r for r in cands if r not in ok]
     return ok, skipped
 
@@ -193,25 +194,21 @@ def write_changelog(backup_dir: Path, mods_dir: Path, outcomes: list[Outcome]) -
     (backup_dir / "cambios.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
     lines = [
-        f"Actualización de mods {datetime.now():%Y-%m-%d %H:%M}",
-        f"Carpeta de mods: {mods_dir}",
+        t("log.title", date=f"{datetime.now():%Y-%m-%d %H:%M}"),
+        t("log.folder", path=mods_dir),
         "",
-        "Para revertir un mod: borra el jar nuevo de la carpeta de mods y copia",
-        "a ella el jar viejo desde esta carpeta de backup. Los marcados [NUEVO]",
-        "no tenían versión anterior: basta con borrarlos.",
+        *t("log.howto").splitlines(),
         "",
     ]
     for e in entries:
         if not e["ok"]:
-            lines.append(f"[FALLO] {e['name']}: sin cambios — {e['message']}")
+            lines.append(t("log.failed", name=e["name"], message=e["message"]))
         elif e["action"] == "install":
-            why = f", requerida por {', '.join(e['required_by'])}" if e["required_by"] else ""
-            lines.append(f"[NUEVO] {e['name']}: {e['new_file']}  ({e['new_version']}, {e['source']}{why})")
+            why = t("log.required_by", names=", ".join(e["required_by"])) if e["required_by"] else ""
+            lines.append(t("log.installed", name=e["name"], file=e["new_file"], version=e["new_version"], source=e["source"], why=why))
         else:
-            lines.append(
-                f"[OK]    {e['name']}: {e['old_file']} -> {e['new_file']}  "
-                f"({e['old_version']} -> {e['new_version']}, {e['source']})"
-            )
+            lines.append(t("log.updated", name=e["name"], old=e["old_file"], new=e["new_file"],
+                           old_version=e["old_version"], new_version=e["new_version"], source=e["source"]))
     path = backup_dir / "cambios.txt"
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path

@@ -208,7 +208,8 @@ def test_broken_installed_mod_with_undownloadable_dep_is_reported():
     finder = FakeFinder({(CF, MEZZ_CF): candidate("MezzConfig", CF, MEZZ_CF, url=False)})
     plan = plan_with_dependencies([jei], [], finder)
     assert plan.items == []
-    assert len(plan.broken) == 1 and "MezzConfig" in plan.broken[0]
+    assert len(plan.broken) == 1 and plan.broken[0].res is jei and "MezzConfig" in plan.broken[0].reason
+    assert plan.broken[0].url == "https://x/MezzConfig"
     assert jei.status == AL_DIA  # no se toca su estado: no se iba a actualizar
 
 

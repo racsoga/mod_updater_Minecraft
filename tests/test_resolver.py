@@ -154,8 +154,8 @@ def test_duplicate_projects_flagged():
     v2 = ver("0.9", "p1", "release", "2023-01-01")
     client = FakeClient(current={"h1": v, "h2": v2}, latest={"h1": v, "h2": v})
     r = resolve(client, [mod("a.jar", "h1"), mod("b.jar", "h2")])
+    assert r["a.jar"].duplicate and r["b.jar"].duplicate
     assert "duplicado" in r["a.jar"].note
-    assert "duplicado" in r["b.jar"].note
 
 
 # --------------------------------------------------------------------------- CurseForge + combinación

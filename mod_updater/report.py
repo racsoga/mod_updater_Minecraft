@@ -1,4 +1,4 @@
-"""Tabla de resultados con rich."""
+"""Tabla de resultados con rich (CLI). Textos en locales/<idioma>.json."""
 
 from __future__ import annotations
 
@@ -9,28 +9,17 @@ from rich.markup import escape
 from rich.table import Table
 
 from .deps import DepPlan
+from .i18n import t
 from .resolver import ACTUALIZABLE, AL_DIA, DESCARGA_MANUAL, INSTALL, NO_ENCONTRADO, Resolution
 
-# Textos para el usuario (también los usará la interfaz gráfica).
-STATUS_LABEL = {
-    ACTUALIZABLE: "Actualizable",
-    AL_DIA: "Al día",
-    DESCARGA_MANUAL: "Descarga manual",
-    NO_ENCONTRADO: "No encontrado",
-}
-STATUS_HELP = {
-    AL_DIA: "Ya tienes la última versión.",
-    ACTUALIZABLE: "Hay una versión nueva compatible.",
-    DESCARGA_MANUAL: "Hay versión nueva, pero no se puede descargar automáticamente. Abre su página.",
-    NO_ENCONTRADO: "No está en CurseForge ni en Modrinth. Se deja como está.",
-}
-NEW_DEP_LABEL = "Nueva dependencia"
+STATUS_KEY = {ACTUALIZABLE: "up", AL_DIA: "ok", DESCARGA_MANUAL: "manual", NO_ENCONTRADO: "missing"}
 STATUS_STYLE = {ACTUALIZABLE: "bold green", AL_DIA: "dim", DESCARGA_MANUAL: "yellow", NO_ENCONTRADO: "red"}
 STATUS_ORDER = {ACTUALIZABLE: 0, DESCARGA_MANUAL: 1, NO_ENCONTRADO: 2, AL_DIA: 3}
 
 
 def status_label(r: Resolution) -> str:
-    return NEW_DEP_LABEL if r.kind == INSTALL else STATUS_LABEL.get(r.status, r.status)
+    """Texto visible del estado ("Al día", "Nueva dependencia"...)."""
+    return t("status.dep") if r.kind == INSTALL else t(f"status.{STATUS_KEY.get(r.status, 'missing')}")
 
 
 def _channel(ch: str | None) -> str:
@@ -51,31 +40,28 @@ def print_report(
     installs = plan.installs if plan else []
     added = {id(r) for r in plan.added_updates} if plan else set()
 
-    table = Table(title="Mods", header_style="bold")
-    table.add_column("Mod", overflow="fold")
-    table.add_column("Versión actual", overflow="fold")
-    table.add_column("→ Nueva", overflow="fold")
-    table.add_column("Estado")
-    table.add_column("Fuente")
-    table.add_column("Notas", overflow="fold", style="dim")
+    table = Table(title=t("cli.table_title"), header_style="bold")
+    for col in ("cli.col_mod", "cli.col_current", "cli.col_new", "cli.col_status", "cli.col_source"):
+        table.add_column(t(col), overflow="fold")
+    table.add_column(t("cli.col_notes"), overflow="fold", style="dim")
 
     for r in installs + rows:
         new = escape(r.new_version) + _channel(r.new_channel) if r.new_version else ""
         if r.kind == INSTALL:
-            label, style = NEW_DEP_LABEL, "bold cyan"
-            note = f"requerida por {', '.join(r.required_by)}"
+            style = "bold cyan"
+            note = t("cli.required_by", names=", ".join(r.required_by))
         else:
-            label, style = status_label(r), STATUS_STYLE.get(r.status, "")
+            style = STATUS_STYLE.get(r.status, "")
             note = r.note
             if id(r) in added:
-                note = "; ".join(filter(None, [f"requerida por {', '.join(r.required_by)}", note]))
+                note = "; ".join(filter(None, [t("cli.required_by", names=", ".join(r.required_by)), note]))
             if r.status == NO_ENCONTRADO and r.mod:
                 note = f"{note}  ({r.mod.file_name})"
         table.add_row(
             escape(r.name),
             "—" if r.kind == INSTALL else escape(r.current_version or "?") + _channel(r.current_channel),
             f"[green]{new}[/]" if r.status == ACTUALIZABLE else new,
-            f"[{style}]{label}[/]",
+            f"[{style}]{status_label(r)}[/]",
             r.source or "-",
             escape(note),
         )
@@ -83,22 +69,22 @@ def print_report(
 
     counts = Counter(r.status for r in results)
     attention = counts[DESCARGA_MANUAL] + counts[NO_ENCONTRADO]
-    parts = [f"[bold green]{counts[ACTUALIZABLE]} actualizaciones disponibles[/]", f"{counts[AL_DIA]} al día"]
+    parts = [
+        f"[bold green]{t('cli.sum_updates', count=counts[ACTUALIZABLE])}[/]",
+        t("cli.sum_ok", count=counts[AL_DIA]),
+    ]
     if installs:
-        parts.append(f"[bold cyan]{len(installs)} dependencias nuevas[/]")
+        parts.append(f"[bold cyan]{t('cli.sum_deps', count=len(installs))}[/]")
     if attention:
-        parts.append(f"[yellow]{attention} requieren atención[/]")
+        parts.append(f"[yellow]{t('cli.sum_attention', count=attention)}[/]")
     console.print(" · ".join(parts))
 
     if plan:
         for r in installs:
-            console.print(
-                f"[cyan]Se instalará {escape(r.name)} {escape(r.new_version or '')} "
-                f"(requerida por {escape(', '.join(r.required_by))}).[/]"
-            )
+            console.print(f"[cyan]{escape(t('cli.will_install', name=r.name, version=r.new_version or '', names=', '.join(r.required_by)))}[/]")
         for r in plan.blocked:
-            console.print(f"[yellow]No se actualizará {escape(r.name)}: {escape(r.note)}[/]")
-        for msg in plan.broken:
-            console.print(f"[red]Tu carpeta ya tiene un problema: {escape(msg)}[/]")
+            console.print(f"[yellow]{escape(t('cli.blocked', name=r.name, note=r.note))}[/]")
+        for b in plan.broken:
+            console.print(f"[red]{escape(t('cli.broken', name=b.res.name, reason=b.reason))}[/]")
         for msg in plan.ignored:
-            console.print(f"[dim]Aviso: {escape(msg)}.[/]")
+            console.print(f"[dim]{escape(t('cli.notice', message=msg))}[/]")
