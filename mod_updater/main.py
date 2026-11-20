@@ -10,9 +10,11 @@ import sys
 from pathlib import Path
 
 from rich.console import Console
+from rich.markup import escape
 
 from . import __version__
 from .config import load_config
+from .downloader import apply_updates, backup_root, updatable
 from .curseforge import CurseForgeAuthError, CurseForgeClient
 from .modrinth import ModrinthClient
 from .net import ApiError
@@ -47,10 +49,6 @@ def main(argv: list[str] | None = None) -> int:
     if args.mods_dir:
         cfg.mods_dir = args.mods_dir
 
-    if args.apply:
-        console.print("[yellow]--apply todavía no está implementado (hito 5). No se ha tocado nada.[/]")
-        return 2
-
     console.print(f"Carpeta de mods: [bold]{cfg.mods_dir}[/]  (MC {cfg.minecraft_version}, {cfg.loader})")
     try:
         with console.status("Calculando hashes…") as status:
@@ -77,6 +75,7 @@ def main(argv: list[str] | None = None) -> int:
                 results = resolve_all(mods, curseforge=curseforge, modrinth=modrinth, **opts)
             except CurseForgeAuthError as exc:
                 console.print(f"[yellow]{exc}. Se usa solo Modrinth.[/]")
+                curseforge = None
                 results = resolve_all(mods, curseforge=None, modrinth=modrinth, **opts)
     except ApiError as exc:
         console.print(f"[red]Error de red: {exc}[/]")
@@ -90,8 +89,47 @@ def main(argv: list[str] | None = None) -> int:
         ]
 
     print_report(results, console, show_up_to_date=not args.hide_up_to_date)
-    console.print("[dim]Modo revisión: no se ha modificado ningún archivo.[/]")
-    return 0
+    if not args.apply:
+        console.print("[dim]Modo revisión: no se ha modificado ningún archivo. Usa --apply para actualizar.[/]")
+        return 0
+    return run_apply(results, cfg.mods_dir, modrinth, curseforge, console, assume_yes=args.yes)
+
+
+def run_apply(results, mods_dir, modrinth, curseforge, console: Console, *, assume_yes: bool) -> int:
+    to_apply, skipped = updatable(results)
+    for r in skipped:
+        console.print(f"[yellow]Se salta {escape(r.name)}: el mismo mod está duplicado en la carpeta.[/]")
+    if not to_apply:
+        console.print("Nada que actualizar.")
+        return 0
+
+    console.print(
+        f"\nSe actualizarán [bold]{len(to_apply)}[/] mods. Los jar viejos se moverán (no se borran) a "
+        f"[bold]{escape(str(backup_root(mods_dir) / '<fecha>'))}[/]."
+    )
+    console.print("[yellow]Cierra Minecraft antes de continuar.[/]")
+    if not assume_yes:
+        answer = console.input("¿Continuar? [s/N] ").strip().lower()
+        if answer not in ("s", "si", "sí", "y", "yes"):
+            console.print("Cancelado. No se ha modificado nada.")
+            return 0
+
+    with console.status("Descargando…") as status:
+        backup_dir, outcomes = apply_updates(
+            to_apply,
+            mods_dir,
+            modrinth_session=modrinth.session,
+            curseforge_session=curseforge.session if curseforge else None,
+            progress=lambda r: status.update(f"Descargando {escape(r.name)}…"),
+        )
+
+    ok = [o for o in outcomes if o.ok]
+    failed = [o for o in outcomes if not o.ok]
+    for o in failed:
+        console.print(f"[red]✗ {escape(o.resolution.name)}: {escape(o.message)}[/] (el jar viejo sigue en su sitio)")
+    console.print(f"[bold green]{len(ok)} actualizados[/], [red]{len(failed)} fallidos[/].")
+    console.print(f"Backup y registro de cambios en: [bold]{escape(str(backup_dir))}[/]")
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":  # pragma: no cover

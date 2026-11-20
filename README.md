@@ -21,6 +21,9 @@ Opcional:
 
 ```bat
 .venv\Scripts\python -m mod_updater                       :: revisa y muestra la tabla (no toca nada)
+.venv\Scripts\python -m mod_updater --apply               :: revisa, pide confirmación y actualiza
+.venv\Scripts\python -m mod_updater --apply --yes         :: sin confirmación
+.venv\Scripts\python -m mod_updater --apply --only balm   :: actualiza solo algunos
 .venv\Scripts\python -m mod_updater --hide-up-to-date     :: oculta los mods al día
 .venv\Scripts\python -m mod_updater --only create,jei     :: filtra por nombre
 .venv\Scripts\python -m mod_updater --allow-beta          :: propone betas aunque tengas la release
@@ -40,13 +43,24 @@ Estados:
 
 Los hashes se guardan en `.cache/scan_cache.json` (dentro del proyecto, no en la carpeta de mods), así que la primera ejecución tarda unos segundos más.
 
+## Cómo actualiza (`--apply`)
+
+También puedes hacer doble clic en `actualizar.bat`. **Cierra Minecraft antes.**
+
+1. Descarga cada jar nuevo a un `.part` en `.minecraft\mods_backup\AAAA-MM-DD_HHMM\` y verifica su hash (sha512 o sha1).
+2. Solo si coincide, mueve el jar viejo a esa carpeta de backup y coloca el nuevo en `mods`.
+3. Si algo falla, el jar viejo sigue (o vuelve) a su sitio. **Nunca se borra nada.**
+4. `cambios.txt` en la carpeta de backup lista lo que cambió, para revertir a mano.
+
+Los mods duplicados en la carpeta se saltan. La API key de CurseForge solo se envía a dominios de CurseForge, incluso si la descarga redirige a otro sitio.
+
 ## Estado
 
 - [x] Hito 1: esqueleto del repo
 - [x] Hito 2: escaneo + fingerprint CurseForge (MurmurHash2) con tests, validado contra la API (125/125)
 - [x] Hito 3: Modrinth, tabla en modo revisión
 - [x] Hito 4: CurseForge como fuente principal, Modrinth como respaldo
-- [ ] Hito 5: descarga + backup (`--apply`)
+- [x] Hito 5: descarga + backup (`--apply`)
 - [ ] Hito 6: dependencias
 
 ## Tests

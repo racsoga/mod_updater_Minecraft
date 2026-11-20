@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-DEFAULT_USER_AGENT = "racsoga/mod-updater/0.1 (github.com/racsoga/mod-updater)"
+DEFAULT_USER_AGENT = "racsoga/mod-updater/0.1 (github.com/racsoga/mod_updater_Minecraft)"
 
 
 def default_mods_dir() -> Path:
