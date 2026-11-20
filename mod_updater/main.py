@@ -13,10 +13,11 @@ from rich.console import Console
 
 from . import __version__
 from .config import load_config
+from .curseforge import CurseForgeAuthError, CurseForgeClient
 from .modrinth import ModrinthClient
 from .net import ApiError
 from .report import print_report
-from .resolver import resolve_with_modrinth
+from .resolver import resolve_all
 from .scanner import scan_folder
 
 
@@ -65,16 +66,18 @@ def main(argv: list[str] | None = None) -> int:
     if not mods:
         return 0
 
-    client = ModrinthClient(cfg.user_agent)
+    modrinth = ModrinthClient(cfg.user_agent)
+    curseforge = CurseForgeClient(cfg.cf_api_key) if cfg.cf_api_key else None
+    if curseforge is None:
+        console.print("[yellow]Sin CF_API_KEY en .env: solo se consultará Modrinth.[/]")
+    opts = dict(loader=cfg.loader, game_version=cfg.minecraft_version, allow_beta=args.allow_beta)
     try:
-        with console.status("Consultando Modrinth…"):
-            results = resolve_with_modrinth(
-                mods,
-                client,
-                loader=cfg.loader,
-                game_version=cfg.minecraft_version,
-                allow_beta=args.allow_beta,
-            )
+        with console.status("Consultando CurseForge y Modrinth…"):
+            try:
+                results = resolve_all(mods, curseforge=curseforge, modrinth=modrinth, **opts)
+            except CurseForgeAuthError as exc:
+                console.print(f"[yellow]{exc}. Se usa solo Modrinth.[/]")
+                results = resolve_all(mods, curseforge=None, modrinth=modrinth, **opts)
     except ApiError as exc:
         console.print(f"[red]Error de red: {exc}[/]")
         return 1

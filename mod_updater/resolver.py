@@ -1,15 +1,16 @@
 """Decide, para cada jar, si hay una versión nueva y de dónde sacarla.
 
-Por ahora solo Modrinth (hito 3). CurseForge se añadirá como fuente principal
-en el hito 4 y Modrinth quedará como respaldo.
+CurseForge es la fuente principal y Modrinth el respaldo (ver `resolve_all`).
 """
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from dataclasses import dataclass
 from typing import Protocol, Sequence, TypeVar
 
+from .curseforge import CfFile, CurseForgeClient, latest_file_ids
 from .modrinth import ModrinthClient, MrVersion
 from .scanner import ModFile
 
@@ -82,6 +83,22 @@ def choose_update(current: VersionLike, candidates: Sequence[V], allow_beta: boo
     return best
 
 
+# --------------------------------------------------------------------------- versión legible
+
+def guess_version(current_file: str, current_version: str | None, new_file: str) -> str | None:
+    """Deduce la versión del archivo nuevo usando el nombre del actual como plantilla.
+
+    `balm-neoforge-1.21.1-21.0.56.jar` con versión `21.0.56` da la plantilla
+    `balm-neoforge-1.21.1-{v}.jar`; aplicada a `balm-neoforge-1.21.1-21.0.67.jar`
+    devuelve `21.0.67`. Si la plantilla no encaja, devuelve None.
+    """
+    if not current_version or current_file.count(current_version) != 1:
+        return None
+    before, after = current_file.split(current_version)
+    m = re.fullmatch(re.escape(before) + r"(.+?)" + re.escape(after), new_file, flags=re.IGNORECASE)
+    return m.group(1) if m else None
+
+
 # --------------------------------------------------------------------------- Modrinth
 
 def resolve_with_modrinth(
@@ -149,3 +166,121 @@ def resolve_with_modrinth(
         res.note = "; ".join(notes)
         results.append(res)
     return results
+
+
+# --------------------------------------------------------------------------- CurseForge
+
+def resolve_with_curseforge(
+    mods: list[ModFile],
+    client: CurseForgeClient,
+    *,
+    loader: str,
+    game_version: str,
+    allow_beta: bool = False,
+) -> list[Resolution]:
+    matches = client.match_fingerprints([m.cf_fingerprint for m in mods])
+    cf_mods = client.mods([mt.mod_id for mt in matches.values()]) if matches else {}
+
+    # Candidatos: los "últimos archivos" por canal del índice del mod (una sola
+    # petición en lote). Si un mod no tiene índice para versión+loader, se
+    # consulta su lista de archivos.
+    index_ids: dict[int, list[int]] = {
+        mod_id: latest_file_ids(info, game_version, loader) for mod_id, info in cf_mods.items()
+    }
+    files_by_id = client.files([fid for ids in index_ids.values() for fid in ids])
+    candidates_by_mod: dict[int, list[CfFile]] = {
+        mod_id: [files_by_id[str(fid)] for fid in ids if str(fid) in files_by_id]
+        for mod_id, ids in index_ids.items()
+    }
+
+    dup_count = Counter(matches[m.cf_fingerprint].mod_id for m in mods if m.cf_fingerprint in matches)
+
+    results: list[Resolution] = []
+    for mod in mods:
+        match = matches.get(mod.cf_fingerprint)
+        if match is None:
+            results.append(
+                Resolution(mod=mod, status=DESCONOCIDO, current_version=mod.version, note="no está en CurseForge")
+            )
+            continue
+
+        info = cf_mods.get(match.mod_id, {})
+        cur = match.file
+        res = Resolution(
+            mod=mod,
+            status=AL_DIA,
+            source="curseforge",
+            project_id=str(match.mod_id),
+            project_name=info.get("name"),
+            project_url=(info.get("links") or {}).get("websiteUrl")
+            or f"https://www.curseforge.com/minecraft/mc-mods/{info.get('slug', match.mod_id)}",
+            current_version=mod.version or cur.display_name,
+            current_channel=cur.version_type,
+        )
+        notes = []
+        if dup_count[match.mod_id] > 1:
+            notes.append("¡duplicado en la carpeta!")
+
+        candidates = candidates_by_mod.get(match.mod_id)
+        if not candidates:
+            candidates = client.mod_files(match.mod_id, game_version, loader)
+        if not candidates:
+            notes.append(f"sin versiones para {game_version}/{loader}")
+
+        new = choose_update(cur, candidates, allow_beta)
+        if new is not None:
+            res.new_version = guess_version(mod.file_name, mod.version, new.file_name) or new.display_name
+            res.new_channel = new.version_type
+            res.new_file_name = new.file_name
+            res.new_sha1 = new.sha1
+            if new.download_url:
+                res.status = ACTUALIZABLE
+                res.download_url = new.download_url
+            else:
+                res.status = SOLO_MANUAL
+                notes.append("el autor no permite descarga por API")
+        res.note = "; ".join(notes)
+        results.append(res)
+    return results
+
+
+# --------------------------------------------------------------------------- combinación
+
+def resolve_all(
+    mods: list[ModFile],
+    *,
+    curseforge: CurseForgeClient | None,
+    modrinth: ModrinthClient,
+    loader: str,
+    game_version: str,
+    allow_beta: bool = False,
+) -> list[Resolution]:
+    """CurseForge como fuente principal y Modrinth como respaldo.
+
+    Se usa Modrinth para los mods que CurseForge no identifica y para los que
+    tienen versión nueva pero no se pueden descargar por API.
+    """
+    opts = dict(loader=loader, game_version=game_version, allow_beta=allow_beta)
+    if curseforge is None:
+        return resolve_with_modrinth(mods, modrinth, **opts)
+
+    cf_results = resolve_with_curseforge(mods, curseforge, **opts)
+    need_mr = [r.mod for r in cf_results if r.status in (DESCONOCIDO, SOLO_MANUAL)]
+    mr_by_path = {r.mod.path: r for r in resolve_with_modrinth(need_mr, modrinth, **opts)} if need_mr else {}
+
+    merged: list[Resolution] = []
+    for cf in cf_results:
+        mr = mr_by_path.get(cf.mod.path)
+        if mr is None:
+            merged.append(cf)
+        elif cf.status == DESCONOCIDO:
+            merged.append(mr)
+        elif mr.status == ACTUALIZABLE:
+            # CurseForge no deja descargar; Modrinth sí.
+            mr.note = "; ".join(filter(None, ["CurseForge no permite descarga, se usa Modrinth", mr.note]))
+            merged.append(mr)
+        else:
+            # Modrinth no ofrece la versión nueva: queda como descarga manual desde la web.
+            cf.note = "; ".join(filter(None, [cf.note, f"descárgalo a mano: {cf.project_url}"]))
+            merged.append(cf)
+    return merged

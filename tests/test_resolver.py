@@ -156,3 +156,110 @@ def test_duplicate_projects_flagged():
     r = resolve(client, [mod("a.jar", "h1"), mod("b.jar", "h2")])
     assert "duplicado" in r["a.jar"].note
     assert "duplicado" in r["b.jar"].note
+
+
+# --------------------------------------------------------------------------- CurseForge + combinación
+
+from mod_updater.curseforge import CfFile, CfMatch
+from mod_updater.resolver import resolve_all
+
+
+def cf_file(id, mod_id, vtype, date, url="https://edge.forgecdn.net/x.jar"):
+    return CfFile(id=str(id), mod_id=mod_id, display_name=f"v{id}", file_name=f"f{id}.jar",
+                  date_published=date, version_type=vtype, download_url=url, sha1="s", fingerprint=None)
+
+
+def cf_mod(name, sha1, fp):
+    m = mod(name, sha1)
+    m.cf_fingerprint = fp
+    return m
+
+
+class FakeCf:
+    def __init__(self, matches, index, files, listing=None):
+        self.matches, self.index, self._files, self.listing = matches, index, files, listing or {}
+        self.listing_calls = []
+
+    def match_fingerprints(self, fps):
+        return {fp: m for fp, m in self.matches.items() if fp in fps}
+
+    def mods(self, ids):
+        return {i: {"id": i, "name": f"Mod{i}", "slug": f"mod{i}",
+                    "latestFilesIndexes": [{"gameVersion": "1.21.1", "modLoader": 6, "fileId": f}
+                                           for f in self.index.get(i, [])]} for i in ids}
+
+    def files(self, ids):
+        return {str(i): self._files[i] for i in ids if i in self._files}
+
+    def mod_files(self, mod_id, game_version, loader):
+        self.listing_calls.append(mod_id)
+        return self.listing.get(mod_id, [])
+
+
+def run_all(cf, mr, mods, allow_beta=False):
+    return {r.mod.file_name: r for r in resolve_all(
+        mods, curseforge=cf, modrinth=mr, loader="neoforge", game_version="1.21.1", allow_beta=allow_beta)}
+
+
+def test_cf_primary_and_modrinth_fallback():
+    cur1 = cf_file(10, 1, "release", "2024-01-01")
+    new1 = cf_file(11, 1, "release", "2024-02-01")
+    beta1 = cf_file(12, 1, "beta", "2024-03-01")
+    cf = FakeCf(matches={100: CfMatch(1, cur1)}, index={1: [11, 12]}, files={11: new1, 12: beta1})
+    mr = FakeClient(current={"h2": ver("1.0", "p2", "release", "2024-01-01")},
+                    latest={"h2": ver("1.1", "p2", "release", "2024-02-01")})
+    r = run_all(cf, mr, [cf_mod("a.jar", "h1", 100), cf_mod("b.jar", "h2", 200), cf_mod("c.jar", "h3", 300)])
+    assert (r["a.jar"].source, r["a.jar"].status, r["a.jar"].new_version) == ("curseforge", ACTUALIZABLE, "v11")
+    assert (r["b.jar"].source, r["b.jar"].status) == ("modrinth", ACTUALIZABLE)
+    assert r["c.jar"].status == DESCONOCIDO
+
+
+def test_cf_without_download_url_uses_modrinth():
+    cur = cf_file(10, 1, "release", "2024-01-01")
+    new = cf_file(11, 1, "release", "2024-02-01", url=None)
+    cf = FakeCf(matches={100: CfMatch(1, cur)}, index={1: [11]}, files={11: new})
+    mr = FakeClient(current={"h1": ver("1.0", "p1", "release", "2024-01-01")},
+                    latest={"h1": ver("1.1", "p1", "release", "2024-02-01")})
+    r = run_all(cf, mr, [cf_mod("a.jar", "h1", 100)])
+    assert r["a.jar"].source == "modrinth"
+    assert r["a.jar"].status == ACTUALIZABLE
+
+
+def test_cf_without_download_url_and_no_modrinth_is_manual():
+    cur = cf_file(10, 1, "release", "2024-01-01")
+    new = cf_file(11, 1, "release", "2024-02-01", url=None)
+    cf = FakeCf(matches={100: CfMatch(1, cur)}, index={1: [11]}, files={11: new})
+    r = run_all(cf, FakeClient(current={}, latest={}), [cf_mod("a.jar", "h1", 100)])
+    assert r["a.jar"].status == SOLO_MANUAL
+    assert "curseforge.com" in r["a.jar"].note or "mod1" in r["a.jar"].note
+
+
+def test_cf_missing_index_falls_back_to_file_listing():
+    cur = cf_file(10, 1, "release", "2024-01-01")
+    new = cf_file(11, 1, "release", "2024-02-01")
+    cf = FakeCf(matches={100: CfMatch(1, cur)}, index={}, files={}, listing={1: [new, cur]})
+    r = run_all(cf, FakeClient(current={}, latest={}), [cf_mod("a.jar", "h1", 100)])
+    assert cf.listing_calls == [1]
+    assert r["a.jar"].status == ACTUALIZABLE
+
+
+def test_cf_release_ignores_beta_in_index():
+    cur = cf_file(10, 1, "release", "2024-01-01")
+    beta = cf_file(12, 1, "beta", "2024-03-01")
+    cf = FakeCf(matches={100: CfMatch(1, cur)}, index={1: [10, 12]}, files={10: cur, 12: beta})
+    r = run_all(cf, FakeClient(current={}, latest={}), [cf_mod("a.jar", "h1", 100)])
+    assert r["a.jar"].status == AL_DIA
+    r = run_all(cf, FakeClient(current={}, latest={}), [cf_mod("a.jar", "h1", 100)], allow_beta=True)
+    assert r["a.jar"].new_version == "v12"
+
+
+from mod_updater.resolver import guess_version
+
+
+def test_guess_version():
+    assert guess_version("balm-neoforge-1.21.1-21.0.56.jar", "21.0.56", "balm-neoforge-1.21.1-21.0.67.jar") == "21.0.67"
+    assert guess_version("AmbientSounds_NEOFORGE_v6.3.8_mc1.21.1.jar", "6.3.8",
+                         "AmbientSounds_NEOFORGE_v6.3.11_mc1.21.1.jar") == "6.3.11"
+    assert guess_version("a-1.0.jar", "1.0", "totally-different.jar") is None
+    assert guess_version("a-1.0.jar", None, "a-1.1.jar") is None
+    assert guess_version("1.0-a-1.0.jar", "1.0", "1.0-a-1.1.jar") is None  # ambiguo
