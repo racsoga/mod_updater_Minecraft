@@ -77,6 +77,7 @@ class Resolution:
     note: str = ""
     duplicate: bool = False  # el mismo proyecto aparece varias veces en la carpeta
     only_prerelease: bool = False  # instalación: no existe ninguna versión estable
+    newer_prerelease: str | None = None  # al día, pero hay una beta/alpha más nueva (no se propone)
     current_deps: list[Dep] = field(default_factory=list)
     new_deps: list[Dep] = field(default_factory=list)
     known_ids: set[tuple[str, str]] = field(default_factory=set)
@@ -127,6 +128,12 @@ def choose_update(current: VersionLike, candidates: Sequence[V], allow_beta: boo
     if best.id == current.id or best.date_published <= current.date_published:
         return None
     return best
+
+
+def newer_prerelease(current: VersionLike, candidates: Sequence[V]) -> V | None:
+    """La versión más nueva que `current` aunque su canal no esté permitido (para avisar)."""
+    newer = [c for c in candidates if c.id != current.id and c.date_published > current.date_published]
+    return max(newer, key=lambda c: c.date_published) if newer else None
 
 
 def choose_for_install(candidates: Sequence[V], allow_beta: bool) -> V | None:
@@ -211,6 +218,8 @@ def resolve_with_modrinth(
             res.add_note(t("note.no_versions", game_version=game_version, loader=loader))
 
         new = choose_update(cur, candidates, allow_beta)
+        if new is None and (pre := newer_prerelease(cur, candidates)) is not None:
+            res.newer_prerelease = pre.version_number
         if new is not None:
             f = new.primary_file
             res.new_version = new.version_number
@@ -299,6 +308,8 @@ def resolve_with_curseforge(
             res.add_note(t("note.no_versions", game_version=game_version, loader=loader))
 
         new = choose_update(cur, candidates, allow_beta)
+        if new is None and (pre := newer_prerelease(cur, candidates)) is not None:
+            res.newer_prerelease = guess_version(mod.file_name, mod.version, pre.file_name) or pre.display_name
         if new is not None:
             res.new_version = guess_version(mod.file_name, mod.version, new.file_name) or new.display_name
             res.new_channel = new.version_type

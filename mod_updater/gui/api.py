@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import threading
 import webbrowser
 from dataclasses import asdict
@@ -86,6 +87,8 @@ def serialize(results: list[Resolution], plan: DepPlan, *, allow_beta: bool = Fa
             sub = file_name if file_name != r.name else t("row.missing_default")
         elif id(r) in added:
             sub = t("row.needed_by", names=", ".join(r.required_by))
+        elif s == "ok" and r.newer_prerelease:
+            sub = t("row.newer_beta", version=r.newer_prerelease)
         rows.append({
             "id": len(rows),
             "s": s,
@@ -405,11 +408,9 @@ class Api:
 
     def open_mods_folder(self) -> bool:
         path = self._settings().mods_path
-        if path.is_dir() and os.name == "nt":
-            os.startfile(path)  # noqa: S606 - abre el Explorador en la carpeta
-            return True
-        return False
-
-    def quit(self) -> None:
-        if self._window is not None:
-            self._window.destroy()
+        if not path.is_dir() or os.name != "nt":
+            return False
+        # explorer.exe <carpeta> abre una ventana nueva en esa carpeta y en primer plano
+        # (os.startfile puede dejarla detrás de la app).
+        subprocess.Popen(["explorer.exe", str(path.resolve())], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        return True

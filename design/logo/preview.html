@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Logo de Mod Updater: variantes</title>
+<style>
+  @font-face { font-family: "Inter"; src: url("../../mod_updater/gui/web/fonts/inter-latin-wght.woff2") format("woff2"); font-weight: 100 900; }
+  @font-face { font-family: "Silkscreen"; src: url("../../mod_updater/gui/web/fonts/silkscreen-latin-400.woff2") format("woff2"); }
+  body { margin: 0; background: #111214; color: #f5f5f7; font: 15px/1.4 "Inter", sans-serif; padding: 32px; }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 24px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .card { background: #1a1b1e; border: 1px solid rgba(255,255,255,.14); border-radius: 20px; padding: 20px; }
+  .card h2 { margin: 0 0 14px; font-size: 15px; font-weight: 600; }
+  img { image-rendering: pixelated; display: block; }
+  .sizes { display: flex; align-items: flex-end; gap: 16px; margin: 16px 0; }
+  .sizes span { font-size: 12px; color: #a8a8ad; display: block; text-align: center; margin-top: 4px; }
+  .bars { display: grid; gap: 8px; }
+  .bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 10px; font-size: 13px; }
+  .bar.taskbar { background: #202020; }
+  .bar.light { background: #f3f3f3; color: #1d1d1f; }
+  .header { display: flex; align-items: center; gap: 10px; padding: 12px 4px; border-top: 1px solid rgba(255,255,255,.08); margin-top: 14px; }
+  .brand { font-family: "Silkscreen"; font-size: 18px; }
+</style>
+</head>
+<body>
+<h1>Logo: tres variantes (pixel art 16×16)</h1>
+<div class="grid">
+  <div class="card" data-v="a-bloque"><h2>A · Bloque de hierba</h2></div>
+  <div class="card" data-v="b-loseta"><h2>B · Bloque en loseta</h2></div>
+  <div class="card" data-v="c-yunque"><h2>C · Yunque</h2></div>
+</div>
+<script>
+for (const card of document.querySelectorAll(".card")) {
+  const src = `variante-${card.dataset.v}.png`;
+  card.insertAdjacentHTML("beforeend", `
+    <img src="${src}" width="128" height="128" alt="">
+    <div class="sizes">${[48, 32, 16].map(s => `<div><img src="${src}" width="${s}" height="${s}" alt=""><span>${s}px</span></div>`).join("")}</div>
+    <div class="bars">
+      <div class="bar taskbar"><img src="${src}" width="24" height="24" alt=""> Barra de tareas</div>
+      <div class="bar light"><img src="${src}" width="24" height="24" alt=""> Fondo claro</div>
+    </div>
+    <div class="header"><img src="${src}" width="24" height="24" alt=""><span class="brand">Mod Updater</span></div>`);
+}
+</script>
+</body>
+</html>

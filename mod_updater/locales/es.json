@@ -181,9 +181,7 @@
   "ui.deck_dep": "{dep} hace falta para {names}.",
 
   "ui.update_region": "Actualizar",
-  "ui.close": "Cerrar",
   "ui.go_shortcut": "Ctrl + Intro",
-  "ui.go_nothing": "Nada que actualizar",
   "ui.go_choose": "Elige algún mod",
   "ui.go_both": "Actualizar {updates} e instalar {installs}",
   "ui.go_install_one": "Instalar 1 dependencia",
@@ -306,5 +304,8 @@
   "ui.clear_confirm_other": "¿Borrar {count} backups? Pulsa otra vez",
   "ui.backups_count_one": "Hay 1 backup guardado.",
   "ui.backups_count_other": "Hay {count} backups guardados.",
-  "ui.no_backups": "No hay backups guardados."
+  "ui.no_backups": "No hay backups guardados.",
+
+  "row.newer_beta": "Hay una beta más reciente ({version}). Para que se proponga, activa las betas en Ajustes.",
+  "ui.all_up_to_date": "Todo al día"
 }

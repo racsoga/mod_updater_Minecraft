@@ -16,3 +16,7 @@ mods_backup/
 
 # Capturas de revisión de diseño
 .playwright-mcp/
+
+# Compilación (PyInstaller)
+build/
+dist/

@@ -181,9 +181,7 @@
   "ui.deck_dep": "{names} needs {dep}.",
 
   "ui.update_region": "Update",
-  "ui.close": "Close",
   "ui.go_shortcut": "Ctrl + Enter",
-  "ui.go_nothing": "Nothing to update",
   "ui.go_choose": "Choose a mod",
   "ui.go_both": "Update {updates} and install {installs}",
   "ui.go_install_one": "Install 1 dependency",
@@ -306,5 +304,8 @@
   "ui.clear_confirm_other": "Delete {count} backups? Press again",
   "ui.backups_count_one": "There is 1 saved backup.",
   "ui.backups_count_other": "There are {count} saved backups.",
-  "ui.no_backups": "There are no saved backups."
+  "ui.no_backups": "There are no saved backups.",
+
+  "row.newer_beta": "A newer beta is available ({version}). To have it suggested, enable betas in Settings.",
+  "ui.all_up_to_date": "Everything up to date"
 }

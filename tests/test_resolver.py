@@ -253,6 +253,32 @@ def test_cf_release_ignores_beta_in_index():
     assert r["a.jar"].new_version == "v12"
 
 
+def test_up_to_date_release_reports_newer_beta():
+    # Caso real: Create Enchantment Industry 2.4.2 (release) y 2.5.4b (beta).
+    cur = cf_file(10, 1, "release", "2024-01-01")
+    beta = cf_file(12, 1, "beta", "2024-03-01")
+    cf = FakeCf(matches={100: CfMatch(1, cur)}, index={1: [10, 12]}, files={10: cur, 12: beta})
+    r = run_all(cf, FakeClient(current={}, latest={}), [cf_mod("a.jar", "h1", 100)])
+    assert r["a.jar"].status == AL_DIA
+    assert r["a.jar"].newer_prerelease == "v12"
+
+
+def test_modrinth_newer_beta_reported():
+    cur = ver("2.4.2", "p1", "release", "2024-01-01")
+    beta = ver("2.5.4b", "p1", "beta", "2024-03-01")
+    client = FakeClient(current={"h1": cur}, latest={"h1": beta}, history={"p1": [beta, cur]})
+    r = resolve(client, [mod("a.jar", "h1")])
+    assert r["a.jar"].status == AL_DIA
+    assert r["a.jar"].newer_prerelease == "2.5.4b"
+
+
+def test_no_newer_beta_note_when_truly_latest():
+    cur = ver("2.4.2", "p1", "release", "2024-03-01")
+    client = FakeClient(current={"h1": cur}, latest={"h1": cur})
+    r = resolve(client, [mod("a.jar", "h1")])
+    assert r["a.jar"].newer_prerelease is None
+
+
 from mod_updater.resolver import guess_version
 
 

@@ -1,0 +1,2 @@
+pillow>=10.0      # solo para tools/logo.py
+pyinstaller>=6.0  # solo para generar el .exe

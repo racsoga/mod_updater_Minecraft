@@ -85,6 +85,5 @@
     clear_backups: async () => ({ ok: true, count: 2, message: "2 backups borrados." }),
     open_url: async () => true,
     open_mods_folder: async () => true,
-    quit: async () => {},
   } };
 })();

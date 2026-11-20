@@ -325,7 +325,7 @@ function render() {
     } else if (g.collapsible && !forced) {
       extra = `<button class="linkbtn" type="button" data-ok aria-expanded="${okOpen}">${esc(okOpen ? t("ui.hide") : t("ui.show_n", { count: items.length }))}</button>`;
     }
-    html += `<div class="group-head"><h3>${esc(t(g.title))}</h3><span class="count">${items.length}</span><span class="grow"></span>${extra}</div>`;
+    html += `<div class="group-head" data-g="${g.key}"><h3>${esc(t(g.title))}</h3><span class="count">${items.length}</span><span class="grow"></span>${extra}</div>`;
     if (open) html += items.map(row).join("");
   }
   $("#list").innerHTML = html ||
@@ -354,12 +354,21 @@ function summary() {
   $("#deck").innerHTML = `<b>${esc(t("ui.deck_ok", { count: okN }))}</b> `
     + (attN ? esc(t("ui.deck_attention", { count: attN })) + " " : "") + esc(depLines);
 
+  // Nada que actualizar: sin botón de acción, solo "Todo al día" y "Volver a revisar".
+  const nothing = !ups.length && !deps.length;
+  $("#go").hidden = nothing;
+  $("#btn-recheck").hidden = !nothing;
+  if (nothing) {
+    $("#summary").innerHTML = `<span class="count">${esc(t("ui.all_up_to_date"))}</span>`
+      + `<span class="safe">${esc(t("ui.deck_ok", { count: okN }))}</span>`;
+    return;
+  }
+
   const sel = MODS.filter(m => m.checked);
   const selUp = sel.filter(m => m.s === "up").length, selDep = sel.filter(m => m.s === "dep").length;
   const btn = $("#go");
   btn.disabled = sel.length === 0;
-  btn.textContent = !ups.length && !deps.length ? t("ui.go_nothing")
-    : !sel.length ? t("ui.go_choose")
+  btn.textContent = !sel.length ? t("ui.go_choose")
     : selDep && selUp ? t("ui.go_both", { updates: selUp, installs: selDep })
     : selDep ? t("ui.go_install", { count: selDep })
     : t("ui.go_update", { count: selUp });
@@ -497,7 +506,7 @@ function wire() {
   $("#btn-settings").addEventListener("click", () => openSetup("settings"));
   $("#btn-rescan").addEventListener("click", startScan);
   $("#btn-retry").addEventListener("click", startScan);
-  $("#btn-quit").addEventListener("click", () => api().quit());
+  $("#btn-recheck").addEventListener("click", startScan);
   $("#btn-cancel-settings").addEventListener("click", async () => {
     // Deshacer la vista previa del idioma si se cancela.
     const s = await api().get_strings(state.settings.language || "auto");

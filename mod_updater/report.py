@@ -55,6 +55,8 @@ def print_report(
             note = r.note
             if id(r) in added:
                 note = "; ".join(filter(None, [t("cli.required_by", names=", ".join(r.required_by)), note]))
+            if r.status == AL_DIA and r.newer_prerelease:
+                note = "; ".join(filter(None, [note, t("row.newer_beta", version=r.newer_prerelease)]))
             if r.status == NO_ENCONTRADO and r.mod:
                 note = f"{note}  ({r.mod.file_name})"
         table.add_row(

@@ -181,9 +181,7 @@
   "ui.deck_dep": "{names} necessita {dep}.",
 
   "ui.update_region": "Actualitzar",
-  "ui.close": "Tancar",
   "ui.go_shortcut": "Ctrl + Retorn",
-  "ui.go_nothing": "Res per actualitzar",
   "ui.go_choose": "Tria algun mod",
   "ui.go_both": "Actualitzar-ne {updates} i instal·lar-ne {installs}",
   "ui.go_install_one": "Instal·lar 1 dependència",
@@ -306,5 +304,8 @@
   "ui.clear_confirm_other": "Esborrar {count} còpies? Torna a prémer",
   "ui.backups_count_one": "Hi ha 1 còpia desada.",
   "ui.backups_count_other": "Hi ha {count} còpies desades.",
-  "ui.no_backups": "No hi ha còpies desades."
+  "ui.no_backups": "No hi ha còpies desades.",
+
+  "row.newer_beta": "Hi ha una beta més recent ({version}). Perquè es proposi, activa les betes a Configuració.",
+  "ui.all_up_to_date": "Tot al dia"
 }

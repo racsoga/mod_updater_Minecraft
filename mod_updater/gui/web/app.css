@@ -12,27 +12,34 @@
   font-weight: 400; font-style: normal; font-display: swap;
 }
 
+/* Paleta v2 (decisión del usuario, 20/11): fondo menos negro, acento verde hierba en lugar
+   del azul de Apple y un color por estado. Contrastes WCAG AA verificados (ver Préstamos en
+   apple.com-DESIGN.md): botón blanco/#357a1f 5.3:1, textos de estado ≥5.5:1 sobre panel. */
 :root {
-  --stage: #000000;
-  --panel: #161617;
-  --charcoal: #1d1d1f;
+  --stage: #111214;          /* fondo: casi negro, no negro puro */
+  --panel: #1a1b1e;
+  --charcoal: #232428;
   --text: #f5f5f7;
-  --muted: #86868b;          /* texto secundario sobre fondos lisos */
-  --muted-strong: #a1a1a6;   /* texto sobre lavados (insignias, campos) */
+  --muted: #8e8e93;          /* texto secundario sobre fondos lisos (≥4.7:1) */
+  --muted-strong: #a8a8ad;   /* texto sobre lavados (insignias, campos) (≥5.9:1) */
   --label: #6e6e73;          /* solo iconos */
-  --edge: #333336;
+  --edge: #3a3b3f;
   --rule: rgba(255, 255, 255, 0.08);
   --hover: rgba(255, 255, 255, 0.04);
   --frame: rgba(255, 255, 255, 0.14);
   --badge: rgba(255, 255, 255, 0.07);
-  --accent: #0071e3;          /* único acento */
-  --accent-hover: #0076df;
-  --accent-active: #006edb;
-  --link: #2997ff;
-  --accent-wash: rgba(0, 113, 227, 0.16);
-  --warn: #ffb340;
-  --error: #ff6961;
-  --ok: #30d158;
+  --accent: #357a1f;          /* acento: verde hierba (botones, casillas, progreso) */
+  --accent-hover: #3d8624;
+  --accent-active: #2f6c1b;
+  --link: #7ccf5a;            /* verde claro: enlaces y texto de acento sobre oscuro */
+  --accent-wash: rgba(124, 207, 90, 0.14);
+  /* colores por estado */
+  --st-ok: #7fb2f0;           /* al día: azul cielo, tranquilo */
+  --st-change: #7ccf5a;       /* cambios: verde */
+  --st-dep: #9fe07f;          /* nueva dependencia: verde claro */
+  --warn: #f2b544;            /* descarga manual / avisos: ámbar */
+  --error: #ff7a70;           /* error */
+  --ok: #7ccf5a;
   --font: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --pixel: "Silkscreen", "Inter", monospace;
 }
@@ -46,7 +53,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 button, input, select { font: inherit; color: inherit; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }  /* verde claro: ≥3:1 sobre todos los fondos */
 [hidden] { display: none !important; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
@@ -102,7 +109,7 @@ button, input, select { font: inherit; color: inherit; }
   height: 36px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--rule); cursor: pointer;
   background: var(--charcoal); color: var(--text); font-size: 14px; font-weight: 500; white-space: nowrap;
 }
-.btn-small:hover { background: #262628; }
+.btn-small:hover { background: #2d2e33; }
 .btn-small:disabled { color: var(--muted-strong); cursor: default; }
 .linkbtn { border: 0; background: none; padding: 4px 6px; border-radius: 6px; cursor: pointer; color: var(--link); font-size: 13px; font-weight: 500; }
 .linkbtn:hover { text-decoration: underline; }
@@ -190,6 +197,10 @@ a:hover { text-decoration: underline; }
 .list { background: var(--panel); border: 1px solid var(--frame); border-radius: 28px; padding: 8px 0 12px; }
 .group-head { display: flex; align-items: center; gap: 12px; padding: 20px 28px 8px; }
 .group-head h3 { margin: 0; font-size: 13px; font-weight: 600; color: var(--muted); }
+.group-head h3::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 8px; vertical-align: 2px; background: var(--muted); }
+.group-head[data-g="attention"] h3::before { background: var(--warn); }
+.group-head[data-g="changes"] h3::before { background: var(--st-change); }
+.group-head[data-g="ok"] h3::before { background: var(--st-ok); }
 .group-head .count { font-size: 13px; color: var(--muted); }
 .group-head .grow { flex: 1; }
 .master { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted-strong); cursor: pointer; }
@@ -217,7 +228,7 @@ a:hover { text-decoration: underline; }
 .tag[data-tip]::after {
   content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%); z-index: 5;
   width: max-content; max-width: 240px; white-space: normal; padding: 8px 10px; border-radius: 8px;
-  background: #2c2c2e; color: var(--text); font-size: 13px; line-height: 1.35;
+  background: #2e2f34; color: var(--text); font-size: 13px; line-height: 1.35;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08); display: none;
 }
 .tag[data-tip]:hover::after { display: block; }
@@ -227,15 +238,17 @@ a:hover { text-decoration: underline; }
   font-size: 12.5px; font-weight: 500; color: var(--muted-strong); white-space: nowrap; cursor: default;
 }
 .badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.badge.up { color: var(--text); }
-.badge.up .dot { background: var(--link); }
-.badge.dep { background: var(--accent-wash); color: var(--link); border-top-color: rgba(41, 151, 255, 0.4); }
-.badge.manual .dot { background: var(--warn); }
+/* un color por estado: al día (azul cielo), cambios (verde), dependencia (verde claro sobre lavado),
+   descarga manual (ámbar), no encontrado (gris) */
+.badge.ok { color: var(--st-ok); }
+.badge.up { color: var(--st-change); }
+.badge.dep { background: var(--accent-wash); color: var(--st-dep); border-top-color: rgba(124, 207, 90, 0.4); }
+.badge.manual { color: var(--warn); }
 .badge.missing .dot { background: transparent; box-shadow: inset 0 0 0 1.5px var(--muted-strong); }
 .badge[data-tip]::after {
   content: attr(data-tip); position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 5;
   width: max-content; max-width: 260px; white-space: normal; padding: 8px 10px; border-radius: 8px;
-  background: #2c2c2e; color: var(--text); font-size: 13px; font-weight: 400; line-height: 1.35;
+  background: #2e2f34; color: var(--text); font-size: 13px; font-weight: 400; line-height: 1.35;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08); display: none;
 }
 .badge[data-tip]:hover::after { display: block; }
@@ -247,8 +260,8 @@ a:hover { text-decoration: underline; }
 .actionbar {
   position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); width: min(1056px, calc(100% - 32px));
   display: flex; align-items: center; gap: 16px; padding: 14px 14px 14px 24px; border-radius: 18px;
-  background: rgba(29, 29, 31, 0.82); backdrop-filter: saturate(1.6) blur(20px); -webkit-backdrop-filter: saturate(1.6) blur(20px);
-  box-shadow: 0 0 0 1px rgb(48, 48, 50);
+  background: rgba(35, 36, 40, 0.85); backdrop-filter: saturate(1.6) blur(20px); -webkit-backdrop-filter: saturate(1.6) blur(20px);
+  box-shadow: 0 0 0 1px rgb(58, 59, 63);
 }
 .actionbar .summary { flex: 1; min-width: 0; }
 .summary .count { font-weight: 600; }
@@ -264,8 +277,9 @@ a:hover { text-decoration: underline; }
 .state.downloading::before { box-shadow: inset 0 0 0 1.5px var(--link); animation: pulse 1s ease-in-out infinite; }
 .state.verified { color: var(--text); }
 .state.verified::before { box-shadow: none; background: var(--link); opacity: 0.6; }
-.state.done, .state.installed { color: var(--text); }
-.state.done::before, .state.installed::before { box-shadow: none; background: var(--accent); }
+.state.done { color: var(--st-change); }
+.state.installed { color: var(--st-dep); }
+.state.done::before, .state.installed::before { box-shadow: none; background: currentColor; }
 .state.error { color: var(--error); }
 .state.error::before { box-shadow: none; background: var(--error); }
 @keyframes pulse { 50% { opacity: 0.35; } }
