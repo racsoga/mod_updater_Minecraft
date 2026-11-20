@@ -69,6 +69,7 @@ def test_unknown_key_and_missing_param_do_not_crash():
     assert "{names}" in t("ui.needed_by")
 
 
+@pytest.mark.real_language
 @pytest.mark.parametrize("langid,expected", [(0x0C0A, "es"), (0x080A, "es"), (0x0409, "en"), (0x0809, "en"),
                                              (0x0403, "ca"), (0x040C, "en"), (0x0407, "en")])
 def test_windows_ui_language(monkeypatch, langid, expected):
@@ -84,6 +85,7 @@ def test_windows_ui_language(monkeypatch, langid, expected):
     assert i18n.system_language() == expected
 
 
+@pytest.mark.real_language
 def test_resolve_preference(monkeypatch):
     monkeypatch.setattr(i18n, "system_language", lambda: "ca")
     assert i18n.resolve("auto") == "ca"
