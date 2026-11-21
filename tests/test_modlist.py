@@ -195,4 +195,25 @@ def test_api_copy_list_and_compare_profiles(api, tmp_path):
     pid = profiles.add(s, name="Servidor", mods_dir=str(b_mods), minecraft_version="1.21.1", loader="neoforge")
     save_settings(s, api._settings_file)
     res = api.compare_profiles(pid)
-    assert res["ok"] and res["only_b"] == ["waystones"] and res["different"] == ["jei"] and res["same"] == 1
+    import hashlib as _h
+    dbg = (res, [(p.parent.parent.name, p.name, _h.sha1(p.read_bytes()).hexdigest()[:8], p.stat().st_size, p.stat().st_mtime_ns) for p in sorted(a_mods.glob("*.jar")) + sorted(b_mods.glob("*.jar"))])
+    assert res["ok"] and res["only_b"] == ["waystones"] and res["different"] == ["jei"] and res["same"] == 1, dbg
+
+
+def test_scan_cache_is_per_folder(api, tmp_path):
+    """Dos carpetas con un jar de igual nombre, tamaño y fecha pero distinto contenido no comparten caché."""
+    import os
+    from mod_updater import profiles
+    from mod_updater.settings import load_settings, save_settings
+    a_mods = Path(api._settings().mods_dir)
+    b_mods = tmp_path / "otro" / "mods"
+    make_jar(a_mods / "jei.jar", "jei", b"a")
+    make_jar(b_mods / "jei.jar", "jei", b"b")
+    stamp = (a_mods / "jei.jar").stat().st_mtime_ns
+    os.utime(b_mods / "jei.jar", ns=(stamp, stamp))
+    assert (a_mods / "jei.jar").stat().st_size == (b_mods / "jei.jar").stat().st_size
+    s = load_settings(api._settings_file)
+    pid = profiles.add(s, name="Otro", mods_dir=str(b_mods), minecraft_version="1.21.1", loader="neoforge")
+    save_settings(s, api._settings_file)
+    assert api.compare_profiles(pid)["different"] == ["jei"]
+    assert api.compare_profiles(pid)["different"] == ["jei"]  # también con la caché ya escrita

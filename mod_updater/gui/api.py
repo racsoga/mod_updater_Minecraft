@@ -13,6 +13,7 @@ Reglas:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -178,6 +179,12 @@ class Api:
 
     def _cache(self) -> Path:
         return self._cache_dir or app_dir() / "cache"
+
+    def _scan_cache(self, mods_dir: Path) -> Path:
+        """Caché de hashes de UNA carpeta: la clave del escáner es nombre|tamaño|fecha, así que dos
+        perfiles con un jar igual de nombre, tamaño y fecha pero distinto contenido no deben compartirla."""
+        key = hashlib.sha1(os.path.normcase(str(Path(mods_dir).resolve())).encode("utf-8")).hexdigest()[:12]
+        return self._cache() / f"scan_cache_{key}.json"
 
     # ------------------------------------------------------------------ idioma
 
@@ -388,7 +395,7 @@ class Api:
         unreadable: list = []
         mods = scan_folder(
             s.mods_path,
-            cache_path=self._cache() / "scan_cache.json",
+            cache_path=self._scan_cache(s.mods_path),
             on_item=lambda i, n, p: progress("read", t("scan.reading_n", done=i, total=n), i, n),
             unreadable=unreadable,
         )
@@ -786,8 +793,8 @@ class Api:
         if other is None:
             return {"ok": False, "message": t("profile.not_found")}
         try:
-            a = scan_folder(s.mods_path, cache_path=self._cache() / "scan_cache.json")
-            b = scan_folder(Path(other["mods_dir"]), cache_path=self._cache() / "scan_cache.json")
+            a = scan_folder(s.mods_path, cache_path=self._scan_cache(s.mods_path))
+            b = scan_folder(Path(other["mods_dir"]), cache_path=self._scan_cache(Path(other["mods_dir"])))
         except FileNotFoundError:
             return {"ok": False, "message": t("ml.err_compare_folder")}
         return {"ok": True, "a": self._active_name(s), "b": other.get("name"), **modlist_mod.compare_folders(a, b)}
