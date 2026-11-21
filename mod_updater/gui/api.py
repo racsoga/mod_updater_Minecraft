@@ -15,10 +15,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import threading
 import webbrowser
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Callable
 from urllib.parse import urlparse
@@ -27,13 +28,15 @@ from .. import credentials, i18n
 from ..analysis import analyze
 from .. import profiles
 from ..categories import Catalog
-from ..launchers import detect_instances
+from ..launchers import detect_instances, loader_version_for
+from .. import modlist as modlist_mod
+from .. import __version__
 from ..changelog import changelog_for
 from ..explore import PAGE_SIZE, _installed_index, detail as explore_detail_of, search as explore_search_in
 from ..config import DEFAULT_USER_AGENT, default_mods_dir
 from ..curseforge import LOADER_TYPES, CurseForgeAuthError, CurseForgeClient
 from ..deps import DependencyFinder, DepPlan, plan_with_dependencies
-from ..resolver import Dep
+from ..resolver import REMOVE, Dep
 from .. import net
 from ..downloader import (
     Outcome,
@@ -152,6 +155,7 @@ class Api:
         self._changelogs: dict = {}         # changelogs ya descargados (por mod y rango de versiones)
         self._explore_cache: dict = {}      # búsquedas recientes (no repetir peticiones al volver atrás)
         self._install: list[Resolution] = []  # plan de la cesta de Explorar, pendiente de confirmar
+        self._import: dict | None = None    # lista importada y comparada, pendiente de confirmar
         self._window = None
         self._busy = threading.Lock()
         self._results: list[Resolution] = []
@@ -228,6 +232,7 @@ class Api:
         self._explore_cache.clear()
         self._changelogs.clear()
         self._install = []
+        self._import = None
 
     def profile_switch(self, profile_id: str) -> dict:
         if not self._busy.acquire(blocking=False):
@@ -480,7 +485,8 @@ class Api:
                 payload = {"id": index[id(res)], "total": total}
                 if isinstance(state, Outcome):
                     done += 1
-                    payload |= {"state": ("installed" if res.kind == INSTALL else "done") if state.ok else "error",
+                    ok_state = {INSTALL: "installed", REMOVE: "removed"}.get(res.kind, "done")
+                    payload |= {"state": ok_state if state.ok else "error",
                                 "message": "" if state.ok else state.message}
                 else:
                     payload["state"] = state
@@ -495,7 +501,8 @@ class Api:
             pruned = prune_backups(s.mods_path, s.backups_to_keep) if ok else []
             self._plan = None  # la revisión ya no refleja la carpeta: hay que volver a revisar
             self._emit("apply_done", {
-                "updated": sum(1 for o in ok if o.resolution.kind != INSTALL),
+                "updated": sum(1 for o in ok if o.resolution.kind not in (INSTALL, REMOVE)),
+                "removed": sum(1 for o in ok if o.resolution.kind == REMOVE),
                 "installed": sum(1 for o in ok if o.resolution.kind == INSTALL and o.resolution.required_by),
                 "added": sum(1 for o in ok if o.resolution.kind == INSTALL and not o.resolution.required_by),
                 "failed": [{"name": o.resolution.name, "message": o.message} for o in outcomes if not o.ok],
@@ -612,6 +619,128 @@ class Api:
         self._explore_cache.clear()  # "Ya instalado" cambia tras instalar
         self._run_async(lambda: self._apply(chosen, s, index))
         return {"ok": True, "total": len(chosen)}
+
+    # ------------------------------------------------------------------ lista de mods
+
+    def _file_dialog(self, save: bool, file_name: str = "", types: tuple = ()) -> str | None:
+        """Diálogo de Windows para guardar o abrir (sustituible en los tests)."""
+        if self._window is None:
+            return None
+        import webview  # solo con ventana real
+
+        kind = webview.SAVE_DIALOG if save else webview.OPEN_DIALOG
+        picked = self._window.create_file_dialog(kind, save_filename=file_name, file_types=types)
+        if not picked:
+            return None
+        return picked[0] if isinstance(picked, (list, tuple)) else picked
+
+    def _clipboard(self, text: str) -> None:
+        subprocess.run(["clip"], input=text.encode("utf-16-le"), check=True,
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+
+    def _active_name(self, s: Settings) -> str:
+        return (profiles.get(s, s.active_profile) or {}).get("name") or t("profile.default_name")
+
+    def modlist_export(self, kind: str = "modlist") -> dict:
+        """Guarda la lista del perfil activo (.modlist.json propio o .mrpack de Modrinth)."""
+        if not self._results:
+            return {"ok": False, "message": t("ex.need_scan")}
+        s = self._settings()
+        name = self._active_name(s)
+        safe = re.sub(r'[\\/:*?"<>|]+', "_", name).strip() or "mods"
+        if kind == "mrpack":
+            path = self._file_dialog(True, f"{safe}.mrpack", (t("ml.type_mrpack") + " (*.mrpack)",))
+            if not path:
+                return {"ok": False, "cancelled": True}
+            mr = self._mr_factory(DEFAULT_USER_AGENT)
+            try:
+                by_sha = mr.versions_from_hashes([r.mod.sha1 for r in self._results if r.mod is not None])
+            except ApiError:
+                return {"ok": False, "message": t("ex.err_network")}
+            lv = loader_version_for(str(s.mods_path))
+            blob, excluded = modlist_mod.build_mrpack(self._results, by_sha, name=name, minecraft=s.minecraft_version,
+                                                      loader=s.loader, loader_version=lv)
+            Path(path).write_bytes(blob)
+            return {"ok": True, "file": Path(path).name, "excluded": excluded, "no_loader_version": lv is None}
+        path = self._file_dialog(True, f"{safe}.modlist.json", (t("ml.type_modlist") + " (*.modlist.json)",))
+        if not path:
+            return {"ok": False, "cancelled": True}
+        data = modlist_mod.build(self._results, minecraft=s.minecraft_version, loader=s.loader,
+                                 app=f"Mod Updater {__version__}")
+        Path(path).write_text(modlist_mod.dumps(data), encoding="utf-8")
+        return {"ok": True, "file": Path(path).name, "excluded": [], "count": len(data["mods"])}
+
+    def modlist_import(self) -> dict:
+        """Abre una lista y la compara con el perfil activo (no instala nada todavía)."""
+        if not self._results:
+            return {"ok": False, "message": t("ex.need_scan")}
+        path = self._file_dialog(False, "", (t("ml.type_modlist") + " (*.modlist.json;*.json)",))
+        if not path:
+            return {"ok": False, "cancelled": True}
+        try:
+            data = modlist_mod.parse(Path(path).read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, modlist_mod.ModlistError):
+            return {"ok": False, "message": t("ml.err_file")}
+        s = self._settings()
+        c = modlist_mod.compare(data, self._results, minecraft=s.minecraft_version, loader=s.loader)
+        self._import = c
+        row = lambda m: {"name": m["nombre"], "version": m.get("version"), "have": m.get("tienes")}  # noqa: E731
+        return {"ok": True, "file": Path(path).name, "mismatch": c["mismatch"],
+                "profile": {"minecraft": s.minecraft_version, "loader": LOADER_LABEL.get(s.loader, s.loader)},
+                "add": [row(m) for m in c["add"]], "update": [row(m) for m in c["update"]],
+                "same": len(c["same"]), "unavailable": [row(m) for m in c["unavailable"]],
+                "remove": [{"name": r.name, "version": r.current_version} for r in c["remove"]]}
+
+    def modlist_import_start(self, remove: bool = False) -> dict:
+        """Instala las versiones exactas de la lista importada (y quita lo que sobra si se pide)."""
+        if not self._import:
+            return {"ok": False, "message": t("apply.nothing")}
+        s = self._settings()
+        if self._running(s.mods_path.parent):
+            return {"ok": False, "reason": "minecraft", "message": t("apply.minecraft_open")}
+        cf, mr = self._clients(s)
+        try:
+            chosen, manual = modlist_mod.resolve_exact(self._import, self._results, curseforge=cf, modrinth=mr)
+        except ApiError as exc:
+            return {"ok": False, "message": t("scan.err_offline") if exc.kind == "offline" else t("ex.err_network")}
+        if remove:
+            chosen += [replace(r, kind=REMOVE) for r in self._import["remove"]]
+        if not chosen:
+            return {"ok": False, "message": t("apply.nothing"), "manual": manual}
+        if not self._busy.acquire(blocking=False):
+            return {"ok": False, "message": t("apply.busy")}
+        self._import = None
+        index = {id(r): 200000 + i for i, r in enumerate(chosen)}
+        rows = [{"id": 200000 + i, "s": {INSTALL: "dep", REMOVE: "rm"}.get(r.kind, "up"), "name": r.name, "icon": r.icon_url,
+                 "from": r.current_version, "to": None if r.kind == REMOVE else r.new_version, "beta": False, "neededBy": []}
+                for i, r in enumerate(chosen)]
+        self._explore_cache.clear()
+        self._run_async(lambda: self._apply(chosen, s, index))
+        return {"ok": True, "rows": rows, "manual": manual}
+
+    def compare_profiles(self, other_id: str) -> dict:
+        """Compara (sin red) la carpeta del perfil activo con la de otro perfil."""
+        s = self._settings()
+        other = profiles.get(s, str(other_id))
+        if other is None:
+            return {"ok": False, "message": t("profile.not_found")}
+        try:
+            a = scan_folder(s.mods_path, cache_path=self._cache() / "scan_cache.json")
+            b = scan_folder(Path(other["mods_dir"]), cache_path=self._cache() / "scan_cache.json")
+        except FileNotFoundError:
+            return {"ok": False, "message": t("ml.err_compare_folder")}
+        return {"ok": True, "a": self._active_name(s), "b": other.get("name"), **modlist_mod.compare_folders(a, b)}
+
+    def copy_list(self) -> dict:
+        """Copia al portapapeles "Nombre versión" de cada mod, para pegarlo en un chat."""
+        if not self._results:
+            return {"ok": False, "message": t("ex.need_scan")}
+        text = modlist_mod.readable(self._results)
+        try:
+            self._clipboard(text)
+        except (OSError, subprocess.SubprocessError):
+            return {"ok": False, "message": t("ml.err_clipboard"), "text": text}
+        return {"ok": True, "count": len(text.splitlines())}
 
     # ------------------------------------------------------------------ changelog
 

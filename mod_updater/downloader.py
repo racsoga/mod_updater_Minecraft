@@ -27,7 +27,7 @@ import requests
 
 from .i18n import t
 from .net import ApiError, request_with_retry
-from .resolver import ACTUALIZABLE, Resolution
+from .resolver import ACTUALIZABLE, REMOVE, Resolution
 
 CHUNK = 1 << 16
 CF_HOSTS = ("forgecdn.net", "curseforge.com")
@@ -142,6 +142,8 @@ def apply_one(
     (para dejarlo anotado en `cambios.json` por si el proceso se interrumpe).
     """
     state = on_state or (lambda name: None)
+    if res.kind == REMOVE:
+        return _remove_one(res, backup_dir, before_change)
     old = res.mod.path if res.mod is not None else None
     new_name = res.new_file_name or ""
     if not res.download_url or not new_name:
@@ -189,6 +191,21 @@ def apply_one(
     return Outcome(res, True, t("dl.updated"), new_path=final, backup_path=backup)
 
 
+def _remove_one(res: Resolution, backup_dir: Path, before_change=None) -> Outcome:
+    """Quita un jar moviéndolo a la copia de seguridad (nunca se borra; Deshacer lo devuelve)."""
+    old = res.mod.path if res.mod is not None else None
+    if old is None or not old.exists():
+        return Outcome(res, False, t("dl.old_missing"))
+    backup = backup_dir / old.name
+    if before_change:
+        before_change({"new_file": None, "backup_file": backup.name})
+    try:
+        os.replace(old, backup)
+    except OSError as exc:
+        return Outcome(res, False, t("dl.move_old_failed", error=friendly_error(exc)))
+    return Outcome(res, True, t("dl.removed"), backup_path=backup)
+
+
 def updatable(results: list[Resolution]) -> tuple[list[Resolution], list[Resolution]]:
     """Separa los actualizables aplicables de los que hay que saltar
     (proyectos duplicados en la carpeta: actualizarlos chocaría)."""
@@ -224,7 +241,7 @@ class Changelog:
     def _entry(self, r: Resolution) -> dict:
         return {
             "state": "pending", "ok": False,
-            "action": "install" if r.mod is None else "update",
+            "action": "install" if r.mod is None else ("remove" if r.kind == REMOVE else "update"),
             "name": r.name, "source": r.source, "project_id": r.project_id,
             "old_file": r.mod.file_name if r.mod else None,
             "new_file": r.new_file_name, "backup_file": None,
@@ -276,6 +293,8 @@ def write_changelog_txt(backup_dir: Path, mods_dir: Path, entries: list[dict]) -
     for e in entries:
         if not e["ok"]:
             lines.append(t("log.failed", name=e["name"], message=e["message"]))
+        elif e["action"] == "remove":
+            lines.append(t("log.removed", name=e["name"], file=e["old_file"], version=e["old_version"]))
         elif e["action"] == "install":
             why = t("log.required_by", names=", ".join(e["required_by"])) if e["required_by"] else ""
             lines.append(t("log.installed", name=e["name"], file=e["new_file"], version=e["new_version"], source=e["source"], why=why))
@@ -478,7 +497,7 @@ def undo_backup(backup_dir: Path) -> UndoResult:
     for change in reversed(_undoable_changes(data)):
         name = change.get("name", "?")
         new_file, old_file, backup_file = change.get("new_file"), change.get("old_file"), change.get("backup_file")
-        if change.get("state") == "pending" and change.get("action") == "update" \
+        if change.get("state") == "pending" and change.get("action") in ("update", "remove") \
                 and not (backup_file and (backup_dir / backup_file).exists()):
             # Se interrumpió antes de apartar el jar viejo: sigue en su sitio y no hay nada
             # que deshacer. (Si el nuevo se llama igual, lo que hay en mods ES el viejo.)
@@ -488,7 +507,7 @@ def undo_backup(backup_dir: Path) -> UndoResult:
                 undo_dir.mkdir(exist_ok=True)
                 os.replace(mods_dir / new_file, undo_dir / new_file)
                 result.removed += 1
-            if change.get("action") == "update" and backup_file and old_file:
+            if change.get("action") in ("update", "remove") and backup_file and old_file:
                 source, target = backup_dir / backup_file, mods_dir / old_file
                 if not source.exists():
                     result.errors.append(t("undo.old_missing", name=name))

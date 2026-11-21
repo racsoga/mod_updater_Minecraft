@@ -36,6 +36,15 @@ def _neoforge_mc(version: str) -> str | None:
     return f"1.{m.group(1)}" + (f".{m.group(2)}" if m.group(2) != "0" else "")
 
 
+def loader_version_of(version_id: str) -> str | None:
+    """Versión del cargador en un id de launcher: neoforge-21.1.77 -> 21.1.77; 1.20.1-forge-47.2.0 -> 47.2.0;
+    fabric-loader-0.16.9-1.20.1 -> 0.16.9."""
+    v = (version_id or "").lower()
+    m = (re.match(r"neoforge-([\d.]+)", v) or re.search(r"forge-([\d.]+)", v)
+         or re.search(r"(?:fabric|quilt)(?:-loader)?-([\d.]+)", v))
+    return m.group(1).rstrip(".") if m else None
+
+
 def parse_version_id(version_id: str) -> tuple[str | None, str | None]:
     """(cargador, versión de Minecraft) a partir de un id de versión de launcher."""
     v = (version_id or "").lower()
@@ -48,9 +57,10 @@ def parse_version_id(version_id: str) -> tuple[str | None, str | None]:
     return None, None
 
 
-def _entry(launcher: str, name: str, mods: Path, loader: str | None, mc: str | None) -> dict:
+def _entry(launcher: str, name: str, mods: Path, loader: str | None, mc: str | None,
+           loader_version: str | None = None) -> dict:
     return {"launcher": launcher, "name": name, "mods_dir": str(mods), "loader": loader,
-            "minecraft_version": mc, "exists": mods.is_dir()}
+            "minecraft_version": mc, "loader_version": loader_version, "exists": mods.is_dir()}
 
 
 def _official(appdata: Path) -> list[dict]:
@@ -64,7 +74,8 @@ def _official(appdata: Path) -> list[dict]:
         if not loader:
             continue  # instalaciones sin cargador de mods (vanilla)
         game = Path(p["gameDir"]) if p.get("gameDir") else root
-        out.append(_entry("official", p.get("name") or p.get("lastVersionId"), game / "mods", loader, mc))
+        out.append(_entry("official", p.get("name") or p.get("lastVersionId"), game / "mods", loader, mc,
+                          loader_version_of(p.get("lastVersionId", ""))))
     return out
 
 
@@ -75,8 +86,10 @@ def _curseforge(home: Path) -> list[dict]:
         if not inst.is_dir():
             continue
         data = _read_json(inst / "minecraftinstance.json")
-        loader, _ = parse_version_id((data.get("baseModLoader") or {}).get("name", ""))
-        out.append(_entry("curseforge", data.get("name") or inst.name, inst / "mods", loader, data.get("gameVersion")))
+        base = (data.get("baseModLoader") or {}).get("name", "")
+        loader, _ = parse_version_id(base)
+        out.append(_entry("curseforge", data.get("name") or inst.name, inst / "mods", loader, data.get("gameVersion"),
+                          loader_version_of(base)))
     return out
 
 
@@ -92,14 +105,14 @@ def _prism(base: Path, launcher: str) -> list[dict]:
             name = m.group(1).strip() if m else name
         except OSError:
             pass
-        loader = mc = None
+        loader = mc = loader_version = None
         for comp in _read_json(inst / "mmc-pack.json").get("components") or []:
             if comp.get("uid") == "net.minecraft":
                 mc = comp.get("version")
             elif comp.get("uid") in LOADER_UIDS:
-                loader = LOADER_UIDS[comp["uid"]]
+                loader, loader_version = LOADER_UIDS[comp["uid"]], comp.get("version")
         game = next((inst / d for d in ("minecraft", ".minecraft") if (inst / d).is_dir()), inst / ".minecraft")
-        out.append(_entry(launcher, name, game / "mods", loader, mc))
+        out.append(_entry(launcher, name, game / "mods", loader, mc, loader_version))
     return out
 
 
@@ -113,6 +126,15 @@ def _modrinth(base: Path) -> list[dict]:
         out.append(_entry("modrinth", meta.get("name") or prof.name, prof / "mods", meta.get("loader"),
                           meta.get("game_version")))
     return out
+
+
+def loader_version_for(mods_dir: str, instances: list[dict] | None = None) -> str | None:
+    """Versión del cargador de la instancia que usa esa carpeta, si algún launcher la conoce."""
+    key = os.path.normcase(os.path.normpath(mods_dir))
+    for i in instances if instances is not None else detect_instances():
+        if os.path.normcase(os.path.normpath(i["mods_dir"])) == key and i.get("loader_version"):
+            return i["loader_version"]
+    return None
 
 
 def detect_instances(appdata: Path | None = None, home: Path | None = None) -> list[dict]:
