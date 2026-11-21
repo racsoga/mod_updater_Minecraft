@@ -93,6 +93,23 @@
       }, step * chosen.length + 400);
       return { ok: true, total: chosen.length };
     },
+    // Análisis de ejemplo (?noanalysis: sin revisión todavía).
+    analysis: async libs => {
+      if (params.has("noanalysis")) return { ready: false };
+      const cats = [["tecnologia", ["Create", "Mekanism", "Create: Steam 'n' Rails", "Applied Energistics 2", "Immersive Engineering", "Create Crafts & Additions"]],
+        ["mobs", ["Alex's Mobs", "Mowzie's Mobs", "Born in Chaos", "Guard Villagers"]], ["calidad_vida", ["Jade", "Mouse Tweaks", "Waystones"]],
+        ["comida", ["Farmer's Delight", "Croptopia"]], ["mapas", ["Xaero's Minimap", "Xaero's World Map"]], ["mundo", ["Terralith"]],
+        ["almacenamiento", ["Sophisticated Backpacks"]], ["rendimiento", ["FerriteCore", "ModernFix"]], ["otras", ["Mod de ejemplo"]]];
+      if (libs) cats.splice(1, 0, ["librerias", ["Balm", "Architectury API", "Kotlin for Forge", "Cloth Config API", "GeckoLib", "Curios API", "Puzzles Lib"]]);
+      return { ready: true,
+        by_category: cats.map(([cat, mods]) => ({ cat, count: mods.length, mods })),
+        totals: { mods: 29, libraries: 7, size: 186400000, up_to_date: 25, updates: 4, sources: { curseforge: 24, modrinth: 4, none: 1 } },
+        heaviest: [{ name: "Create", size: 19100000 }, { name: "Mekanism", size: 15800000 }, { name: "Alex's Mobs", size: 14300000 },
+          { name: "Applied Energistics 2", size: 9900000 }, { name: "Immersive Engineering", size: 8700000 }],
+        stale: [{ name: "Mod de ejemplo", date: "2024-10-15T00:00:00Z", url: "https://example.org" }],
+        orphans: [{ name: "Cloth Config API", size: 1200000 }],
+        sides: { client: 5, server: 1, both: 21, unknown: 2 } };
+    },
     // ?interrupted: simula que la última actualización se cortó a medias
     interrupted: async () => params.has("interrupted")
       ? { path: "C:\\…\\mods_backup\\2026-11-20_1930", date: "2026-11-20T19:30:00", changes: 2, complete: false, undone: false, undoable: true }

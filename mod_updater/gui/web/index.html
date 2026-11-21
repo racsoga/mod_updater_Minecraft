@@ -27,6 +27,7 @@
   <!-- Secciones de la app. Análisis, Explorar y Sugerencias se añaden en sus hitos. -->
   <div class="tabs" id="tabs" role="tablist" data-i18n-aria-label="ui.tabs_label" hidden>
     <button class="tab" type="button" role="tab" id="tab-mods" data-tab="mods" aria-selected="true" data-i18n="ui.tab_mods"></button>
+    <button class="tab" type="button" role="tab" id="tab-analysis" data-tab="analysis" aria-selected="false" tabindex="-1" data-i18n="ui.tab_analysis"></button>
     <button class="tab" type="button" role="tab" id="tab-settings" data-tab="settings" aria-selected="false" tabindex="-1" data-i18n="ui.settings"></button>
   </div>
 
@@ -157,6 +158,60 @@
     </details>
   </section>
 
+  <!-- ============================================ Análisis -->
+  <section class="screen" id="screen-analysis" hidden>
+    <div class="lede">
+      <h2 id="an-title"></h2>
+      <p id="an-deck"></p>
+    </div>
+    <div class="an-empty" id="an-empty" hidden>
+      <button class="btn-primary" type="button" id="an-go-scan" data-i18n="an.empty_go"></button>
+    </div>
+    <div id="an-body" hidden>
+      <div class="an-cards" id="an-cards"></div>
+
+      <section class="panel an-chart" aria-labelledby="an-chart-title">
+        <div class="an-chart-head">
+          <h3 id="an-chart-title" data-i18n="an.chart_title"></h3>
+          <span class="spacer"></span>
+          <label class="toggle"><input type="checkbox" id="an-libs"> <span data-i18n="an.include_libs"></span></label>
+          <button class="btn-small" type="button" id="an-table-btn" aria-controls="an-table" aria-expanded="false" data-i18n="an.as_table"></button>
+        </div>
+        <div id="an-chart"></div>
+        <div class="an-detail" id="an-detail" aria-live="polite"></div>
+        <div class="sr-only" id="an-table">
+        <table class="an-table">
+          <caption data-i18n="an.chart_title"></caption>
+          <thead><tr><th scope="col" data-i18n="an.table_cat"></th><th scope="col" data-i18n="an.table_count"></th><th scope="col" data-i18n="an.table_mods"></th></tr></thead>
+          <tbody id="an-table-body"></tbody>
+        </table>
+        </div>
+      </section>
+
+      <div class="an-grid">
+        <section class="panel an-box" aria-labelledby="an-heavy-title">
+          <h3 id="an-heavy-title" data-i18n="an.heaviest"></h3>
+          <ol class="an-list" id="an-heavy"></ol>
+        </section>
+        <section class="panel an-box" aria-labelledby="an-sides-title">
+          <h3 id="an-sides-title" data-i18n="an.sides"></h3>
+          <ul class="an-list" id="an-sides"></ul>
+          <p class="an-hint" data-i18n="an.sides_hint"></p>
+        </section>
+        <section class="panel an-box" aria-labelledby="an-stale-title">
+          <h3 id="an-stale-title" data-i18n="an.stale"></h3>
+          <p class="an-hint" data-i18n="an.stale_hint"></p>
+          <ul class="an-list" id="an-stale"></ul>
+        </section>
+        <section class="panel an-box" aria-labelledby="an-orphans-title">
+          <h3 id="an-orphans-title" data-i18n="an.orphans"></h3>
+          <p class="an-hint" data-i18n="an.orphans_hint"></p>
+          <ul class="an-list" id="an-orphans"></ul>
+        </section>
+      </div>
+    </div>
+  </section>
+
   <!-- ============================================ Actualizando -->
   <section class="screen" id="screen-apply" hidden>
     <div class="lede">
@@ -193,6 +248,8 @@
   <button class="btn-primary" type="button" id="btn-recheck" hidden data-i18n="ui.check_again"></button>
 </div>
 
+<script src="cat-icons.js"></script>
+<script src="chart.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

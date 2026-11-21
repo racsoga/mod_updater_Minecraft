@@ -47,11 +47,11 @@ const MODS_SCREENS = ["scan", "recover", "results", "apply", "done"];
 let modsScreen = null;
 
 function show(screen) {
-  for (const s of ["setup", ...MODS_SCREENS]) $(`#screen-${s}`).hidden = s !== screen;
+  for (const s of ["setup", "analysis", ...MODS_SCREENS]) $(`#screen-${s}`).hidden = s !== screen;
   if (MODS_SCREENS.includes(screen)) modsScreen = screen;
   // Pestañas: ocultas en la bienvenida (primera vez) y mientras se actualiza (no se puede salir).
   $("#tabs").hidden = (screen === "setup" && setupMode === "setup") || screen === "apply";
-  selectTab(screen === "setup" ? "settings" : "mods");
+  selectTab(screen === "setup" ? "settings" : screen === "analysis" ? "analysis" : "mods");
   $("#btn-rescan").hidden = screen !== "results";
   $("#actionbar").hidden = screen !== "results";
   for (const chip of [$("#chip-folder"), $("#chip-env")]) chip.hidden = screen === "setup" || !chip.textContent.trim();
@@ -527,20 +527,138 @@ function selectTab(name) {
   }
 }
 
-async function leaveSettings() {
-  // Igual que Cancelar: deshace la vista previa del idioma y vuelve a donde estaba.
+async function revertLanguagePreview() {
+  // Al salir de Ajustes sin guardar se deshace la vista previa del idioma.
   const s = await api().get_strings(state.settings.language || "auto");
   applyStrings(s.lang, s.strings);
+}
+
+function goMods() {
   if (modsScreen && modsScreen !== "apply") show(modsScreen);
   else if (DATA) showResults(DATA);
   else startScan();
 }
 
-function openTab(name) {
+async function leaveSettings() {
+  await revertLanguagePreview();
+  goMods();
+}
+
+async function openTab(name) {
   const current = document.querySelector('#tabs [aria-selected="true"]').dataset.tab;
   if (name === current) return;
+  if (current === "settings") await revertLanguagePreview();
   if (name === "settings") openSetup("settings");
-  else if (name === "mods") leaveSettings();
+  else if (name === "analysis") openAnalysis();
+  else goMods();
+}
+
+/* ================================================================ análisis */
+
+let anLibs = false;       // interruptor "Incluir librerías"
+let anSelected = null;    // categoría cuya lista de mods se muestra
+let anData = null;
+
+function fmtSize(bytes) {
+  const mb = bytes / 1e6;
+  return t("an.mb", { value: new Intl.NumberFormat(LANG, { maximumFractionDigits: mb < 100 ? 1 : 0 }).format(mb) });
+}
+
+function fmtMonth(iso) {
+  try { return new Date(iso).toLocaleDateString(LANG, { year: "numeric", month: "short" }); } catch { return iso; }
+}
+
+async function openAnalysis() {
+  show("analysis");
+  renderAnalysis(await api().analysis(anLibs));
+}
+
+function anCard(label, value, sub = "") {
+  return `<div class="an-card"><span class="an-card-label">${esc(label)}</span>
+    <span class="an-card-value">${esc(value)}</span>${sub ? `<span class="an-card-sub">${esc(sub)}</span>` : ""}</div>`;
+}
+
+function renderAnalysis(d) {
+  const ready = !!(d && d.ready && d.totals.mods > 0);
+  $("#an-title").textContent = ready ? t("an.title") : t("an.empty_title");
+  $("#an-deck").textContent = ready ? t("an.deck") : t("an.empty_deck");
+  $("#an-empty").hidden = ready;
+  $("#an-body").hidden = !ready;
+  if (!ready) return;
+  anData = d;
+  const T = d.totals;
+
+  $("#an-cards").innerHTML = [
+    anCard(t("an.card_mods"), T.mods),
+    anCard(t("an.card_libs"), T.libraries),
+    anCard(t("an.card_size"), fmtSize(T.size)),
+    anCard(t("an.card_status"), T.up_to_date, t("an.card_updates", { count: T.updates })),
+    anCard(t("an.card_sources"), T.sources.curseforge + T.sources.modrinth,
+      T.sources.none ? t("an.sources_sub_none", { cf: T.sources.curseforge, mr: T.sources.modrinth, none: T.sources.none })
+                     : t("an.sources_sub", { cf: T.sources.curseforge, mr: T.sources.modrinth })),
+  ].join("");
+
+  const bars = d.by_category.map(b => ({
+    id: b.cat, count: b.count, mods: b.mods,
+    name: t(`cat.${b.cat}`), short: t(`cat_short.${b.cat}`), icon: catIcon(b.cat, 18),
+  }));
+  if (!bars.some(b => b.id === anSelected)) anSelected = bars.length ? bars[0].id : null;
+  renderBlockChart($("#an-chart"), bars, {
+    selected: anSelected, onSelect: selectCategory,
+    label: b => t("an.col_label", { count: b.count, name: b.name }),
+  });
+  selectCategory(anSelected);
+
+  $("#an-table-body").innerHTML = bars.map(b =>
+    `<tr><th scope="row">${esc(b.name)}</th><td>${b.count}</td><td>${esc(b.mods.join(", "))}</td></tr>`).join("");
+
+  $("#an-heavy").innerHTML = d.heaviest.map(h =>
+    `<li><span class="an-name">${esc(h.name)}</span><span class="an-num">${esc(fmtSize(h.size))}</span></li>`).join("");
+
+  const sideMax = Math.max(1, ...Object.values(d.sides));
+  $("#an-sides").innerHTML = ["client", "server", "both", "unknown"].map(k =>
+    `<li><span class="an-name">${esc(t(`an.side_${k}`))}</span>
+       <span class="an-meter" aria-hidden="true"><span style="width:${(d.sides[k] / sideMax) * 100}%"></span></span>
+       <span class="an-num">${d.sides[k]}</span></li>`).join("");
+
+  $("#an-stale").innerHTML = d.stale.length
+    ? d.stale.map(s => `<li><span class="an-name">${s.url ? `<a href="${esc(s.url)}" data-external>${esc(s.name)}</a>` : esc(s.name)}</span>
+        <span class="an-num">${esc(fmtMonth(s.date))}</span></li>`).join("")
+    : `<li class="an-none">${esc(t("an.stale_none"))}</li>`;
+
+  $("#an-orphans").innerHTML = d.orphans.length
+    ? d.orphans.map(o => `<li><span class="an-name">${esc(o.name)}</span><span class="an-num">${esc(fmtSize(o.size))}</span></li>`).join("")
+    : `<li class="an-none">${esc(t("an.orphans_none"))}</li>`;
+}
+
+function selectCategory(id) {
+  anSelected = id;
+  for (const btn of document.querySelectorAll("#an-chart .block-btn")) {
+    const on = btn.dataset.cat === id;
+    btn.classList.toggle("on", on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+  }
+  const bar = anData && anData.by_category.find(b => b.cat === id);
+  $("#an-detail").innerHTML = bar
+    ? `<h4>${catIcon(id, 16)}<span>${esc(t("an.detail_title", { count: bar.count, name: t(`cat.${id}`) }))}</span></h4>
+       <ul class="an-chips">${bar.mods.map(m => `<li>${esc(m)}</li>`).join("")}</ul>`
+    : "";
+}
+
+function wireAnalysis() {
+  $("#an-go-scan").addEventListener("click", startScan);
+  $("#an-libs").addEventListener("change", async e => {
+    anLibs = e.target.checked;
+    renderAnalysis(await api().analysis(anLibs));
+  });
+  $("#an-table-btn").addEventListener("click", () => {
+    const table = $("#an-table"), btn = $("#an-table-btn");
+    const showTable = table.classList.contains("sr-only");
+    table.classList.toggle("sr-only", !showTable);
+    $("#an-chart").hidden = $("#an-detail").hidden = showTable;
+    btn.setAttribute("aria-expanded", String(showTable));
+    btn.textContent = showTable ? t("an.as_chart") : t("an.as_table");
+  });
 }
 
 function wireTabs() {
@@ -561,6 +679,7 @@ function wireTabs() {
 
 function wire() {
   wireTabs();
+  wireAnalysis();
   $("#q").addEventListener("input", e => { query = e.target.value.trim().toLowerCase(); render(); });
   $("#btn-rescan").addEventListener("click", startScan);
   $("#btn-retry").addEventListener("click", startScan);

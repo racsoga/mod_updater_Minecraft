@@ -254,4 +254,4 @@ def test_every_category_has_a_name_in_both_languages():
     for code in i18n.SUPPORTED:
         table = i18n._load(code)
         for c in OURS + (OTHER,):
-            assert table.get(f"cat.{c}"), f"{code}: falta cat.{c}"
+            assert table.get(f"cat.{c}") and table.get(f"cat_short.{c}"), f"{code}: falta cat(_short).{c}"

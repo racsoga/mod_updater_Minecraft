@@ -90,6 +90,8 @@ class Resolution:
     known_ids: set[tuple[str, str]] = field(default_factory=set)
     required_by: list[str] = field(default_factory=list)
     categories: list[str] = field(default_factory=list)  # propias (categories.py), la principal primero
+    project_updated: str | None = None  # fecha de la última versión publicada del proyecto (ISO)
+    side: str | None = None  # "client" / "server" / "both" / None (desconocido)
 
     @property
     def is_library(self) -> bool:
@@ -103,6 +105,18 @@ class Resolution:
 
     def add_note(self, text: str) -> None:
         self.note = "; ".join(filter(None, [self.note, text]))
+
+
+def mr_side(project: dict) -> str | None:
+    """Lado en que hace falta el mod según Modrinth (`client_side`/`server_side`)."""
+    client, server = project.get("client_side"), project.get("server_side")
+    if not client or not server or "unknown" in (client, server):
+        return None
+    if server == "unsupported":
+        return "client"
+    if client == "unsupported":
+        return "server"
+    return "both"
 
 
 def cf_deps(file: CfFile) -> list[Dep]:
@@ -220,6 +234,8 @@ def resolve_with_modrinth(
             slug=project.get("slug"),
             icon_url=project.get("icon_url"),
             categories=categories_mod.from_modrinth(project),
+            project_updated=project.get("updated"),
+            side=mr_side(project) or mod.side,
             current_version=cur.version_number or mod.version,
             current_channel=cur.version_type,
             current_date=cur.date_published,
@@ -316,6 +332,8 @@ def resolve_with_curseforge(
             slug=info.get("slug"),
             icon_url=(info.get("logo") or {}).get("thumbnailUrl"),
             categories=categories_mod.from_curseforge(info, catalog),
+            project_updated=info.get("dateReleased"),
+            side=mod.side,
             current_version=mod.version or cur.display_name,
             current_channel=cur.version_type,
             current_date=cur.date_published,
@@ -450,4 +468,13 @@ def resolve_all(
             v = mr_current.get(r.mod.sha1)
             if v:
                 r.known_ids.add((MR, v.project_id))
+    need_side = {mid: r for r in merged if r.side is None for src, mid in r.known_ids if src == MR}
+    if need_side and MR not in failed:
+        try:
+            projects = modrinth.projects(list(need_side))
+        except ApiError:
+            projects = {}
+        for mid, project in projects.items():
+            if mid in need_side:
+                need_side[mid].side = mr_side(project)
     return merged
