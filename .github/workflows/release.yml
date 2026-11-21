@@ -51,10 +51,13 @@ jobs:
           python packaging/release_notes.py ${{ github.ref_name }} @sums > notas.md
           Get-Content notas.md
 
-      - name: Crear la Release
+      # Se crea como BORRADOR: no es pública hasta que alguien la revisa y pulsa "Publish release"
+      # en GitHub (así da tiempo a probar el .exe compilado aquí y a pasarlo por VirusTotal).
+      - name: Crear la Release (borrador)
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${{ github.ref_name }}" (Get-ChildItem dist -File | ForEach-Object FullName) `
-            --title "Mod Updater ${{ github.ref_name }}" --notes-file notas.md
+            --draft --title "Mod Updater ${{ github.ref_name }}" --notes-file notas.md
+          Get-Content dist/*.sha256 | ForEach-Object { "- ``$_``" } | Out-File -Append -Encoding utf8 $env:GITHUB_STEP_SUMMARY

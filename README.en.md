@@ -67,13 +67,30 @@ CurseForge requires each person to use **their own key** (it can't be shared or 
 <details>
 <summary><b>Windows says "Windows protected your PC" (SmartScreen). Is it dangerous?</b></summary>
 
-It appears because the executable isn't signed with a paid certificate, not because anything was detected. Press **More info → Run anyway**. If you'd rather check first, every Release includes the SHA-256 checksum of the `.exe` (`ModUpdater.exe.sha256`) and the full source code is in this repository.
+It appears because the executable isn't signed with a paid certificate, not because anything was detected. Press **More info → Run anyway**. If you'd rather check first, see *How do I check the .exe is the original?* below; the full source code is in this repository.
 </details>
 
 <details>
-<summary><b>My antivirus blocks the <code>.exe</code></b></summary>
+<summary><b>My antivirus says the <code>.exe</code> is suspicious</b></summary>
 
-Some antivirus products flag programs built with PyInstaller by resemblance (a common false positive). Each Release's notes link to the VirusTotal scan of the exact file. If yours blocks it, download **`ModUpdater-…-carpeta.zip`** from the same Release: it's the same program as a folder; unzip it and open the `ModUpdater.exe` inside.
+A minor antivirus may give a **false positive**. It happens to many programs built with PyInstaller, because from the outside they resemble others that really are malicious. For example, version 0.2.0 is clean on Microsoft Defender, Kaspersky, ESET, Bitdefender and SentinelOne, and only 2 of VirusTotal's 71 engines flag it (Bkav Pro and SecureAge).
+
+- Each Release's notes link to the **VirusTotal scan** of the exact file, so you can see for yourself.
+- Check your file is the original (see the next question).
+- If your antivirus blocks it, download **`ModUpdater-…-carpeta.zip`** from the same Release. It's the same program as a folder: unzip it and open the `ModUpdater.exe` inside.
+</details>
+
+<details>
+<summary><b>How do I check the <code>.exe</code> is the original?</b></summary>
+
+Every Release includes the **SHA-256** of each file, in the notes and in `ModUpdater.exe.sha256`. It's a unique fingerprint: changing a single byte of the file would give a different one.
+
+1. Open PowerShell in the folder where you downloaded the file.
+2. Run:
+   ```powershell
+   Get-FileHash .\ModUpdater.exe -Algorithm SHA256
+   ```
+3. The `Hash` value must match the one in the Release (upper or lower case doesn't matter). If it doesn't match, don't open it and download it again from this repository's *Releases* page.
 </details>
 
 <details>

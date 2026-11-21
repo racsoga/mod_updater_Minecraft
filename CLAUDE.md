@@ -35,7 +35,7 @@ Actualizador de mods de Minecraft (NeoForge 1.21.1) en Python. Planes: `docs/PLA
 - Probar la interfaz en navegador con el simulador: servir `mod_updater/gui/web` y abrir `index.html?mock` (`dev-mock.js`, no va en el .exe).
 
 ## Diseño (interfaz v2)
-- Estilo base: `apple.com-DESIGN.md` (raíz, **solo local**: no está en el repo; tampoco `design/references/`). Las referencias de `design/references/` son solo inspiración: usar únicamente lo que diga su sección "Préstamos".
+- Estilo base: `apple.com-DESIGN.md` (raíz, **solo local**: no está en el repo; tampoco la carpeta `design/` con referencias, variantes del logo y mockup). Las referencias de `design/references/` son solo inspiración: usar únicamente lo que diga su sección "Préstamos".
 - Tema oscuro, un único color de acento, sin degradados morados, emojis decorativos ni tarjetas con brillo.
 - Validar el mockup con el usuario antes de programar pantallas.
 

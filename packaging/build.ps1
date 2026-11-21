@@ -26,8 +26,12 @@ if (-not $SkipBootloader) {
     if ($LASTEXITCODE -ne 0) { throw "No se pudo compilar el cargador de PyInstaller" }
 }
 
-$dist = Join-Path $root "dist"
-if (Test-Path $dist) { Remove-Item -Recurse -Force $dist }
+# Empezar siempre de cero: así el único ejecutable es el de dist\ y no quedan restos de
+# compilaciones anteriores en build\ (p. ej. un build\dist\ModUpdater.exe viejo).
+foreach ($dir in @("dist", "build")) {
+    $path = Join-Path $root $dir
+    if (Test-Path $path) { Remove-Item -Recurse -Force $path }
+}
 
 # Un solo archivo
 Remove-Item Env:MODUPDATER_ONEDIR -ErrorAction SilentlyContinue

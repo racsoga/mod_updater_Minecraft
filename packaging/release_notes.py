@@ -29,6 +29,8 @@ Si tu antivirus bloquea el `.exe` (falso positivo habitual en programas hechos c
 
 {hashes}
 
+Para comprobar tu descarga, en PowerShell: `Get-FileHash .\\ModUpdater.exe -Algorithm SHA256`. El resultado debe coincidir con el de arriba.
+
 Proyecto no oficial: no está afiliado a Mojang Studios, Microsoft, CurseForge ni Modrinth.
 """
 

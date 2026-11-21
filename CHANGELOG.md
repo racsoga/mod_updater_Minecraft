@@ -4,7 +4,7 @@ Todos los cambios importantes de Mod Updater. Formato basado en [Keep a Changelo
 
 La sección de cada versión es la que se publica como notas de la Release al crear la etiqueta `vX.Y.Z`.
 
-## [0.2.0] - sin publicar
+## [0.2.0] - 2026-11-21
 
 Primera versión con ventana propia.
 

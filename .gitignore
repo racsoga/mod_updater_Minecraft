@@ -23,8 +23,7 @@ dist/
 
 # Archivos de trabajo locales (no van al repo)
 apple.com-DESIGN.md
-design/references/
-design/RECURSOS_DISENO_Y_CLAUDE.md
+design/
 .impeccable/
 .playwright-mcp/
 .vscode/
