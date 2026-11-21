@@ -113,6 +113,9 @@
       }, step * chosen.length + 400);
       return { ok: true, total: chosen.length };
     },
+    // ?update: simula que hay una versión nueva de la app
+    app_update: async () => params.has("update") ? { version: "0.4.0", url: "https://github.com/racsoga/mod_updater_Minecraft/releases/tag/v0.4.0",
+      notes_html: "<h2>Novedades</h2><ul><li>Ejemplo de novedad</li></ul>" } : null,
     // Sugerencias de ejemplo.
     suggest_answers: async () => ({}),
     suggest_run: async a => ({ ok: true, answers: a, total: 120, over_limit: 0,

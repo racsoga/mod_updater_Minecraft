@@ -15,6 +15,7 @@
     <h1 class="brand"><img class="brand-logo" src="logo.svg" alt="" width="32" height="32">Mod Updater</h1>
     <span class="spacer"></span>
     <!-- Hueco para el selector de perfil (hito 5 del plan v3). -->
+    <button class="update-pill" type="button" id="app-update" hidden></button>
     <span id="profile-slot" hidden>
       <label class="sr-only" for="profile-select" data-i18n="profile.select"></label>
       <select class="select profile-select" id="profile-select"></select>
@@ -112,6 +113,7 @@
       <div class="field" id="advanced" hidden>
         <span class="label" data-i18n="ui.updates_section"></span>
         <label class="toggle"><input type="checkbox" id="allow-beta"> <span data-i18n="ui.allow_beta"></span></label>
+        <label class="toggle" style="margin-top: 10px;"><input type="checkbox" id="check-updates"> <span data-i18n="up.setting"></span></label>
         <div class="row-inline" style="margin-top: 14px;">
           <label for="backups" data-i18n="ui.backups"></label>
           <input class="input version" id="backups" type="number" min="1" max="20" style="width: 80px;">
