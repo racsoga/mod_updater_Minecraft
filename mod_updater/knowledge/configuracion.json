@@ -1,0 +1,9 @@
+{
+  "formato": 1,
+  "descripcion": "Librerías de configuración: muchos mods las usan de forma opcional para su menú de ajustes, sin declararlas como dependencia. En Sugerencias nunca van a Quitar; solo un aviso.",
+  "mods": [
+    {"nombre": "Cloth Config API", "curseforge": 348521, "modrinth": "9s6osm5g"},
+    {"nombre": "YetAnotherConfigLib", "curseforge": 667299, "modrinth": "1eAoo2KR"},
+    {"nombre": "Forge Config API Port", "curseforge": 547434, "modrinth": "ohNO6lps"}
+  ]
+}
