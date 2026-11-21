@@ -38,7 +38,7 @@ def _fetch(session) -> dict | None:
     try:
         resp = session.get(RELEASES_URL, timeout=8, headers={"Accept": "application/vnd.github+json"})
         data = resp.json() if resp.ok else None
-    except (requests.RequestException, ValueError):
+    except (requests.RequestException, ValueError, OSError):  # sin red o respuesta rara: no molestar
         return None
     if not isinstance(data, dict) or data.get("draft") or data.get("prerelease"):
         return None
@@ -58,8 +58,9 @@ def check_latest(current: str, *, cache_path: Path, session=None, now: float | N
     latest = None
     try:
         cached = json.loads(Path(cache_path).read_text(encoding="utf-8"))
-        if now - float(cached["checked"]) < CHECK_EVERY:
-            latest = cached.get("latest") or {}
+        age = now - float(cached["checked"])
+        if 0 <= age < CHECK_EVERY and isinstance(cached.get("latest"), dict):  # una fecha futura no vale
+            latest = cached["latest"]
     except (OSError, ValueError, KeyError, TypeError):
         latest = None
     if latest is None:
@@ -71,6 +72,6 @@ def check_latest(current: str, *, cache_path: Path, session=None, now: float | N
             Path(cache_path).write_text(json.dumps({"checked": now, "latest": latest}), encoding="utf-8")
         except OSError:
             pass
-    if latest and is_newer(latest.get("version", ""), current):
+    if latest and isinstance(latest.get("version"), str) and is_newer(latest["version"], current):
         return latest
     return None

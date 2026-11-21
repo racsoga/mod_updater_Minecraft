@@ -67,13 +67,14 @@ def _official(appdata: Path) -> list[dict]:
     root = appdata / ".minecraft"
     data = _read_json(root / "launcher_profiles.json")
     out = []
-    for p in (data.get("profiles") or {}).values():
+    profiles = data.get("profiles")
+    for p in profiles.values() if isinstance(profiles, dict) else []:
         if not isinstance(p, dict):
             continue
         loader, mc = parse_version_id(p.get("lastVersionId", ""))
         if not loader:
             continue  # instalaciones sin cargador de mods (vanilla)
-        game = Path(p["gameDir"]) if p.get("gameDir") else root
+        game = Path(p["gameDir"]) if isinstance(p.get("gameDir"), str) and p["gameDir"] else root
         out.append(_entry("official", p.get("name") or p.get("lastVersionId"), game / "mods", loader, mc,
                           loader_version_of(p.get("lastVersionId", ""))))
     return out
@@ -86,7 +87,8 @@ def _curseforge(home: Path) -> list[dict]:
         if not inst.is_dir():
             continue
         data = _read_json(inst / "minecraftinstance.json")
-        base = (data.get("baseModLoader") or {}).get("name", "")
+        bml = data.get("baseModLoader")
+        base = bml.get("name", "") if isinstance(bml, dict) else ""
         loader, _ = parse_version_id(base)
         out.append(_entry("curseforge", data.get("name") or inst.name, inst / "mods", loader, data.get("gameVersion"),
                           loader_version_of(base)))
@@ -106,7 +108,10 @@ def _prism(base: Path, launcher: str) -> list[dict]:
         except OSError:
             pass
         loader = mc = loader_version = None
-        for comp in _read_json(inst / "mmc-pack.json").get("components") or []:
+        comps = _read_json(inst / "mmc-pack.json").get("components")
+        for comp in comps if isinstance(comps, list) else []:
+            if not isinstance(comp, dict):
+                continue
             if comp.get("uid") == "net.minecraft":
                 mc = comp.get("version")
             elif comp.get("uid") in LOADER_UIDS:
@@ -123,6 +128,7 @@ def _modrinth(base: Path) -> list[dict]:
             continue
         data = _read_json(prof / "profile.json")
         meta = data.get("metadata") if isinstance(data.get("metadata"), dict) else data
+        meta = {k: v for k, v in meta.items() if isinstance(v, str)}
         out.append(_entry("modrinth", meta.get("name") or prof.name, prof / "mods", meta.get("loader"),
                           meta.get("game_version")))
     return out
@@ -141,11 +147,17 @@ def detect_instances(appdata: Path | None = None, home: Path | None = None) -> l
     """Instancias encontradas (una por carpeta de mods), con su cargador y versión si se saben."""
     appdata = appdata or Path(os.environ.get("APPDATA") or Path.home())
     home = home or Path.home()
-    found = (_official(appdata) + _curseforge(home)
-             + _prism(appdata / "PrismLauncher" / "instances", "prism")
-             + _prism(appdata / "MultiMC" / "instances", "multimc")
-             + _modrinth(appdata / "ModrinthApp" / "profiles")
-             + _modrinth(appdata / "com.modrinth.theseus" / "profiles"))
+    found = []
+    readers = (lambda: _official(appdata), lambda: _curseforge(home),
+               lambda: _prism(appdata / "PrismLauncher" / "instances", "prism"),
+               lambda: _prism(appdata / "MultiMC" / "instances", "multimc"),
+               lambda: _modrinth(appdata / "ModrinthApp" / "profiles"),
+               lambda: _modrinth(appdata / "com.modrinth.theseus" / "profiles"))
+    for read in readers:
+        try:
+            found += read()
+        except Exception:  # noqa: BLE001 - un launcher raro no impide detectar los demás
+            continue
     seen: set[str] = set()
     out = []
     for i in found:

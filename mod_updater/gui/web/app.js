@@ -516,7 +516,15 @@ document.addEventListener("click", async e => {
 
 /* ================================================================ changelog */
 
+// Escape cierra el panel abierto aunque el foco no esté en un control (se hizo clic en su texto).
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape" || !document.body.classList.contains("drawer-open")) return;
+  if (!$("#cl-drawer").hidden) closeChangelog();
+  else if (!$("#ex-drawer").hidden) closeExDrawer();
+});
+
 let clReturn = null;   // botón al que vuelve el foco al cerrar
+let clSeq = 0;         // descarta respuestas de una petición anterior (red lenta)
 
 async function openChangelog(id, trigger) {
   const m = MODS[id];
@@ -527,8 +535,9 @@ async function openChangelog(id, trigger) {
   $("#cl-backdrop").hidden = $("#cl-drawer").hidden = false;
   document.body.classList.add("drawer-open");
   $("#cl-close").focus();
+  const seq = ++clSeq;
   const res = await api().changelog(id);
-  if ($("#cl-drawer").hidden) return;  // se cerró mientras cargaba
+  if ($("#cl-drawer").hidden || seq !== clSeq) return;  // se cerró o se abrió otro mientras cargaba
   renderChangelog(res);
 }
 
@@ -539,7 +548,7 @@ function renderChangelog(res) {
   if (!res.versions.length) { body.innerHTML = `<p class="cl-empty">${esc(t("cl.none"))} ${link}</p>`; return; }
   // El HTML de cada versión ya viene limpio desde Python (changelog.sanitize_html).
   const entries = res.versions.map(v => `<section class="cl-entry">
-      <h3><span>${esc(v.version)}</span>${v.channel !== "release" ? `<span class="beta">${esc(v.channel)}</span>` : ""}
+      <h3><span>${esc(v.version)}</span>${v.channel !== "release" ? `<span class="beta">${esc(t(v.channel === "alpha" ? "ui.alpha" : "ui.beta"))}</span>` : ""}
         <time datetime="${esc(v.date)}">${esc(formatDay(v.date))}</time></h3>
       ${v.html ? `<div class="cl-html">${v.html}</div>` : `<p class="cl-empty">${esc(t("cl.empty"))} ${link}</p>`}
     </section>`).join("");
@@ -585,6 +594,7 @@ document.addEventListener("change", e => {
 });
 
 document.addEventListener("keydown", e => {
+  if (document.body.classList.contains("drawer-open")) return;  // con un panel abierto, sus teclas mandan
   if ($("#screen-results").hidden) return;
   if (e.key === "/" && !["INPUT", "SELECT"].includes(document.activeElement.tagName)) { e.preventDefault(); $("#q").focus(); }
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !$("#go").disabled) $("#go").click();
@@ -638,7 +648,7 @@ function envText(p) {
 
 function renderProfileSelect(screen) {
   const list = state.profiles || [];
-  const hide = !list.length || (screen === "setup" && setupMode === "setup") || screen === "apply";
+  const hide = !list.length || (screen === "setup" && setupMode === "setup") || screen === "apply" || screen === "scan";
   $("#profile-slot").hidden = hide;
   if (hide) return;
   $("#profile-select").innerHTML = list.map(p =>
@@ -652,6 +662,7 @@ async function switchProfile(id) {
   // Lo revisado, analizado y buscado era del perfil anterior.
   DATA = null; MODS = []; modsScreen = null; anSelected = null;
   EX.cards = []; EX.started = false; BASKET.clear(); renderBasket();
+  $("#ex-results").innerHTML = ""; $("#ex-status").textContent = ""; $("#ex-more").hidden = true;
   SG = { loaded: false, result: null };
   startScan();
 }
@@ -718,7 +729,10 @@ function wireProfiles() {
       label.innerHTML = `<input class="prof-rename" maxlength="60" aria-label="${esc(t("profile.name_label"))}" value="${esc(current)}">`;
       const input = label.querySelector("input");
       input.focus(); input.select();
+      let done = false;  // al volver a pintar se pierde el foco (blur): no guardar dos veces ni al cancelar
       const save = async () => {
+        if (done) return;
+        done = true;
         const res = await api().profile_rename(id, input.value);
         if (res.ok) setState(res.state);
         renderProfiles();
@@ -726,7 +740,7 @@ function wireProfiles() {
       };
       input.addEventListener("keydown", ev => {
         if (ev.key === "Enter") { ev.preventDefault(); save(); }
-        if (ev.key === "Escape") { ev.preventDefault(); renderProfiles(); }
+        if (ev.key === "Escape") { ev.preventDefault(); done = true; renderProfiles(); }
       });
       input.addEventListener("blur", save, { once: true });
     }
@@ -923,8 +937,10 @@ function renderBasket() {
 }
 
 let exReturn = null;
+let exSeqDrawer = 0;  // descarta respuestas de una petición anterior del panel de Explorar
 
 function openExDrawer(title, sub, icon) {
+  exSeqDrawer++;
   exReturn = document.activeElement;
   $("#ex-d-title").textContent = title;
   $("#ex-d-sub").textContent = sub || "";
@@ -946,12 +962,13 @@ function closeExDrawer() {
 
 async function openExDetail(c) {
   openExDrawer(c.name, c.author ? t("ex.by", { author: c.author }) : "", c.icon);
+  const seq = exSeqDrawer;
   const d = await api().explore_detail(c.source, c.id);
-  if ($("#ex-drawer").hidden) return;
+  if ($("#ex-drawer").hidden || seq !== exSeqDrawer) return;
   if (!d.ok) { $("#ex-d-body").innerHTML = `<p class="cl-error">${esc(d.message)}</p>`; return; }
   const inst = d.install;
   const what = !inst ? `<p class="ex-note warn">${esc(t("ex.no_version"))}</p>`
-    : `<p class="ex-note">${esc(t("ex.would_install", { version: inst.version, via: inst.via }))}${inst.beta ? ` <span class="beta">beta</span>` : ""}</p>`
+    : `<p class="ex-note">${esc(t("ex.would_install", { version: inst.version, via: inst.via }))}${inst.beta ? ` <span class="beta">${esc(t("ui.beta"))}</span>` : ""}</p>`
       + (inst.manual ? `<p class="ex-note warn">${esc(t("ex.manual_hint"))}</p>` : "")
       + (inst.deps.length ? `<p class="ex-note">${esc(t("ex.needs"))} ${inst.deps.map(x =>
           `<span class="ex-dep">${esc(x.name)}${x.installed ? ` · ${esc(t("ex.dep_installed"))}` : ` · ${esc(t("ex.dep_added"))}`}</span>`).join(" ")}</p>` : "");
@@ -971,8 +988,10 @@ async function openExDetail(c) {
 
 async function reviewBasket() {
   openExDrawer(t("ex.review_title"), t("ex.basket_count", { count: BASKET.size }));
+  const seq = exSeqDrawer;
   const res = await api().install_plan([...BASKET.values()].map(c => ({ source: c.source, id: c.id, name: c.name })));
-  renderPlanReview(res, () => { BASKET.clear(); renderBasket(); });
+  // Tras instalar, la próxima visita a Explorar vuelve a buscar ("Ya instalado" cambia).
+  if (seq === exSeqDrawer) renderPlanReview(res, () => { BASKET.clear(); renderBasket(); EX.started = false; });
 }
 
 // Revisión antes de instalar/quitar (la usan la cesta de Explorar y las Sugerencias).
@@ -1025,6 +1044,7 @@ let SG = { loaded: false, result: null };
 async function openSuggest() {
   show("suggest");
   if (!SG.loaded) {
+    $("#sg-results").hidden = true;
     SG.loaded = true;
     renderSuggestForm(await api().suggest_answers());
   }
@@ -1094,6 +1114,7 @@ function updateSuggestApply() {
 }
 
 async function applySuggestions() {
+  if (!SG.result) return;
   const marked = [...document.querySelectorAll("#sg-cols input[data-sg]:checked")];
   const sel = { remove: [], add: [] };
   for (const c of marked) {
@@ -1102,7 +1123,9 @@ async function applySuggestions() {
     else sel.add.push({ source: item.source, id: item.id, name: item.name });
   }
   openExDrawer(t("sg.review_title"), t("sg.apply_marked", { count: marked.length }));
-  renderPlanReview(await api().suggest_plan(sel), () => { SG.result = null; });
+  const seq = exSeqDrawer;
+  const plan = await api().suggest_plan(sel);
+  if (seq === exSeqDrawer) renderPlanReview(plan, () => { SG = { loaded: false, result: null }; });
 }
 
 function wireSuggest() {
@@ -1118,9 +1141,10 @@ function wireExplore() {
   $("#ex-more").addEventListener("click", () => exSearch(EX.page + 1));
   $("#ex-results").addEventListener("click", e => {
     const add = e.target.closest("[data-ex-add]");
-    if (add) { toggleBasket(EX.cards[Number(add.dataset.exAdd)]); return; }
+    const card = el => EX.cards[Number(el.dataset.exAdd ?? el.dataset.exOpen)];
+    if (add) { if (card(add)) toggleBasket(card(add)); return; }
     const open = e.target.closest("[data-ex-open]");
-    if (open) openExDetail(EX.cards[Number(open.dataset.exOpen)]);
+    if (open && card(open)) openExDetail(card(open));
   });
   $("#ex-basket-list").addEventListener("click", e => {
     const x = e.target.closest("[data-ex-remove]");

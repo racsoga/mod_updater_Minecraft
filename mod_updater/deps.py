@@ -128,6 +128,10 @@ def plan_with_dependencies(results: list[Resolution], selected: list[Resolution]
             in_plan.add(id(res))
             queue.append((res, res.new_deps))
 
+    for r in selected:  # lo elegido (p. ej. una librería en la cesta) no se vuelve a buscar como dependencia
+        if r.kind == INSTALL:
+            for k in r.known_ids:
+                installs[k] = r
     queue: list[tuple[Resolution, list[Dep]]] = [(r, r.new_deps) for r in selected]
     queue += [(r, r.current_deps) for r in results if r.mod is not None and id(r) not in in_plan]
 

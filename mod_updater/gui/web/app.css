@@ -401,6 +401,7 @@ body.drawer-open { overflow: hidden; }
 }
 @keyframes fade { from { opacity: 0; } }
 @keyframes slide-in { from { transform: translateX(24px); opacity: 0; } }
+.drawer:focus { outline: none; }
 .drawer-head { display: flex; align-items: flex-start; gap: 12px; padding: 24px 24px 16px; border-bottom: 1px solid var(--rule); }
 .drawer-head > div { flex: 1; min-width: 0; }
 .drawer-head h2 { margin: 0 0 4px; font-size: 22px; font-weight: 600; line-height: 1.2; overflow-wrap: anywhere; }
