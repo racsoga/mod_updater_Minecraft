@@ -132,6 +132,17 @@ class ModrinthClient:
         versions.sort(key=lambda v: v.date_published, reverse=True)
         return versions
 
+    def search(self, *, query: str, game_version: str, loader: str, index: str, offset: int, limit: int,
+               categories: list[str] | None = None) -> list[dict]:
+        """Búsqueda de mods para una versión y cargador (facetas). Devuelve los "hits"."""
+        facets = [["project_type:mod"], [f"versions:{game_version}"], [f"categories:{loader}"]]
+        if categories:
+            facets.append([f"categories:{c}" for c in categories])  # OR entre ellas
+        params = {"facets": json.dumps(facets), "index": index, "offset": offset, "limit": limit}
+        if query:
+            params["query"] = query
+        return (self._call("GET", "/v2/search", params=params) or {}).get("hits", [])
+
     def project(self, id_or_slug: str) -> dict | None:
         return self._call("GET", f"/v2/project/{id_or_slug}")
 

@@ -298,3 +298,8 @@ def test_modrinth_override():
     if table.get("modrinth"):
         pid, cat = next(iter(table["modrinth"].items()))
         assert from_modrinth({"id": pid, "categories": ["cursed"]})[0] == cat
+
+
+def test_concrete_primary_is_kept_over_subcategories():
+    # Backpacked: principal storage (concreta) y una subcategoría technology-farming -> Almacenamiento
+    assert from_curseforge(cf_info(420, 416, primary=420))[0] == "almacenamiento"

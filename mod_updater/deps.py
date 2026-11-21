@@ -189,11 +189,12 @@ def plan_with_dependencies(results: list[Resolution], selected: list[Resolution]
         parents = [p for p, c in edges if c is res]
         return any(id(p) not in blocked for p in parents)
 
+    chosen = {id(r) for r in selected}  # lo que eligió el usuario (también instalaciones desde Explorar)
     final: list[Resolution] = []
     for r in plan:
         if id(r) in blocked:
             continue
-        if (r.kind == INSTALL or (r.required_by and r not in selected)) and not needed(r):
+        if id(r) not in chosen and (r.kind == INSTALL or r.required_by) and not needed(r):
             continue
         final.append(r)
     final_ids = {id(r) for r in final}
@@ -203,13 +204,12 @@ def plan_with_dependencies(results: list[Resolution], selected: list[Resolution]
     out = DepPlan(items=final, ignored=ignored, conflicts=_conflicts(results, final, installed))
     for rid, (reason, url) in blocked.items():
         res = origin[rid]
-        if res.kind == INSTALL:
-            continue
-        if res in selected:
+        if rid in chosen:
             res.status = DESCARGA_MANUAL
             res.add_note(t("deps.blocked", reason=reason))
             out.blocked.append(res)
-        elif rid not in final_ids:
+            continue
+        if res.kind != INSTALL and rid not in final_ids:
             out.broken.append(Broken(res, reason, url))
     return out
 

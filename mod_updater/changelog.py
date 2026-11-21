@@ -40,8 +40,9 @@ def _safe_url(url: str | None, *, image: bool = False) -> str | None:
 
 
 class _Sanitizer(HTMLParser):
-    def __init__(self) -> None:
+    def __init__(self, flag: bool = True) -> None:
         super().__init__(convert_charrefs=True)
+        self.flag = flag
         self.out: list[str] = []
         self.open: list[str] = []   # etiquetas permitidas abiertas
         self.skip: list[str] = []   # etiquetas cuyo contenido se descarta
@@ -99,7 +100,7 @@ class _Sanitizer(HTMLParser):
         if data.strip():
             self.text = True
         escaped = html.escape(data, quote=False)
-        if "code" in self.open or "pre" in self.open:
+        if not self.flag or "code" in self.open or "pre" in self.open:
             self.out.append(escaped)
         else:
             self.out.append(FLAG_WORDS.sub(lambda m: f'<mark class="cl-flag">{m.group(0)}</mark>', escaped))
@@ -110,11 +111,12 @@ class _Sanitizer(HTMLParser):
         return "".join(self.out).strip() if self.text else ""
 
 
-def sanitize_html(raw: str | None) -> str:
-    """HTML seguro para insertar en la ventana (cadena vacía si no queda texto visible)."""
+def sanitize_html(raw: str | None, flag: bool = True) -> str:
+    """HTML seguro para insertar en la ventana (cadena vacía si no queda texto visible).
+    `flag`: resaltar las palabras de aviso (solo en changelogs, no en descripciones)."""
     if not raw:
         return ""
-    s = _Sanitizer()
+    s = _Sanitizer(flag)
     s.feed(raw)
     s.close()
     return s.result()
@@ -123,8 +125,8 @@ def sanitize_html(raw: str | None) -> str:
 _MD = MarkdownIt("commonmark", {"html": False})  # el HTML crudo del Markdown se muestra como texto
 
 
-def markdown_to_html(text: str | None) -> str:
-    return sanitize_html(_MD.render(text or "")) if text else ""
+def markdown_to_html(text: str | None, flag: bool = True) -> str:
+    return sanitize_html(_MD.render(text or ""), flag) if text else ""
 
 
 def _between(items: list, date_of, current: str | None, new: str | None) -> list:

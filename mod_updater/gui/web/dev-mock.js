@@ -93,6 +93,34 @@
       }, step * chosen.length + 400);
       return { ok: true, total: chosen.length };
     },
+    // Explorar de ejemplo (sin red). Los nombres son inventados salvo los de la colección de prueba.
+    explore_search: async opts => {
+      await new Promise(r => setTimeout(r, 250));
+      const all = [
+        ["curseforge", "1", "Ejemplo de mochilas", "almacenamiento", 12400000, false],
+        ["modrinth", "a2", "Ejemplo de minimapa", "mapas", 8900000, false],
+        ["curseforge", "3", "Balm", "librerias", 98000000, true],
+        ["curseforge", "4", "Ejemplo de cocina", "comida", 3100000, false],
+        ["modrinth", "b5", "Ejemplo de rendimiento", "rendimiento", 45000000, false],
+      ].map(([source, id, name, cat, downloads, installed]) => ({ source, id, name, cat, cats: [cat], downloads, installed,
+        author: "Autor", summary: `Descripción corta de ${name}.`, updated: "2026-10-12T00:00:00Z", icon: null,
+        url: "https://example.org", manual: false, also_on: [] }));
+      const q = (opts.query || "").toLowerCase();
+      const cards = all.filter(c => (!q || c.name.toLowerCase().includes(q)) && (!opts.category || c.cat === opts.category)
+        && !(opts.hide_installed && c.installed));
+      return { ok: true, cards: opts.page ? [] : cards, page: opts.page, more: false, scanned: true,
+               env: { minecraft_version: "1.21.1", loader: "NeoForge" } };
+    },
+    explore_detail: async () => ({ ok: true, html: "<p>Descripción larga de ejemplo.</p>", images: [],
+      links: { page: "https://example.org" }, install: { version: "1.2.0", beta: false, manual: false, via: "CurseForge",
+      deps: [{ name: "Balm", installed: true }] } }),
+    install_plan: async items => ({ ok: true, manual: [], unavailable: [], already: [], blocked: [],
+      rows: items.map((it, i) => ({ id: 100000 + i, s: "dep", name: it.name, icon: null, from: null, to: "1.2.0", beta: false, neededBy: [] })) }),
+    install_start: async () => {
+      setTimeout(() => emit("apply_done", { updated: 0, installed: 0, added: 1, failed: [], pruned: 0,
+        backup: { path: "C:\\…\\mods_backup\\2026-11-21_1600", date: "2026-11-21T16:00:00", changes: 1, undone: false, undoable: true } }), 800);
+      return { ok: true, total: 1 };
+    },
     // Changelog de ejemplo (?clfail: error de red). El HTML real llega ya limpio desde Python.
     changelog: async id => {
       await new Promise(r => setTimeout(r, params.has("slow") ? 1500 : 300));

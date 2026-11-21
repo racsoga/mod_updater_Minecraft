@@ -28,6 +28,7 @@
   <div class="tabs" id="tabs" role="tablist" data-i18n-aria-label="ui.tabs_label" hidden>
     <button class="tab" type="button" role="tab" id="tab-mods" data-tab="mods" aria-selected="true" data-i18n="ui.tab_mods"></button>
     <button class="tab" type="button" role="tab" id="tab-analysis" data-tab="analysis" aria-selected="false" tabindex="-1" data-i18n="ui.tab_analysis"></button>
+    <button class="tab" type="button" role="tab" id="tab-explore" data-tab="explore" aria-selected="false" tabindex="-1" data-i18n="ui.tab_explore"></button>
     <button class="tab" type="button" role="tab" id="tab-settings" data-tab="settings" aria-selected="false" tabindex="-1" data-i18n="ui.settings"></button>
   </div>
 
@@ -211,6 +212,34 @@
     </div>
   </section>
 
+  <!-- ============================================ Explorar -->
+  <section class="screen" id="screen-explore" hidden>
+    <div class="lede">
+      <h2 data-i18n="ex.title"></h2>
+      <p id="ex-deck"></p>
+    </div>
+    <form class="ex-bar" id="ex-form" role="search" onsubmit="return false">
+      <label class="search ex-search">
+        <span class="sr-only" data-i18n="ex.search"></span>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M7 1.5a5.5 5.5 0 0 1 4.38 8.82l3.15 3.15-1.06 1.06-3.15-3.15A5.5 5.5 0 1 1 7 1.5Zm0 1.5a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/></svg>
+        <input id="ex-q" type="search" autocomplete="off" data-i18n-placeholder="ex.search_placeholder">
+      </label>
+      <label class="ex-field"><span data-i18n="ex.category"></span><select class="select" id="ex-cat"></select></label>
+      <label class="ex-field"><span data-i18n="ex.sort"></span>
+        <select class="select" id="ex-sort">
+          <option value="popular" data-i18n="ex.sort_popular"></option>
+          <option value="downloads" data-i18n="ex.sort_downloads"></option>
+          <option value="updated" data-i18n="ex.sort_updated"></option>
+          <option value="name" data-i18n="ex.sort_name"></option>
+        </select>
+      </label>
+      <label class="toggle ex-hide"><input type="checkbox" id="ex-hide"> <span data-i18n="ex.hide_installed"></span></label>
+    </form>
+    <p class="ex-status" id="ex-status" aria-live="polite"></p>
+    <div class="ex-grid" id="ex-results"></div>
+    <div class="ex-more"><button class="btn-secondary" type="button" id="ex-more" hidden data-i18n="ex.load_more"></button></div>
+  </section>
+
   <!-- ============================================ Actualizando -->
   <section class="screen" id="screen-apply" hidden>
     <div class="lede">
@@ -246,6 +275,33 @@
   <button class="btn-primary" type="button" id="go" aria-keyshortcuts="Control+Enter" data-i18n-title="ui.go_shortcut"></button>
   <button class="btn-primary" type="button" id="btn-recheck" hidden data-i18n="ui.check_again"></button>
 </div>
+
+<!-- Cesta de Explorar -->
+<div class="actionbar ex-basket" role="region" data-i18n-aria-label="ex.basket_region" id="ex-basket" hidden>
+  <div class="summary">
+    <span class="count" id="ex-basket-count"></span>
+    <ul class="ex-basket-list" id="ex-basket-list"></ul>
+  </div>
+  <button class="btn-secondary" type="button" id="ex-basket-clear" data-i18n="ex.basket_clear"></button>
+  <button class="btn-primary" type="button" id="ex-basket-go" data-i18n="ex.basket_go"></button>
+</div>
+
+<!-- Explorar: detalle de un mod y revisión de la cesta (diálogo modal) -->
+<div class="drawer-backdrop" id="ex-backdrop" hidden></div>
+<aside class="drawer" id="ex-drawer" role="dialog" aria-modal="true" aria-labelledby="ex-d-title" hidden>
+  <header class="drawer-head">
+    <span class="ex-d-icon" id="ex-d-icon" hidden></span>
+    <div>
+      <h2 id="ex-d-title"></h2>
+      <p id="ex-d-sub"></p>
+    </div>
+    <button class="navbtn drawer-close" type="button" id="ex-d-close" data-i18n-aria-label="cl.close">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.7 2.6 8 6.9l4.3-4.3 1.1 1.1L9.1 8l4.3 4.3-1.1 1.1L8 9.1l-4.3 4.3-1.1-1.1L6.9 8 2.6 3.7z"/></svg>
+    </button>
+  </header>
+  <div class="drawer-body" id="ex-d-body" aria-live="polite"></div>
+  <footer class="drawer-foot" id="ex-d-foot"></footer>
+</aside>
 
 <!-- Changelog: panel lateral (diálogo modal) -->
 <div class="drawer-backdrop" id="cl-backdrop" hidden></div>

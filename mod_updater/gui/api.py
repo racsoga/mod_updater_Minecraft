@@ -27,9 +27,11 @@ from .. import credentials, i18n
 from ..analysis import analyze
 from ..categories import Catalog
 from ..changelog import changelog_for
+from ..explore import PAGE_SIZE, _installed_index, detail as explore_detail_of, search as explore_search_in
 from ..config import DEFAULT_USER_AGENT, default_mods_dir
 from ..curseforge import LOADER_TYPES, CurseForgeAuthError, CurseForgeClient
 from ..deps import DependencyFinder, DepPlan, plan_with_dependencies
+from ..resolver import Dep
 from .. import net
 from ..downloader import (
     Outcome,
@@ -146,6 +148,8 @@ class Api:
         self._row_s: list[str] = []         # estado de cada fila ("up", "dep", ...)
         self._applying = False              # hay una actualización en curso (aviso al cerrar)
         self._changelogs: dict = {}         # changelogs ya descargados (por mod y rango de versiones)
+        self._explore_cache: dict = {}      # búsquedas recientes (no repetir peticiones al volver atrás)
+        self._install: list[Resolution] = []  # plan de la cesta de Explorar, pendiente de confirmar
         self._window = None
         self._busy = threading.Lock()
         self._results: list[Resolution] = []
@@ -386,8 +390,8 @@ class Api:
         self._run_async(lambda: self._apply(chosen, s))
         return {"ok": True, "total": len(chosen)}
 
-    def _apply(self, chosen: list[Resolution], s: Settings) -> None:
-        index = {id(r): i for i, r in enumerate(self._rows)}
+    def _apply(self, chosen: list[Resolution], s: Settings, index: dict | None = None) -> None:
+        index = index or {id(r): i for i, r in enumerate(self._rows)}
         total, done = len(chosen), 0
         self._applying = True
         net.retry_listener = lambda host, reason, wait: self._emit(
@@ -418,7 +422,8 @@ class Api:
             self._plan = None  # la revisión ya no refleja la carpeta: hay que volver a revisar
             self._emit("apply_done", {
                 "updated": sum(1 for o in ok if o.resolution.kind != INSTALL),
-                "installed": sum(1 for o in ok if o.resolution.kind == INSTALL),
+                "installed": sum(1 for o in ok if o.resolution.kind == INSTALL and o.resolution.required_by),
+                "added": sum(1 for o in ok if o.resolution.kind == INSTALL and not o.resolution.required_by),
                 "failed": [{"name": o.resolution.name, "message": o.message} for o in outcomes if not o.ok],
                 "backup": backup_info(backup_dir) if backup_dir.exists() else None,
                 "pruned": len(pruned),
@@ -434,6 +439,104 @@ class Api:
     def _is_applying(self) -> bool:
         """Para el aviso al cerrar la ventana (gui/app.py)."""
         return self._applying
+
+    # ------------------------------------------------------------------ explorar
+
+    def _clients(self, s: Settings):
+        key = self._get_key()[0] if s.use_curseforge else None
+        return (self._cf_factory(key) if key else None), self._mr_factory(DEFAULT_USER_AGENT)
+
+    def explore_search(self, opts: dict) -> dict:
+        """Busca mods para la versión y el cargador de los ajustes. opts: query, category, sort,
+        page, hide_installed. Devuelve tarjetas sin duplicados entre fuentes."""
+        s = self._settings()
+        opts = opts or {}
+        args = dict(query=str(opts.get("query") or "").strip()[:100], category=opts.get("category") or None,
+                    sort=opts.get("sort") or "popular", page=max(0, int(opts.get("page") or 0)),
+                    hide_installed=bool(opts.get("hide_installed")))
+        key = (s.minecraft_version, s.loader, tuple(sorted(args.items())), len(self._results))
+        if key not in self._explore_cache:
+            cf, mr = self._clients(s)
+            try:
+                cards = explore_search_in(cf, mr, installed=self._results, game_version=s.minecraft_version,
+                                          loader=s.loader, **args)
+            except ApiError as exc:
+                return {"ok": False, "message": t("scan.err_offline") if exc.kind == "offline" else t("ex.err_network")}
+            if len(self._explore_cache) > 60:
+                self._explore_cache.clear()
+            self._explore_cache[key] = cards
+        cards = self._explore_cache[key]
+        return {"ok": True, "cards": cards, "page": args["page"], "more": len(cards) >= PAGE_SIZE // 2,
+                "env": {"minecraft_version": s.minecraft_version, "loader": LOADER_LABEL.get(s.loader, s.loader)},
+                "scanned": bool(self._results)}
+
+    def explore_detail(self, source: str, project_id: str) -> dict:
+        """Descripción, capturas, enlaces y versión que se instalaría (con sus dependencias)."""
+        s = self._settings()
+        cf, mr = self._clients(s)
+        try:
+            info = explore_detail_of(cf, mr, source=source, project_id=str(project_id))
+            finder = DependencyFinder(cf, mr, loader=s.loader, game_version=s.minecraft_version, allow_beta=s.allow_beta)
+            res = finder.find(Dep(source, str(project_id)))
+        except ApiError as exc:
+            return {"ok": False, "message": t("scan.err_offline") if exc.kind == "offline" else t("ex.err_network")}
+        ids, _ = _installed_index(self._results)
+        install = None
+        if res is not None:
+            install = {"version": res.new_version, "beta": res.new_channel not in (None, "release"),
+                       "manual": res.status != ACTUALIZABLE, "via": SOURCE_LABEL.get(res.source or "", ""),
+                       "deps": [{"name": finder.describe(d), "installed": d.key in ids} for d in res.new_deps]}
+        return {"ok": True, **info, "install": install}
+
+    def install_plan(self, items: list) -> dict:
+        """Prepara la instalación de la cesta: versión de cada mod y dependencias que faltan."""
+        if not self._results:
+            return {"ok": False, "message": t("ex.need_scan")}
+        s = self._settings()
+        cf, mr = self._clients(s)
+        finder = DependencyFinder(cf, mr, loader=s.loader, game_version=s.minecraft_version, allow_beta=s.allow_beta)
+        ids, _ = _installed_index(self._results)
+        chosen: list[Resolution] = []
+        manual, unavailable, already = [], [], []
+        try:
+            for it in items or []:
+                src, pid, name = it.get("source"), str(it.get("id")), it.get("name") or "?"
+                if (src, pid) in ids:
+                    already.append(name)
+                    continue
+                res = finder.find(Dep(src, pid))
+                if res is None:
+                    unavailable.append(name)
+                elif res.status != ACTUALIZABLE:
+                    manual.append({"name": res.name, "url": res.project_url})
+                else:
+                    chosen.append(res)
+            plan = plan_with_dependencies(self._results, chosen, finder)
+        except ApiError as exc:
+            return {"ok": False, "message": t("scan.err_offline") if exc.kind == "offline" else t("ex.err_network")}
+        blocked = {id(r) for r in plan.blocked}
+        self._install = [r for r in plan.items if id(r) not in blocked]
+        rows = [{"id": 100000 + i, "s": "dep" if r.kind == INSTALL else "up", "name": r.name, "icon": r.icon_url,
+                 "from": r.current_version if r.kind != INSTALL else None, "to": r.new_version,
+                 "beta": r.new_channel not in (None, "release"), "neededBy": list(r.required_by)}
+                for i, r in enumerate(self._install)]
+        return {"ok": True, "rows": rows, "manual": manual, "unavailable": unavailable, "already": already,
+                "blocked": [{"name": r.name, "reason": r.note} for r in plan.blocked]}
+
+    def install_start(self) -> dict:
+        """Instala el plan preparado con install_plan (misma pantalla y copia que al actualizar)."""
+        if not self._install:
+            return {"ok": False, "message": t("apply.nothing")}
+        s = self._settings()
+        if self._running(s.mods_path.parent):
+            return {"ok": False, "reason": "minecraft", "message": t("apply.minecraft_open")}
+        if not self._busy.acquire(blocking=False):
+            return {"ok": False, "message": t("apply.busy")}
+        chosen, self._install = self._install, []
+        index = {id(r): 100000 + i for i, r in enumerate(chosen)}
+        self._explore_cache.clear()  # "Ya instalado" cambia tras instalar
+        self._run_async(lambda: self._apply(chosen, s, index))
+        return {"ok": True, "total": len(chosen)}
 
     # ------------------------------------------------------------------ changelog
 

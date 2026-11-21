@@ -184,10 +184,10 @@ def _is_subcategory(cat: dict) -> bool:
 def from_curseforge(info: dict, catalog: Catalog | None = None) -> list[str]:
     """Categorías propias de un mod de CurseForge, la principal primero.
 
-    `primaryCategoryId` no se usa a ciegas: gana la categoría más específica (una subcategoría
-    gana a una de primer nivel) y, entre subcategorías, cualquier otra gana a Tecnología, que es la
-    más genérica (un addon de Create para granjas es de Comida). Entre categorías de primer nivel
-    decide la principal de CurseForge. "Otras" nunca es la principal si hay otra. La tabla de correcciones manda.
+    `primaryCategoryId` no se usa a ciegas cuando es genérica (Tecnología u Otras): entonces gana la
+    categoría más específica (una subcategoría gana a una de primer nivel y, entre subcategorías,
+    cualquier otra gana a Tecnología: un addon de Create para granjas es de Comida). Si la principal
+    ya es concreta (p. ej. Almacenamiento), se respeta. "Otras" nunca es la principal si hay otra. La tabla de correcciones manda.
     """
     raw = [c for c in (info.get("categories") or []) if isinstance(c, dict)]
     primary_id = info.get("primaryCategoryId")
@@ -199,6 +199,8 @@ def from_curseforge(info: dict, catalog: Catalog | None = None) -> list[str]:
         best = LIBRARY
     else:
         content = [s for s in scored if s[0] not in (OTHER, LIBRARY)]
+        if primary not in (None, OTHER, "tecnologia"):
+            content = [s for s in content if s[2]]  # la principal ya es concreta (p. ej. Almacenamiento): se respeta
         # (subcategoría, subcategoría que no es Tecnología, principal de CurseForge, orden)
         best = max(content, key=lambda s: (s[1], s[1] and s[0] != "tecnologia", s[2], s[3]))[0] if content else (
             LIBRARY if LIBRARY in all_cats else (OTHER if all_cats else None))

@@ -6,6 +6,7 @@ mensajes de error ni en logs.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 
 import requests
@@ -123,6 +124,23 @@ class CurseForgeClient:
             data = self._call("POST", "/v1/mods", json={"modIds": ids[i : i + BATCH]}) or []
             out.update({m["id"]: m for m in data})
         return out
+
+    def search(self, *, query: str, game_version: str, loader: str, sort_field: int, index: int, page_size: int,
+               category_ids: list[int] | None = None) -> list[dict]:
+        """Búsqueda de mods (clase Mods) para una versión y cargador. Devuelve los objetos de mod."""
+        params = {"gameId": MINECRAFT_GAME_ID, "classId": 6, "gameVersion": game_version,
+                  "modLoaderType": LOADER_TYPES[loader], "sortField": sort_field,
+                  "sortOrder": "asc" if sort_field == 4 else "desc", "index": index, "pageSize": page_size}
+        if query:
+            params["searchFilter"] = query
+        if category_ids:
+            params["categoryIds"] = json.dumps(category_ids[:10])  # la API admite hasta 10
+        return self._call("GET", "/v1/mods/search", params=params) or []
+
+    def description(self, mod_id: int) -> str:
+        """Descripción larga del mod (HTML)."""
+        data = self._call("GET", f"/v1/mods/{mod_id}/description")
+        return data if isinstance(data, str) else ""
 
     def file_changelog(self, mod_id: int, file_id: int) -> str:
         """Changelog (HTML) de un archivo; cadena vacía si no hay."""
