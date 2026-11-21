@@ -343,5 +343,27 @@
   "cli.ap_error": "%(prog)s: error: %(message)s\n",
   "ui.list_empty": "There are no .jar files in this folder.",
   "ui.head_empty": "No mods in this folder",
-  "ui.deck_empty": "Check in Settings that this is your Minecraft mods folder."
+  "ui.deck_empty": "Check in Settings that this is your Minecraft mods folder.",
+
+  "cli.ap_argument": "argument %(argument_name)s: %(message)s",
+  "cli.ap_unrecognized": "unrecognized arguments: %s",
+  "cli.ap_required": "the following arguments are required: %s",
+  "cli.ap_one_required": "one of the arguments %s is required",
+  "cli.ap_not_allowed": "not allowed with argument %s",
+  "cli.ap_ambiguous": "ambiguous option: %(option)s could match %(matches)s",
+  "cli.ap_expected_one": "expected one argument",
+  "cli.ap_expected_at_most_one": "expected at most one argument",
+  "cli.ap_expected_at_least_one": "expected at least one argument",
+  "cli.ap_invalid_value": "invalid value: %(value)r",
+  "cli.ap_invalid_choice": "invalid choice: %(value)r (choose from %(choices)s)",
+  "cli.ap_ignored": "ignored explicit argument %r",
+  "cli.ap_positional": "positional arguments",
+  "cli.interrupted": "Warning: the update from {date} was interrupted halfway. To put the folder back as it was, open the app and press Restore, or recover the files from {path}.",
+  "recover.title": "The last update was interrupted",
+  "recover.deck_one": "The program closed while updating ({date}) and 1 mod may have been left halfway. Restore puts your mods folder back as it was before that update.",
+  "recover.deck_other": "The program closed while updating ({date}) and {count} mods may have been left halfway. Restore puts your mods folder back as it was before that update.",
+  "recover.restore": "Restore",
+  "recover.skip": "Not now",
+  "recover.continue": "Check mods",
+  "recover.done_title": "Folder restored."
 }

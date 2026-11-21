@@ -93,6 +93,11 @@
       }, step * chosen.length + 400);
       return { ok: true, total: chosen.length };
     },
+    // ?interrupted: simula que la última actualización se cortó a medias
+    interrupted: async () => params.has("interrupted")
+      ? { path: "C:\\…\\mods_backup\\2026-11-20_1930", date: "2026-11-20T19:30:00", changes: 2, complete: false, undone: false, undoable: true }
+      : null,
+    restore_interrupted: async () => ({ ok: true, restored: 2, removed: 1, errors: [], message: t("undo.done", { count: 2, removed: 1 }) }),
     undo_last: async () => ({ ok: true, restored: 3, removed: 4, errors: [], message: "Hecho: 3 mods vuelven a su versión anterior (4 archivos nuevos apartados en la copia)." }),
     backups_info: async () => ({ count: 2, last: { path: "C:\\…\\mods_backup\\2026-11-20_1930", date: "2026-11-20T19:30:00", changes: 4, undone: false, undoable: true } }),
     clear_backups: async () => ({ ok: true, count: 2, message: "2 backups borrados." }),

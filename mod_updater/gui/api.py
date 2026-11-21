@@ -31,6 +31,7 @@ from .. import net
 from ..downloader import (
     Outcome,
     friendly_error,
+    interrupted_backup,
     last_undoable,
     apply_updates,
     backup_info,
@@ -430,11 +431,25 @@ class Api:
         target = last_undoable(mods_path)
         return {"count": len(backups), "last": backup_info(target) if target else None}
 
+    def interrupted(self) -> dict | None:
+        """Al abrir la app: ¿hay una actualización que se quedó a medias? (para ofrecer restaurarla)."""
+        try:
+            target = interrupted_backup(self._settings().mods_path)
+        except OSError:
+            return None
+        return backup_info(target) if target else None
+
+    def restore_interrupted(self) -> dict:
+        """Deshace la actualización interrumpida: la carpeta queda como antes de empezarla."""
+        return self._undo(interrupted_backup(self._settings().mods_path))
+
     def undo_last(self) -> dict:
         """Deshace la última actualización que se pueda deshacer (aunque después haya
         habido un intento fallido o una actualización interrumpida a medias)."""
+        return self._undo(last_undoable(self._settings().mods_path))
+
+    def _undo(self, target: Path | None) -> dict:
         s = self._settings()
-        target = last_undoable(s.mods_path)
         if target is None:
             return {"ok": False, "message": t("undo.none")}
         if self._running(s.mods_path.parent):

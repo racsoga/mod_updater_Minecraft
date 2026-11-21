@@ -311,14 +311,62 @@ def prune_backups(mods_dir: Path, keep: int) -> list[Path]:
     """Borra los backups más viejos y deja los `keep` más recientes. Devuelve los borrados.
 
     Solo toca carpetas con el formato de fecha y un `cambios.json`/`cambios.txt`
-    dentro, es decir, creadas por este programa.
+    dentro, es decir, creadas por este programa. Nunca borra una copia que haga falta
+    para recuperar algo (ver `_must_keep`).
     """
     keep = max(1, keep)
     backups = list_backups(mods_dir)
-    to_delete = backups[:-keep] if len(backups) > keep else []
-    for p in to_delete:
-        shutil.rmtree(p)
+    logs = {b: read_changelog(b) for b in backups}
+    present = _mods_present(logs.values(), mods_dir)
+    old = backups[:-keep] if len(backups) > keep else []
+    to_delete = [b for b in old if not _must_keep(b, logs[b], mods_dir, present)]
+    for b in to_delete:
+        shutil.rmtree(b)
     return to_delete
+
+
+def _mod_key(change: dict) -> tuple:
+    if change.get("project_id"):
+        return (change.get("source"), str(change["project_id"]))
+    return ("file", change.get("old_file") or change.get("new_file"))
+
+
+def _mods_present(logs, mods_dir: Path) -> set[tuple]:
+    """Mods (por proyecto) de los que hay alguna versión en la carpeta de mods, según
+    cualquier copia: si un mod se actualizó dos veces, su versión actual sale en la última."""
+    present: set[tuple] = set()
+    for data in logs:
+        for change in (data or {}).get("changes", []):
+            if any((mods_dir / n).exists() for n in (change.get("old_file"), change.get("new_file")) if n):
+                present.add(_mod_key(change))
+    return present
+
+
+def _must_keep(backup_dir: Path, data: dict | None, mods_dir: Path, present: set[tuple]) -> bool:
+    """¿Hay que conservar esta copia aunque sobre?
+
+    - Si es de una actualización interrumpida que no se ha restaurado.
+    - Si guarda el jar viejo de un mod del que no queda ninguna versión en la carpeta de
+      mods: esa copia es el único sitio donde queda ese mod.
+    """
+    if data is None:
+        return False
+    if not data.get("complete", True) and not data.get("undone"):
+        return True
+    for change in data.get("changes", []):
+        backup_file = change.get("backup_file")
+        if backup_file and (backup_dir / backup_file).is_file() and _mod_key(change) not in present:
+            return True
+    return False
+
+
+def interrupted_backup(mods_dir: Path) -> Path | None:
+    """La copia de una actualización que se interrumpió (sin terminar ni restaurar), si hay."""
+    for backup in reversed(list_backups(mods_dir)):
+        info = backup_info(backup)
+        if not info["complete"] and info["undoable"]:
+            return backup
+    return None
 
 
 def apply_updates(
@@ -430,6 +478,11 @@ def undo_backup(backup_dir: Path) -> UndoResult:
     for change in reversed(_undoable_changes(data)):
         name = change.get("name", "?")
         new_file, old_file, backup_file = change.get("new_file"), change.get("old_file"), change.get("backup_file")
+        if change.get("state") == "pending" and change.get("action") == "update" \
+                and not (backup_file and (backup_dir / backup_file).exists()):
+            # Se interrumpió antes de apartar el jar viejo: sigue en su sitio y no hay nada
+            # que deshacer. (Si el nuevo se llama igual, lo que hay en mods ES el viejo.)
+            continue
         try:
             if new_file and (mods_dir / new_file).exists():
                 undo_dir.mkdir(exist_ok=True)

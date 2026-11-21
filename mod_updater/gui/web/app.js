@@ -43,7 +43,7 @@ let pendingFolder = null;  // carpeta elegida y aún no guardada
 /* ================================================================ pantallas */
 
 function show(screen) {
-  for (const s of ["setup", "scan", "results", "apply", "done"]) $(`#screen-${s}`).hidden = s !== screen;
+  for (const s of ["setup", "scan", "recover", "results", "apply", "done"]) $(`#screen-${s}`).hidden = s !== screen;
   $("#btn-settings").hidden = screen === "setup" || screen === "apply";
   $("#btn-rescan").hidden = screen !== "results";
   $("#actionbar").hidden = screen !== "results";
@@ -608,11 +608,45 @@ function wire() {
   });
 }
 
+// Al abrir: si la última actualización se cortó a medias, ofrecer restaurarla antes de revisar.
+function showRecover(info) {
+  $("#recover-title").textContent = t("recover.title");
+  $("#recover-deck").textContent = t("recover.deck", { count: info.changes, date: formatDate(info.date) });
+  $("#recover-help").textContent = "";
+  $("#btn-restore").hidden = false;
+  $("#btn-restore").disabled = false;
+  $("#btn-recover-skip").textContent = t("recover.skip");
+  show("recover");
+  $("#btn-restore").focus();
+}
+
+function wireRecover() {
+  $("#btn-restore").addEventListener("click", async () => {
+    const btn = $("#btn-restore");
+    btn.disabled = true;
+    const res = await api().restore_interrupted();
+    const help = $("#recover-help");
+    help.className = `help undo-help ${res.ok ? "ok" : "bad"}`;
+    help.textContent = [res.message, ...(res.errors || [])].join(" ");
+    if (res.ok || res.restored || res.removed) {
+      $("#recover-title").textContent = t("recover.done_title");
+      $("#recover-deck").textContent = "";
+      btn.hidden = true;
+      $("#btn-recover-skip").textContent = t("recover.continue");
+      $("#btn-recover-skip").focus();
+    } else btn.disabled = false;
+  });
+  $("#btn-recover-skip").addEventListener("click", startScan);
+}
+
 async function boot() {
   wire();
+  wireRecover();
   state = await api().get_state();
   applyStrings(state.lang, state.strings);
-  if (!state.settings.setup_done) openSetup("setup");
+  if (!state.settings.setup_done) return openSetup("setup");
+  const pending = await api().interrupted();
+  if (pending) showRecover(pending);
   else startScan();
 }
 

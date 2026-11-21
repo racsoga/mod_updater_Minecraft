@@ -17,7 +17,7 @@ from . import __version__, i18n
 from .config import load_config
 from .curseforge import CurseForgeAuthError, CurseForgeClient
 from .deps import DependencyFinder, DepPlan, plan_with_dependencies
-from .downloader import apply_updates, backup_root, friendly_error, prune_backups, updatable
+from .downloader import apply_updates, backup_info, backup_root, friendly_error, interrupted_backup, prune_backups, updatable
 from .i18n import t
 from .modrinth import ModrinthClient
 from .net import ApiError
@@ -37,6 +37,19 @@ _ARGPARSE_TEXTS = {
     "show this help message and exit": "cli.ap_help",
     "show program's version number and exit": "cli.ap_version",
     "%(prog)s: error: %(message)s\n": "cli.ap_error",
+    "positional arguments": "cli.ap_positional",
+    "argument %(argument_name)s: %(message)s": "cli.ap_argument",
+    "unrecognized arguments: %s": "cli.ap_unrecognized",
+    "the following arguments are required: %s": "cli.ap_required",
+    "one of the arguments %s is required": "cli.ap_one_required",
+    "not allowed with argument %s": "cli.ap_not_allowed",
+    "ambiguous option: %(option)s could match %(matches)s": "cli.ap_ambiguous",
+    "expected one argument": "cli.ap_expected_one",
+    "expected at most one argument": "cli.ap_expected_at_most_one",
+    "expected at least one argument": "cli.ap_expected_at_least_one",
+    "invalid %(type)s value: %(value)r": "cli.ap_invalid_value",
+    "invalid choice: %(value)r (choose from %(choices)s)": "cli.ap_invalid_choice",
+    "ignored explicit argument %r": "cli.ap_ignored",
 }
 
 
@@ -109,6 +122,10 @@ def main(argv: list[str] | None = None) -> int:
         cfg.backups_to_keep = args.keep_backups
 
     console.print(t("cli.header", path=escape(str(cfg.mods_dir)), version=cfg.minecraft_version, loader=cfg.loader))
+    pending = interrupted_backup(Path(cfg.mods_dir))
+    if pending is not None:
+        date = (backup_info(pending)["date"] or "").replace("T", " ")[:16]
+        console.print(f"[bold yellow]{escape(t('cli.interrupted', date=date, path=str(pending)))}[/]")
     try:
         unreadable: list = []
         with console.status(t("cli.hashing")) as status:

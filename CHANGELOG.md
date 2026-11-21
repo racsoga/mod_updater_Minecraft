@@ -36,6 +36,10 @@ Primera versión con ventana propia.
 - Ejecutable con información de versión, sin UPX y con el cargador de PyInstaller compilado desde el código fuente. Dependencias y acciones de GitHub fijadas a versiones exactas.
 
 ### Corregido
+- Al abrir, la app avisa si la última actualización se quedó a medias y ofrece **restaurar** la carpeta. La línea de comandos también lo avisa.
+- La limpieza de copias nunca borra una copia de una actualización interrumpida ni una que guarde el único ejemplar de un mod que ya no está en la carpeta.
+- Deshacer una actualización interrumpida no toca los mods que no llegaron a cambiar.
+- Los errores de la línea de comandos salen completamente traducidos.
 - Un jar que no se puede leer ya no detiene la revisión: aparece en *Requieren atención*.
 - Errores del Administrador de credenciales de Windows al guardar u olvidar la key se muestran en lugar de fallar.
 - La key de CurseForge no se reenvía si la API responde con una redirección.

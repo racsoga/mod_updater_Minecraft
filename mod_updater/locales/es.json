@@ -343,5 +343,27 @@
   "cli.ap_error": "%(prog)s: error: %(message)s\n",
   "ui.list_empty": "No hay ningún archivo .jar en esta carpeta.",
   "ui.head_empty": "No hay mods en esta carpeta",
-  "ui.deck_empty": "Comprueba en Ajustes que es la carpeta mods de tu Minecraft."
+  "ui.deck_empty": "Comprueba en Ajustes que es la carpeta mods de tu Minecraft.",
+
+  "cli.ap_argument": "argumento %(argument_name)s: %(message)s",
+  "cli.ap_unrecognized": "opciones no reconocidas: %s",
+  "cli.ap_required": "faltan estas opciones: %s",
+  "cli.ap_one_required": "hace falta una de estas opciones: %s",
+  "cli.ap_not_allowed": "no se puede usar junto con %s",
+  "cli.ap_ambiguous": "opción ambigua: %(option)s puede ser %(matches)s",
+  "cli.ap_expected_one": "falta un valor",
+  "cli.ap_expected_at_most_one": "admite como mucho un valor",
+  "cli.ap_expected_at_least_one": "necesita al menos un valor",
+  "cli.ap_invalid_value": "valor no válido: %(value)r",
+  "cli.ap_invalid_choice": "valor no válido: %(value)r (opciones: %(choices)s)",
+  "cli.ap_ignored": "se ignora el valor %r",
+  "cli.ap_positional": "argumentos",
+  "cli.interrupted": "Aviso: la actualización del {date} se interrumpió a medias. Para dejar la carpeta como estaba, abre la app y pulsa Restaurar, o recupera los archivos de {path}.",
+  "recover.title": "La última actualización se quedó a medias",
+  "recover.deck_one": "El programa se cerró mientras actualizaba ({date}) y 1 mod pudo quedar a medias. Restaurar deja la carpeta de mods como estaba antes de esa actualización.",
+  "recover.deck_other": "El programa se cerró mientras actualizaba ({date}) y {count} mods pudieron quedar a medias. Restaurar deja la carpeta de mods como estaba antes de esa actualización.",
+  "recover.restore": "Restaurar",
+  "recover.skip": "Ahora no",
+  "recover.continue": "Revisar mods",
+  "recover.done_title": "Carpeta restaurada."
 }
