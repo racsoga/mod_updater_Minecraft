@@ -163,6 +163,7 @@ Guardar las respuestas en el perfil.
   - **Mods "duros":** los que suben mucho la dificultad (Born in Chaos, Infernal Mobs…), para el filtro de dificultad.
 - Señales de las APIs: categorías, descargas, fecha de la última versión, si existe para tu versión y cargador.
 - **Resultado en tres columnas: Quitar · Mantener · Añadir**, cada sugerencia con **el motivo en una frase** ("Tienes dos minimapas: Xaero's y JourneyMap", "Sin actualizar desde 2024", "Muy popular en partidas de tecnología con Create"). Nada se aplica sin que el usuario lo marque.
+- **Aviso en la cesta de Explorar** (pedido en el punto de control B): si un mod de la cesta hace lo mismo que otro que ya está instalado (grupos de solapamiento; ej.: Traveler's Backpack con Sophisticated Backpacks), avisarlo en "Revisar la instalación" sin impedir instalarlo.
 - "Añadir" reutiliza la instalación del hito 4 y "Quitar" mueve los mods a la copia de seguridad (se puede deshacer), nunca borra.
 - Las sugerencias de añadir solo incluyen mods que existen para la versión y el cargador del perfil.
 - Texto honesto en la pantalla: son recomendaciones automáticas; revisa antes de aplicar.

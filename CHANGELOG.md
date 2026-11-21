@@ -16,6 +16,7 @@ La sección de cada versión es la que se publica como notas de la Release al cr
   - Mods sin actualizar en más de un año, separando los posiblemente abandonados de los que no tienen versión nueva para tu versión de Minecraft.
   - Librerías que ningún mod pide, según CurseForge y el `mods.toml` de cada jar, indicando si alguien las usa de forma opcional.
 - **Ver cambios** antes de actualizar: panel con las notas de todas las versiones entre la instalada y la nueva (CurseForge y Modrinth), limpiadas antes de mostrarse (sin scripts ni iframes, enlaces en el navegador, imágenes solo de los CDN de CurseForge y Modrinth) y con las palabras *breaking*, *incompatible*, *requires* y *world* resaltadas.
+- **Explorar**: busca mods en CurseForge y Modrinth a la vez, siempre para tu versión de Minecraft y cargador, sin duplicados entre fuentes. Filtros por categoría y orden, opción de ocultar los que ya tienes, ficha de cada mod (descripción, capturas, enlaces, versión que se instalaría y dependencias) y **cesta** para instalar varios a la vez con sus dependencias, copia de seguridad y Deshacer. Los mods que el autor no deja descargar desde otras apps aparecen como *Descarga manual*.
 - Tabla de correcciones de categoría (`mod_updater/knowledge/categorias.json`); al clasificar gana la categoría más específica, no la principal de CurseForge a ciegas.
 
 ## [0.2.0] - 2026-11-21

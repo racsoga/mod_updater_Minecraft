@@ -11,6 +11,7 @@ visibles están en los archivos de idioma (`cat.<id>`).
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -167,11 +168,32 @@ def overrides() -> dict[str, dict[str, str]]:
             for src in ("curseforge", "modrinth")}
 
 
-def _with_override(cats: list[str], source: str, project_id) -> list[str]:
+@lru_cache(maxsize=1)
+def keywords() -> list[tuple[re.Pattern, str]]:
+    """Palabras del nombre que deciden la categoría (`palabras_clave` en knowledge/categorias.json):
+    p. ej. "backpack" -> Almacenamiento, aunque CurseForge lo tenga en Armas o Modrinth en Aventura."""
+    try:
+        data = json.loads(KNOWLEDGE_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    return [(re.compile(rf"\b{re.escape(word)}\b", re.IGNORECASE), cat)
+            for word, cat in (data.get("palabras_clave") or {}).items() if cat in OURS]
+
+
+def _with_override(cats: list[str], source: str, project_id, name: str | None = None) -> list[str]:
+    """Correcciones: primero por id de proyecto; si no, por palabras del nombre."""
     fixed = overrides().get(source, {}).get(str(project_id)) if project_id is not None else None
+    if not fixed and name:
+        fixed = next((cat for rx, cat in keywords() if rx.search(name)), None)
     if not fixed:
         return cats
     return [fixed] + [c for c in cats if c != fixed]
+
+
+# Modrinth no marca categoría principal y las da en orden alfabético ("adventure" casi siempre
+# primero). Se elige la más concreta según este orden.
+MR_PRIORITY = ("almacenamiento", "comida", "magia", "rendimiento", "librerias", "mapas", "tecnologia",
+               "mundo", "mobs", "construccion", "calidad_vida", "aventura", OTHER)
 
 
 def _is_subcategory(cat: dict) -> bool:
@@ -184,10 +206,10 @@ def _is_subcategory(cat: dict) -> bool:
 def from_curseforge(info: dict, catalog: Catalog | None = None) -> list[str]:
     """Categorías propias de un mod de CurseForge, la principal primero.
 
-    `primaryCategoryId` no se usa a ciegas: gana la categoría más específica (una subcategoría
-    gana a una de primer nivel) y, entre subcategorías, cualquier otra gana a Tecnología, que es la
-    más genérica (un addon de Create para granjas es de Comida). Entre categorías de primer nivel
-    decide la principal de CurseForge. "Otras" nunca es la principal si hay otra. La tabla de correcciones manda.
+    `primaryCategoryId` no se usa a ciegas cuando es genérica (Tecnología u Otras): entonces gana la
+    categoría más específica (una subcategoría gana a una de primer nivel y, entre subcategorías,
+    cualquier otra gana a Tecnología: un addon de Create para granjas es de Comida). Si la principal
+    ya es concreta (p. ej. Almacenamiento), se respeta. "Otras" nunca es la principal si hay otra. La tabla de correcciones manda.
     """
     raw = [c for c in (info.get("categories") or []) if isinstance(c, dict)]
     primary_id = info.get("primaryCategoryId")
@@ -199,19 +221,21 @@ def from_curseforge(info: dict, catalog: Catalog | None = None) -> list[str]:
         best = LIBRARY
     else:
         content = [s for s in scored if s[0] not in (OTHER, LIBRARY)]
+        if primary not in (None, OTHER, "tecnologia"):
+            content = [s for s in content if s[2]]  # la principal ya es concreta (p. ej. Almacenamiento): se respeta
         # (subcategoría, subcategoría que no es Tecnología, principal de CurseForge, orden)
         best = max(content, key=lambda s: (s[1], s[1] and s[0] != "tecnologia", s[2], s[3]))[0] if content else (
             LIBRARY if LIBRARY in all_cats else (OTHER if all_cats else None))
     cats = ([best] if best else []) + [c for c in all_cats if c != best]
-    return _with_override(_other_last(cats), "curseforge", info.get("id"))
+    return _with_override(_other_last(cats), "curseforge", info.get("id"), info.get("name"))
 
 
 def from_modrinth(project: dict) -> list[str]:
-    """Categorías propias de un proyecto de Modrinth. La principal es la primera que no
-    sea "otras" (Modrinth no marca ninguna como principal); la tabla de correcciones manda."""
+    """Categorías propias de un proyecto de Modrinth. La principal es la más concreta según
+    MR_PRIORITY (Modrinth no marca ninguna como principal); las correcciones mandan."""
     slugs = list(project.get("categories") or []) + list(project.get("additional_categories") or [])
-    cats = _other_last(_unique([MR_SLUGS[s] for s in slugs if s in MR_SLUGS]))
-    return _with_override(cats, "modrinth", project.get("id"))
+    cats = sorted(_unique([MR_SLUGS[s] for s in slugs if s in MR_SLUGS]), key=MR_PRIORITY.index)
+    return _with_override(cats, "modrinth", project.get("id"), project.get("title"))
 
 
 def is_library(cats: list[str]) -> bool:

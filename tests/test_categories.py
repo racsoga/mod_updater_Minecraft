@@ -123,7 +123,8 @@ def test_curseforge_without_categories():
 
 def test_modrinth_ignores_loaders_and_first_mapped_is_primary():
     project = {"categories": ["neoforge", "fabric", "social", "technology"], "additional_categories": ["storage"]}
-    assert from_modrinth(project) == ["tecnologia", "almacenamiento", "otras"]
+    # Modrinth no marca principal y ordena alfabéticamente: gana la más concreta (Almacenamiento)
+    assert from_modrinth(project) == ["almacenamiento", "tecnologia", "otras"]
 
 
 def test_modrinth_only_other():
@@ -298,3 +299,21 @@ def test_modrinth_override():
     if table.get("modrinth"):
         pid, cat = next(iter(table["modrinth"].items()))
         assert from_modrinth({"id": pid, "categories": ["cursed"]})[0] == cat
+
+
+def test_concrete_primary_is_kept_over_subcategories():
+    # Backpacked: principal storage (concreta) y una subcategoría technology-farming -> Almacenamiento
+    assert from_curseforge(cf_info(420, 416, primary=420))[0] == "almacenamiento"
+
+
+def test_modrinth_specific_category_beats_alphabetical_adventure():
+    assert from_modrinth({"categories": ["adventure", "equipment", "storage", "utility"]})[0] == "almacenamiento"
+
+
+def test_name_keywords_from_knowledge_base():
+    # Traveler's Backpack: principal armor-weapons-tools en CurseForge, pero es una mochila
+    info = cf_info(434, 422, 424, 420, primary=434) | {"name": "Traveler's Backpack"}
+    assert from_curseforge(info)[0] == "almacenamiento"
+    assert from_modrinth({"title": "Beans Backpacks", "categories": ["adventure", "equipment"]})[0] == "almacenamiento"
+    # Solo palabras completas: "Backpacked" (sin categoría de almacenamiento) no cambia por la palabra
+    assert from_curseforge(cf_info(422, primary=422) | {"name": "Backpackedness"})[0] == "aventura"

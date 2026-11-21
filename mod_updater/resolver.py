@@ -73,6 +73,7 @@ class Resolution:
     current_date: str | None = None
     new_version: str | None = None
     new_date: str | None = None  # fecha de publicación de la versión nueva (ISO)
+    new_size: int = 0  # bytes del archivo nuevo (0 si la fuente no lo dice)
     new_channel: str | None = None
     new_file_name: str | None = None
     download_url: str | None = None
@@ -277,6 +278,7 @@ def resolve_with_modrinth(
             if f and f.url:
                 res.status = ACTUALIZABLE
                 res.new_file_name = f.filename
+                res.new_size = f.size or 0
                 res.download_url = f.url
                 res.new_sha1 = f.sha1
                 res.new_sha512 = f.sha512
@@ -374,6 +376,7 @@ def resolve_with_curseforge(
             res.new_date = new.date_published
             res.new_channel = new.version_type
             res.new_file_name = new.file_name
+            res.new_size = new.size
             res.new_sha1 = new.sha1
             res.new_deps = cf_deps(new)
             res.new_incompat = cf_incompat(new)

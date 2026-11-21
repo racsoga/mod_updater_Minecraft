@@ -47,11 +47,12 @@ const MODS_SCREENS = ["scan", "recover", "results", "apply", "done"];
 let modsScreen = null;
 
 function show(screen) {
-  for (const s of ["setup", "analysis", ...MODS_SCREENS]) $(`#screen-${s}`).hidden = s !== screen;
+  for (const s of ["setup", "analysis", "explore", ...MODS_SCREENS]) $(`#screen-${s}`).hidden = s !== screen;
+  $("#ex-basket").hidden = screen !== "explore" || !BASKET.size;
   if (MODS_SCREENS.includes(screen)) modsScreen = screen;
   // Pestañas: ocultas en la bienvenida (primera vez) y mientras se actualiza (no se puede salir).
   $("#tabs").hidden = (screen === "setup" && setupMode === "setup") || screen === "apply";
-  selectTab(screen === "setup" ? "settings" : screen === "analysis" ? "analysis" : "mods");
+  selectTab({ setup: "settings", analysis: "analysis", explore: "explore" }[screen] || "mods");
   $("#btn-rescan").hidden = screen !== "results";
   $("#actionbar").hidden = screen !== "results";
   for (const chip of [$("#chip-folder"), $("#chip-env")]) chip.hidden = screen === "setup" || !chip.textContent.trim();
@@ -438,13 +439,14 @@ function onApplyProgress(p) {
 function showDone(r) {
   const parts = [];
   if (r.updated) parts.push(t("ui.done_updated", { count: r.updated }));
-  if (r.installed) parts.push(t("ui.done_installed", { count: r.installed }));
+  if (r.added) parts.push(t("ui.done_added", { count: r.added }));  // elegidos en Explorar
+  if (r.installed) parts.push(t("ui.done_installed", { count: r.installed }));  // dependencias
   const title = parts.length ? parts.join(t("ui.and")) : t("ui.done_none");
   $("#done-title").textContent = title.charAt(0).toUpperCase() + title.slice(1) + ".";
   const deck = [];
   if (r.error) deck.push(r.error);
   if (r.backup && r.backup.changes) deck.push(t("ui.done_backup", { path: shortPath(r.backup.path) }));
-  if (r.updated || r.installed) deck.push(t("ui.done_restart"));
+  if (r.updated || r.installed || r.added) deck.push(t("ui.done_restart"));
   $("#done-deck").textContent = deck.join(" ");
   $("#btn-undo").hidden = !(r.backup && r.backup.undoable);
   $("#btn-undo").disabled = false;
@@ -613,7 +615,201 @@ async function openTab(name) {
   if (current === "settings") await revertLanguagePreview();
   if (name === "settings") openSetup("settings");
   else if (name === "analysis") openAnalysis();
+  else if (name === "explore") openExplore();
   else goMods();
+}
+
+/* ================================================================ explorar */
+
+const BASKET = new Map();    // clave "fuente:id" -> tarjeta
+let EX = { cards: [], page: 0, started: false, timer: null, seq: 0 };
+const exKey = c => `${c.source}:${c.id}`;
+const fmtCompact = n => new Intl.NumberFormat(LANG, { notation: "compact", maximumFractionDigits: 1 }).format(n);
+
+function openExplore() {
+  show("explore");
+  if (!$("#ex-cat").options.length) {
+    const cats = ["tecnologia", "magia", "aventura", "mundo", "mobs", "construccion", "almacenamiento", "comida",
+      "mapas", "calidad_vida", "rendimiento", "librerias"];
+    $("#ex-cat").innerHTML = `<option value="">${esc(t("ex.category_all"))}</option>`
+      + cats.map(c => `<option value="${c}">${esc(t(`cat.${c}`))}</option>`).join("");
+  }
+  if (!EX.started) { EX.started = true; exSearch(0); }
+}
+
+function exOpts(page) {
+  return { query: $("#ex-q").value, category: $("#ex-cat").value, sort: $("#ex-sort").value,
+           hide_installed: $("#ex-hide").checked, page };
+}
+
+async function exSearch(page) {
+  const seq = ++EX.seq;  // descartar respuestas de búsquedas anteriores
+  $("#ex-status").textContent = t("ex.searching");
+  $("#ex-more").hidden = true;
+  const res = await api().explore_search(exOpts(page));
+  if (seq !== EX.seq) return;
+  if (!res.ok) { $("#ex-status").textContent = res.message; if (!page) $("#ex-results").innerHTML = ""; return; }
+  $("#ex-deck").textContent = t("ex.deck", { loader: res.env.loader, version: res.env.minecraft_version });
+  const seen = new Set(page ? EX.cards.map(exKey) : []);
+  EX.cards = (page ? EX.cards : []).concat(res.cards.filter(c => !seen.has(exKey(c))));
+  EX.page = page;
+  $("#ex-status").textContent = EX.cards.length ? t("ex.count", { count: EX.cards.length }) : t("ex.none");
+  $("#ex-more").hidden = !res.more;
+  renderExplore();
+}
+
+function exCard(c, i) {
+  const inBasket = BASKET.has(exKey(c));
+  const action = c.installed ? `<span class="badge ok"><span class="dot" aria-hidden="true"></span>${esc(t("ex.installed"))}</span>`
+    : c.manual ? `<a class="linkbtn" href="${esc(c.url)}" data-external>${esc(t("ex.manual"))}</a>`
+    : `<button class="btn-small ex-add${inBasket ? " on" : ""}" type="button" data-ex-add="${i}" aria-pressed="${inBasket}">${esc(inBasket ? t("ex.in_basket") : t("ex.add"))}</button>`;
+  const updated = c.updated ? fmtMonth(c.updated) : "";
+  return `<article class="ex-card">
+    ${c.icon ? `<img class="ex-icon" src="${esc(c.icon)}" alt="" loading="lazy" referrerpolicy="no-referrer">`
+             : `<span class="ex-icon mono" aria-hidden="true">${esc(c.name.charAt(0).toUpperCase())}</span>`}
+    <div class="ex-main">
+      <h3><button class="ex-name" type="button" data-ex-open="${i}">${esc(c.name)}</button></h3>
+      <p class="ex-author">${esc(c.author ? t("ex.by", { author: c.author }) : "")}</p>
+      <p class="ex-sum">${esc(c.summary)}</p>
+      <p class="ex-meta">
+        <span class="ex-cat">${catIcon(c.cat, 14)}${esc(t(`cat.${c.cat}`))}</span>
+        <span>${esc(t("ex.downloads", { n: fmtCompact(c.downloads) }))}</span>
+        ${updated ? `<span>${esc(t("ex.updated", { date: updated }))}</span>` : ""}
+        <span>${esc(c.source === "curseforge" ? "CurseForge" : "Modrinth")}</span>
+      </p>
+    </div>
+    <div class="ex-act">${action}</div>
+  </article>`;
+}
+
+function renderExplore() {
+  $("#ex-results").innerHTML = EX.cards.map(exCard).join("");
+}
+
+function toggleBasket(c) {
+  const k = exKey(c);
+  if (BASKET.has(k)) BASKET.delete(k); else BASKET.set(k, c);
+  renderBasket();
+  renderExplore();
+}
+
+function renderBasket() {
+  $("#ex-basket").hidden = $("#screen-explore").hidden || !BASKET.size;
+  $("#ex-basket-count").textContent = t("ex.basket_count", { count: BASKET.size });
+  $("#ex-basket-list").innerHTML = [...BASKET.values()].map(c =>
+    `<li>${esc(c.name)} <button class="ex-x" type="button" data-ex-remove="${esc(exKey(c))}" aria-label="${esc(t("ex.remove", { name: c.name }))}">×</button></li>`).join("");
+  $("#ex-basket-go").textContent = t("ex.basket_go", { count: BASKET.size });
+}
+
+let exReturn = null;
+
+function openExDrawer(title, sub, icon) {
+  exReturn = document.activeElement;
+  $("#ex-d-title").textContent = title;
+  $("#ex-d-sub").textContent = sub || "";
+  $("#ex-d-icon").hidden = !icon;
+  $("#ex-d-icon").innerHTML = icon ? `<img src="${esc(icon)}" alt="" referrerpolicy="no-referrer">` : "";
+  $("#ex-d-body").innerHTML = `<p class="cl-loading">${esc(t("ex.loading"))}</p>`;
+  $("#ex-d-foot").innerHTML = "";
+  $("#ex-backdrop").hidden = $("#ex-drawer").hidden = false;
+  document.body.classList.add("drawer-open");
+  $("#ex-d-close").focus();
+}
+
+function closeExDrawer() {
+  if ($("#ex-drawer").hidden) return;
+  $("#ex-backdrop").hidden = $("#ex-drawer").hidden = true;
+  document.body.classList.remove("drawer-open");
+  if (exReturn && document.contains(exReturn)) exReturn.focus();
+}
+
+async function openExDetail(c) {
+  openExDrawer(c.name, c.author ? t("ex.by", { author: c.author }) : "", c.icon);
+  const d = await api().explore_detail(c.source, c.id);
+  if ($("#ex-drawer").hidden) return;
+  if (!d.ok) { $("#ex-d-body").innerHTML = `<p class="cl-error">${esc(d.message)}</p>`; return; }
+  const inst = d.install;
+  const what = !inst ? `<p class="ex-note warn">${esc(t("ex.no_version"))}</p>`
+    : `<p class="ex-note">${esc(t("ex.would_install", { version: inst.version, via: inst.via }))}${inst.beta ? ` <span class="beta">beta</span>` : ""}</p>`
+      + (inst.manual ? `<p class="ex-note warn">${esc(t("ex.manual_hint"))}</p>` : "")
+      + (inst.deps.length ? `<p class="ex-note">${esc(t("ex.needs"))} ${inst.deps.map(x =>
+          `<span class="ex-dep">${esc(x.name)}${x.installed ? ` · ${esc(t("ex.dep_installed"))}` : ` · ${esc(t("ex.dep_added"))}`}</span>`).join(" ")}</p>` : "");
+  const links = Object.entries(d.links || {}).filter(([, u]) => u)
+    .map(([k, u]) => `<a href="${esc(u)}" data-external>${esc(t(`ex.link_${k}`))}</a>`).join(" · ");
+  const imgs = d.images.length ? `<div class="ex-shots">${d.images.map(u => `<img src="${esc(u)}" alt="" loading="lazy" referrerpolicy="no-referrer">`).join("")}</div>` : "";
+  $("#ex-d-body").innerHTML = `${what}${links ? `<p class="ex-links">${links}</p>` : ""}${imgs}
+    ${d.html ? `<p class="ex-desc-label">${esc(t("ex.desc_label"))}</p><div class="cl-html">${d.html}</div>`
+             : `<p class="cl-empty">${esc(t("ex.no_description"))}</p>`}`;
+  const canAdd = !c.installed && !c.manual && inst && !inst.manual;
+  $("#ex-d-foot").innerHTML = c.installed ? `<span class="badge ok"><span class="dot" aria-hidden="true"></span>${esc(t("ex.installed"))}</span>`
+    : canAdd ? `<button class="btn-primary" type="button" id="ex-d-add">${esc(BASKET.has(exKey(c)) ? t("ex.in_basket") : t("ex.add"))}</button>`
+    : "";
+  const add = $("#ex-d-add");
+  if (add) add.addEventListener("click", () => { toggleBasket(c); add.textContent = BASKET.has(exKey(c)) ? t("ex.in_basket") : t("ex.add"); });
+}
+
+async function reviewBasket() {
+  openExDrawer(t("ex.review_title"), t("ex.basket_count", { count: BASKET.size }));
+  const res = await api().install_plan([...BASKET.values()].map(c => ({ source: c.source, id: c.id, name: c.name })));
+  if ($("#ex-drawer").hidden) return;
+  if (!res.ok) { $("#ex-d-body").innerHTML = `<p class="cl-error">${esc(res.message)}</p>`; return; }
+  const list = (title, items) => items.length ? `<h3 class="ex-h">${esc(title)}</h3><ul class="an-list">${items.join("")}</ul>` : "";
+  const li = (name, extra = "") => `<li><span class="an-name">${esc(name)}${extra ? `<span class="an-note">${esc(extra)}</span>` : ""}</span></li>`;
+  const mine = res.rows.filter(r => !r.neededBy.length), deps = res.rows.filter(r => r.neededBy.length);
+  const ver = r => [r.to, r.size ? fmtSize(r.size) : ""].filter(Boolean).join(" · ");
+  $("#ex-d-body").innerHTML = list(t("ex.will_install"), mine.map(r => li(r.name, ver(r))))
+    + list(t("ex.will_add_deps"), deps.map(r => li(r.name, `${ver(r)} · ${t("ui.needed_by", { names: r.neededBy.join(", ") })}`)))
+    + (res.rows.length && res.size ? `<p class="ex-total">${esc(t("ex.total_size", { size: fmtSize(res.size), count: res.rows.length }))}</p>` : "")
+    + list(t("ex.cant_manual"), res.manual.map(m => `<li><span class="an-name"><a href="${esc(m.url)}" data-external>${esc(m.name)}</a></span></li>`))
+    + list(t("ex.cant_blocked"), res.blocked.map(b => li(b.name, b.reason)))
+    + list(t("ex.cant_unavailable"), res.unavailable.map(n => li(n)))
+    + list(t("ex.already"), res.already.map(n => li(n)))
+    + `<p class="an-hint">${esc(t("ex.safe"))}</p>`;
+  $("#ex-d-foot").innerHTML = res.rows.length
+    ? `<button class="btn-secondary" type="button" id="ex-d-cancel">${esc(t("ui.cancel"))}</button>
+       <button class="btn-primary" type="button" id="ex-d-install">${esc(t("ex.install_n", { count: res.rows.length }))}</button>` : "";
+  if (!res.rows.length) return;
+  $("#ex-d-cancel").addEventListener("click", closeExDrawer);
+  $("#ex-d-install").addEventListener("click", async () => {
+    const go = await api().install_start();
+    if (!go.ok) { $("#ex-d-body").insertAdjacentHTML("afterbegin", `<p class="cl-error">${esc(go.message)}</p>`); return; }
+    closeExDrawer();
+    BASKET.clear();
+    renderBasket();
+    APPLY = res.rows.map(r => ({ ...r, state: "queued", message: "" }));
+    $("#apply-label").textContent = t("ui.apply_count", { done: 0, count: APPLY.length });
+    $("#apply-bar > span").style.width = "0%";
+    renderApply();
+    show("apply");
+  });
+}
+
+function wireExplore() {
+  $("#ex-q").addEventListener("input", () => { clearTimeout(EX.timer); EX.timer = setTimeout(() => exSearch(0), 400); });
+  for (const id of ["#ex-cat", "#ex-sort", "#ex-hide"]) $(id).addEventListener("change", () => exSearch(0));
+  $("#ex-more").addEventListener("click", () => exSearch(EX.page + 1));
+  $("#ex-results").addEventListener("click", e => {
+    const add = e.target.closest("[data-ex-add]");
+    if (add) { toggleBasket(EX.cards[Number(add.dataset.exAdd)]); return; }
+    const open = e.target.closest("[data-ex-open]");
+    if (open) openExDetail(EX.cards[Number(open.dataset.exOpen)]);
+  });
+  $("#ex-basket-list").addEventListener("click", e => {
+    const x = e.target.closest("[data-ex-remove]");
+    if (x) { BASKET.delete(x.dataset.exRemove); renderBasket(); renderExplore(); }
+  });
+  $("#ex-basket-clear").addEventListener("click", () => { BASKET.clear(); renderBasket(); renderExplore(); });
+  $("#ex-basket-go").addEventListener("click", reviewBasket);
+  $("#ex-d-close").addEventListener("click", closeExDrawer);
+  $("#ex-backdrop").addEventListener("click", closeExDrawer);
+  $("#ex-drawer").addEventListener("keydown", e => {
+    if (e.key === "Escape") { e.preventDefault(); closeExDrawer(); return; }
+    if (e.key !== "Tab") return;
+    const items = [...$("#ex-drawer").querySelectorAll("button, a[href], [tabindex]:not([tabindex='-1'])")];
+    const first = items[0], last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
 }
 
 /* ================================================================ análisis */
@@ -755,6 +951,7 @@ function wireTabs() {
 
 function wire() {
   wireTabs();
+  wireExplore();
   wireChangelog();
   wireAnalysis();
   $("#q").addEventListener("input", e => { query = e.target.value.trim().toLowerCase(); render(); });
