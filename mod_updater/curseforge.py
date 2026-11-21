@@ -41,6 +41,7 @@ class CfFile:
     fingerprint: int | None
     game_versions: list[str] = field(default_factory=list)
     dependencies: list[dict] = field(default_factory=list)
+    size: int = 0  # bytes (fileLength)
 
     @classmethod
     def from_api(cls, d: dict) -> "CfFile":
@@ -57,6 +58,7 @@ class CfFile:
             fingerprint=d.get("fileFingerprint"),
             game_versions=d.get("gameVersions") or [],
             dependencies=d.get("dependencies") or [],
+            size=int(d.get("fileLength") or 0),
         )
 
     @property

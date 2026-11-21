@@ -135,6 +135,7 @@ def test_install_plan_adds_dependencies_skips_installed_and_reports_manual(tmp_p
     res = a.install_plan([{"source": CF, "id": "238222", "name": "JEI"}, {"source": CF, "id": "328085", "name": "Create"},
                           {"source": CF, "id": "9", "name": "Raro"}])
     assert res["ok"] and [r["name"] for r in res["rows"]] == ["JEI", "MezzConfig"]
+    assert res["rows"][1]["to"] == "0.7.1" and res["size"] == sum(r["size"] for r in res["rows"])
     assert res["rows"][1]["neededBy"] == ["JEI"]
     assert res["already"] == ["Create"] and res["manual"][0]["name"] == "Raro"
 

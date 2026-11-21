@@ -738,7 +738,8 @@ async function openExDetail(c) {
     .map(([k, u]) => `<a href="${esc(u)}" data-external>${esc(t(`ex.link_${k}`))}</a>`).join(" · ");
   const imgs = d.images.length ? `<div class="ex-shots">${d.images.map(u => `<img src="${esc(u)}" alt="" loading="lazy" referrerpolicy="no-referrer">`).join("")}</div>` : "";
   $("#ex-d-body").innerHTML = `${what}${links ? `<p class="ex-links">${links}</p>` : ""}${imgs}
-    ${d.html ? `<div class="cl-html">${d.html}</div>` : `<p class="cl-empty">${esc(t("ex.no_description"))}</p>`}`;
+    ${d.html ? `<p class="ex-desc-label">${esc(t("ex.desc_label"))}</p><div class="cl-html">${d.html}</div>`
+             : `<p class="cl-empty">${esc(t("ex.no_description"))}</p>`}`;
   const canAdd = !c.installed && !c.manual && inst && !inst.manual;
   $("#ex-d-foot").innerHTML = c.installed ? `<span class="badge ok"><span class="dot" aria-hidden="true"></span>${esc(t("ex.installed"))}</span>`
     : canAdd ? `<button class="btn-primary" type="button" id="ex-d-add">${esc(BASKET.has(exKey(c)) ? t("ex.in_basket") : t("ex.add"))}</button>`
@@ -755,8 +756,10 @@ async function reviewBasket() {
   const list = (title, items) => items.length ? `<h3 class="ex-h">${esc(title)}</h3><ul class="an-list">${items.join("")}</ul>` : "";
   const li = (name, extra = "") => `<li><span class="an-name">${esc(name)}${extra ? `<span class="an-note">${esc(extra)}</span>` : ""}</span></li>`;
   const mine = res.rows.filter(r => !r.neededBy.length), deps = res.rows.filter(r => r.neededBy.length);
-  $("#ex-d-body").innerHTML = list(t("ex.will_install"), mine.map(r => li(r.name, r.to)))
-    + list(t("ex.will_add_deps"), deps.map(r => li(r.name, t("ui.needed_by", { names: r.neededBy.join(", ") }))))
+  const ver = r => [r.to, r.size ? fmtSize(r.size) : ""].filter(Boolean).join(" · ");
+  $("#ex-d-body").innerHTML = list(t("ex.will_install"), mine.map(r => li(r.name, ver(r))))
+    + list(t("ex.will_add_deps"), deps.map(r => li(r.name, `${ver(r)} · ${t("ui.needed_by", { names: r.neededBy.join(", ") })}`)))
+    + (res.rows.length && res.size ? `<p class="ex-total">${esc(t("ex.total_size", { size: fmtSize(res.size), count: res.rows.length }))}</p>` : "")
     + list(t("ex.cant_manual"), res.manual.map(m => `<li><span class="an-name"><a href="${esc(m.url)}" data-external>${esc(m.name)}</a></span></li>`))
     + list(t("ex.cant_blocked"), res.blocked.map(b => li(b.name, b.reason)))
     + list(t("ex.cant_unavailable"), res.unavailable.map(n => li(n)))

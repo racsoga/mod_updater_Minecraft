@@ -50,7 +50,7 @@ def _cf_card(m: dict) -> dict:
 
 
 def _mr_card(h: dict) -> dict:
-    cats = from_modrinth({"id": h.get("project_id"), "categories": h.get("categories") or []})
+    cats = from_modrinth({"id": h.get("project_id"), "title": h.get("title"), "categories": h.get("categories") or []})
     return {
         "source": MR, "id": h["project_id"], "slug": h.get("slug"), "name": h.get("title") or "?",
         "author": h.get("author") or "", "summary": h.get("description") or "",

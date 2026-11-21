@@ -518,9 +518,10 @@ class Api:
         self._install = [r for r in plan.items if id(r) not in blocked]
         rows = [{"id": 100000 + i, "s": "dep" if r.kind == INSTALL else "up", "name": r.name, "icon": r.icon_url,
                  "from": r.current_version if r.kind != INSTALL else None, "to": r.new_version,
-                 "beta": r.new_channel not in (None, "release"), "neededBy": list(r.required_by)}
+                 "beta": r.new_channel not in (None, "release"), "neededBy": list(r.required_by), "size": r.new_size}
                 for i, r in enumerate(self._install)]
-        return {"ok": True, "rows": rows, "manual": manual, "unavailable": unavailable, "already": already,
+        return {"ok": True, "rows": rows, "size": sum(r.new_size for r in self._install),
+                "manual": manual, "unavailable": unavailable, "already": already,
                 "blocked": [{"name": r.name, "reason": r.note} for r in plan.blocked]}
 
     def install_start(self) -> dict:
@@ -610,7 +611,8 @@ class Api:
             self._busy.release()
         self._plan = None
         return {"ok": not r.errors, "restored": r.restored, "removed": r.removed, "errors": r.errors,
-                "message": t("undo.done", count=r.restored, removed=r.removed)}
+                "message": t("undo.done", count=r.restored, removed=r.removed) if r.restored
+                else t("undo.done_removed", count=r.removed)}
 
     def clear_backups(self) -> dict:
         if not self._busy.acquire(blocking=False):

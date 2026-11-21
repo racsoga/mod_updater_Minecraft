@@ -263,6 +263,8 @@
   "undo.failed": "{name}: no se ha podido deshacer ({error}).",
   "undo.none": "No hay ninguna actualización que deshacer.",
   "undo.minecraft_open": "Minecraft está abierto con esta carpeta. Ciérralo para deshacer.",
+  "undo.done_removed_one": "Hecho: se ha quitado el mod instalado (queda apartado en la copia).",
+  "undo.done_removed_other": "Hecho: se han quitado los {count} mods instalados (quedan apartados en la copia).",
   "undo.done_one": "Hecho: 1 mod vuelve a su versión anterior ({removed} archivos nuevos apartados en la copia).",
   "undo.done_other": "Hecho: {count} mods vuelven a su versión anterior ({removed} archivos nuevos apartados en la copia).",
   "backups.cleared_one": "1 backup borrado.",
@@ -519,5 +521,8 @@
   "ex.install_n_one": "Instalar 1",
   "ex.install_n_other": "Instalar {count}",
   "ex.need_scan": "Primero revisa tus mods (pestaña Mis mods) para saber qué tienes ya instalado.",
+  "ex.total_size_one": "Descarga total: {size} (1 archivo)",
+  "ex.total_size_other": "Descarga total: {size} ({count} archivos)",
+  "ex.desc_label": "Descripción del autor (en inglés)",
   "ex.err_network": "No se ha podido buscar ahora mismo. Inténtalo de nuevo en un momento."
 }

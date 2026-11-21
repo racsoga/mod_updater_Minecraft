@@ -263,6 +263,8 @@
   "undo.failed": "{name}: couldn't be undone ({error}).",
   "undo.none": "There is no update to undo.",
   "undo.minecraft_open": "Minecraft is open with this folder. Close it to undo.",
+  "undo.done_removed_one": "Done: the installed mod was removed (kept aside in the backup).",
+  "undo.done_removed_other": "Done: the {count} installed mods were removed (kept aside in the backup).",
   "undo.done_one": "Done: 1 mod is back to its previous version ({removed} new files set aside in the backup).",
   "undo.done_other": "Done: {count} mods are back to their previous version ({removed} new files set aside in the backup).",
   "backups.cleared_one": "1 backup deleted.",
@@ -519,5 +521,8 @@
   "ex.install_n_one": "Install 1",
   "ex.install_n_other": "Install {count}",
   "ex.need_scan": "Check your mods first (My mods tab) so we know what you already have.",
+  "ex.total_size_one": "Total download: {size} (1 file)",
+  "ex.total_size_other": "Total download: {size} ({count} files)",
+  "ex.desc_label": "Author's description (in English)",
   "ex.err_network": "Couldn't search right now. Try again in a moment."
 }

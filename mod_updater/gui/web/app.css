@@ -457,6 +457,9 @@ mark.cl-flag { background: rgba(242, 181, 68, 0.18); color: var(--warn); border-
 .ex-act { align-self: center; }
 .ex-add.on { color: var(--link); border-color: rgba(124, 207, 90, 0.5); }
 .ex-more { display: flex; justify-content: center; margin-top: 18px; }
+#screen-explore { padding-bottom: 120px; }  /* la barra de la cesta no tapa la última fila */
+.ex-total { margin: 16px 0 0; padding-top: 12px; border-top: 1px solid var(--rule); font-size: 14px; font-weight: 600; }
+.ex-desc-label { margin: 18px 0 0; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; color: var(--muted); text-transform: uppercase; }
 .ex-basket .summary { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .ex-basket-list { display: flex; gap: 6px; margin: 0; padding: 0; list-style: none; overflow-x: auto; scrollbar-width: thin; }
 .ex-basket-list li { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border-radius: 8px; background: var(--badge); font-size: 13px; white-space: nowrap; }
@@ -473,7 +476,7 @@ mark.cl-flag { background: rgba(242, 181, 68, 0.18); color: var(--warn); border-
 .ex-shots { display: flex; gap: 8px; overflow-x: auto; margin: 14px 0; padding-bottom: 4px; }
 .ex-shots img { height: 120px; border-radius: 10px; flex: none; }
 .ex-h { margin: 18px 0 4px; font-size: 14px; font-weight: 600; }
-#ex-d-body .cl-html { margin-top: 16px; }
+#ex-d-body .cl-html { margin-top: 6px; }
 
 /* ------------------------------------------------ ventanas bajas: barra inferior compacta */
 @media (max-height: 700px) {
