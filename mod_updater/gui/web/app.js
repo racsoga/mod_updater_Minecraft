@@ -42,9 +42,16 @@ let pendingFolder = null;  // carpeta elegida y aún no guardada
 
 /* ================================================================ pantallas */
 
+// Pantallas de la sección "Mis mods" (la última visitada se recuerda al volver de Ajustes).
+const MODS_SCREENS = ["scan", "recover", "results", "apply", "done"];
+let modsScreen = null;
+
 function show(screen) {
-  for (const s of ["setup", "scan", "recover", "results", "apply", "done"]) $(`#screen-${s}`).hidden = s !== screen;
-  $("#btn-settings").hidden = screen === "setup" || screen === "apply";
+  for (const s of ["setup", ...MODS_SCREENS]) $(`#screen-${s}`).hidden = s !== screen;
+  if (MODS_SCREENS.includes(screen)) modsScreen = screen;
+  // Pestañas: ocultas en la bienvenida (primera vez) y mientras se actualiza (no se puede salir).
+  $("#tabs").hidden = (screen === "setup" && setupMode === "setup") || screen === "apply";
+  selectTab(screen === "setup" ? "settings" : "mods");
   $("#btn-rescan").hidden = screen !== "results";
   $("#actionbar").hidden = screen !== "results";
   for (const chip of [$("#chip-folder"), $("#chip-env")]) chip.hidden = screen === "setup" || !chip.textContent.trim();
@@ -512,18 +519,53 @@ document.addEventListener("keydown", e => {
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !$("#go").disabled) $("#go").click();
 });
 
+function selectTab(name) {
+  for (const tab of document.querySelectorAll("#tabs [role=tab]")) {
+    const on = tab.dataset.tab === name;
+    tab.setAttribute("aria-selected", on ? "true" : "false");
+    tab.tabIndex = on ? 0 : -1;
+  }
+}
+
+async function leaveSettings() {
+  // Igual que Cancelar: deshace la vista previa del idioma y vuelve a donde estaba.
+  const s = await api().get_strings(state.settings.language || "auto");
+  applyStrings(s.lang, s.strings);
+  if (modsScreen && modsScreen !== "apply") show(modsScreen);
+  else if (DATA) showResults(DATA);
+  else startScan();
+}
+
+function openTab(name) {
+  const current = document.querySelector('#tabs [aria-selected="true"]').dataset.tab;
+  if (name === current) return;
+  if (name === "settings") openSetup("settings");
+  else if (name === "mods") leaveSettings();
+}
+
+function wireTabs() {
+  const tabs = [...document.querySelectorAll("#tabs [role=tab]")];
+  for (const tab of tabs) tab.addEventListener("click", () => openTab(tab.dataset.tab));
+  $("#tabs").addEventListener("keydown", e => {
+    // Teclado: flechas, Inicio y Fin mueven el foco y abren la sección (patrón de pestañas).
+    const i = tabs.indexOf(document.activeElement);
+    if (i < 0) return;
+    const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
+    if (next === undefined) return;
+    e.preventDefault();
+    const tab = tabs[(next + tabs.length) % tabs.length];
+    tab.focus();
+    openTab(tab.dataset.tab);
+  });
+}
+
 function wire() {
+  wireTabs();
   $("#q").addEventListener("input", e => { query = e.target.value.trim().toLowerCase(); render(); });
-  $("#btn-settings").addEventListener("click", () => openSetup("settings"));
   $("#btn-rescan").addEventListener("click", startScan);
   $("#btn-retry").addEventListener("click", startScan);
   $("#btn-recheck").addEventListener("click", startScan);
-  $("#btn-cancel-settings").addEventListener("click", async () => {
-    // Deshacer la vista previa del idioma si se cancela.
-    const s = await api().get_strings(state.settings.language || "auto");
-    applyStrings(s.lang, s.strings);
-    if (DATA) { showResults(DATA); } else startScan();
-  });
+  $("#btn-cancel-settings").addEventListener("click", leaveSettings);
   $("#btn-save").addEventListener("click", () => saveSetup(true));
   $("#btn-nokey").addEventListener("click", () => saveSetup(false));
   $("#mc-version").addEventListener("change", () => envHelp(state.folder));

@@ -4,6 +4,12 @@ Todos los cambios importantes de Mod Updater. Formato basado en [Keep a Changelo
 
 La sección de cada versión es la que se publica como notas de la Release al crear la etiqueta `vX.Y.Z`.
 
+## [0.3.0] - sin publicar
+
+### Añadido
+- **Categorías** propias para todos los mods (Tecnología, Magia, Aventura y exploración, Mundo y biomas, Mobs y combate, Construcción y decoración, Almacenamiento, Comida y granjas, Mapas e información, Calidad de vida, Rendimiento y Librerías), a partir de las de CurseForge y Modrinth.
+- **Secciones** en pestañas: *Mis mods* y *Ajustes*, con navegación por teclado (flechas, Inicio y Fin).
+
 ## [0.2.0] - 2026-11-21
 
 Primera versión con ventana propia.

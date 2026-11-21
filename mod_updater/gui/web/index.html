@@ -14,14 +14,21 @@
   <header class="topbar">
     <h1 class="brand"><img class="brand-logo" src="logo.svg" alt="" width="32" height="32">Mod Updater</h1>
     <span class="spacer"></span>
+    <!-- Hueco para el selector de perfil (hito 5 del plan v3). -->
+    <span id="profile-slot"></span>
     <span class="chip hide-sm" id="chip-folder" hidden></span>
     <span class="chip" id="chip-env" hidden></span>
     <button class="navbtn" type="button" id="btn-rescan" hidden data-i18n-aria-label="ui.rescan">
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2a6 6 0 1 0 5.66 8h-1.6A4.5 4.5 0 1 1 8 3.5c1.24 0 2.37.5 3.18 1.32L9 7h5V2l-1.76 1.76A5.98 5.98 0 0 0 8 2Z"/></svg>
       <span class="label" data-i18n="ui.rescan"></span>
     </button>
-    <button class="navbtn" type="button" id="btn-settings" hidden data-i18n="ui.settings"></button>
   </header>
+
+  <!-- Secciones de la app. Análisis, Explorar y Sugerencias se añaden en sus hitos. -->
+  <div class="tabs" id="tabs" role="tablist" data-i18n-aria-label="ui.tabs_label" hidden>
+    <button class="tab" type="button" role="tab" id="tab-mods" data-tab="mods" aria-selected="true" data-i18n="ui.tab_mods"></button>
+    <button class="tab" type="button" role="tab" id="tab-settings" data-tab="settings" aria-selected="false" tabindex="-1" data-i18n="ui.settings"></button>
+  </div>
 
   <!-- ============================================ Bienvenida / Ajustes -->
   <section class="screen" id="screen-setup" hidden>

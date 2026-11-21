@@ -247,3 +247,11 @@ def test_serialized_row_has_category():
 def test_curseforge_primary_other_yields_to_real_category():
     # Addon de Mekanism: principal "mc-addons" (otras) y también "technology"
     assert from_curseforge(cf_info(426, 412, primary=426)) == ["tecnologia", "otras"]
+
+
+def test_every_category_has_a_name_in_both_languages():
+    from mod_updater import i18n
+    for code in i18n.SUPPORTED:
+        table = i18n._load(code)
+        for c in OURS + (OTHER,):
+            assert table.get(f"cat.{c}"), f"{code}: falta cat.{c}"
