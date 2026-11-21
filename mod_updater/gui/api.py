@@ -24,6 +24,7 @@ from typing import Callable
 from urllib.parse import urlparse
 
 from .. import credentials, i18n
+from ..analysis import analyze
 from ..categories import Catalog
 from ..config import DEFAULT_USER_AGENT, default_mods_dir
 from ..curseforge import LOADER_TYPES, CurseForgeAuthError, CurseForgeClient
@@ -429,6 +430,15 @@ class Api:
     def _is_applying(self) -> bool:
         """Para el aviso al cerrar la ventana (gui/app.py)."""
         return self._applying
+
+    # ------------------------------------------------------------------ análisis
+
+    def analysis(self, include_libraries: bool = False) -> dict:
+        """Cifras de la colección según la última revisión (pestaña Análisis)."""
+        if not self._results:
+            return {"ready": False}
+        return {"ready": True, **analyze(self._results, include_libraries=bool(include_libraries),
+                                          game_version=self._settings().minecraft_version)}
 
     # ------------------------------------------------------------------ backups y deshacer
 

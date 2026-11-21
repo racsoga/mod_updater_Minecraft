@@ -1,0 +1,131 @@
+"""Análisis de la colección: cifras y listas a partir del resultado de una revisión.
+
+Función pura (sin red ni disco): la pestaña Análisis llama a `analyze` con los resultados
+de la última revisión.
+"""
+
+from __future__ import annotations
+
+import time
+from collections import Counter
+from datetime import datetime
+
+from .categories import LIBRARY, OTHER, OURS
+from .resolver import ACTUALIZABLE, AL_DIA, CF, DESCARGA_MANUAL, MR, Resolution
+
+STALE_DAYS = 365
+TOP_HEAVIEST = 5
+
+
+def _timestamp(iso: str | None) -> float | None:
+    if not iso:
+        return None
+    try:
+        return datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def _orphans(installed: list[Resolution]) -> list[Resolution]:
+    """Librerías que ningún otro mod instalado necesita (ni según la API ni según el jar).
+    Se repite hasta estabilizarse: si una librería solo la necesitaba otra huérfana,
+    también lo es."""
+    remaining = list(installed)
+    orphans: list[Resolution] = []
+    while True:
+        needed_keys: set[tuple[str, str]] = set()
+        needed_ids: set[str] = set()
+        for r in remaining:
+            needed_keys |= {d.key for d in r.current_deps}
+            if r.mod is not None:
+                needed_ids |= set(r.mod.requires)
+        found = []
+        for r in remaining:
+            if not r.is_library:
+                continue
+            own_ids = _ids(r)
+            others_keys = needed_keys - {d.key for d in r.current_deps}
+            if not (r.known_ids & others_keys) and not (own_ids & needed_ids):
+                found.append(r)
+        if not found:
+            return sorted(orphans, key=lambda r: r.name.lower())
+        orphans += found
+        remaining = [r for r in remaining if r not in found]
+
+
+def _ids(r: Resolution) -> set[str]:
+    return {r.mod.mod_id, *r.mod.extra_mod_ids} - {None} if r.mod else set()
+
+
+def _orphan_notes(orphans: list[Resolution], installed: list[Resolution]) -> list[dict]:
+    """Para cada librería sin usar: quién la usa de forma opcional y si solo la necesita otra
+    librería que tampoco usa nadie (p. ej. Placebo, que solo pide Apothic Attributes)."""
+    out = []
+    for o in orphans:
+        ids = _ids(o)
+        optional_by = sorted((r.name for r in installed if r is not o and r.mod and ids & set(r.mod.optional)),
+                             key=str.lower)
+        needed_by = sorted((x.name for x in orphans if x is not o and (
+            (x.mod and ids & set(x.mod.requires)) or (o.known_ids & {d.key for d in x.current_deps}))), key=str.lower)
+        out.append({"name": o.name, "size": o.mod.size, "optional_by": optional_by, "needed_by_orphans": needed_by})
+    return out
+
+
+def _old(iso: str | None, now: float) -> bool:
+    ts = _timestamp(iso)
+    return ts is not None and now - ts > STALE_DAYS * 24 * 3600
+
+
+def analyze(results: list[Resolution], *, include_libraries: bool = False, now: float | None = None,
+            game_version: str | None = None) -> dict:
+    now = time.time() if now is None else now
+    installed = [r for r in results if r.mod is not None]
+
+    groups: dict[str, list[str]] = {}
+    for r in installed:
+        cat = r.categories[0] if r.categories else OTHER
+        if cat == LIBRARY and not include_libraries:
+            continue
+        groups.setdefault(cat, []).append(r.name)
+    order = {c: i for i, c in enumerate(OURS + (OTHER,))}
+    by_category = sorted(
+        ({"cat": c, "count": len(names), "mods": sorted(names, key=str.lower)} for c, names in groups.items()),
+        key=lambda b: (-b["count"], order.get(b["cat"], 99)),
+    )
+
+    sources = Counter(r.source for r in installed)
+    totals = {
+        "mods": len(installed),
+        "libraries": sum(r.is_library for r in installed),
+        "size": sum(r.mod.size for r in installed),
+        "up_to_date": sum(r.status == AL_DIA for r in installed),
+        "updates": sum(r.status in (ACTUALIZABLE, DESCARGA_MANUAL) for r in installed),
+        "sources": {"curseforge": sources.get(CF, 0), "modrinth": sources.get(MR, 0),
+                    "none": sum(r.source not in (CF, MR) for r in installed)},
+    }
+
+    heaviest = [{"name": r.name, "size": r.mod.size}
+                for r in sorted(installed, key=lambda r: -r.mod.size)[:TOP_HEAVIEST]]
+
+    # Sin actualizar en más de un año: "posiblemente abandonado" si el proyecto entero lleva más de
+    # un año sin versiones; "sin versión nueva para esta versión" si sí publica, pero para otras.
+    abandoned, no_version = [], []
+    for r in installed:
+        if _old(r.project_updated, now):
+            abandoned.append({"name": r.name, "date": r.project_updated, "url": r.project_url})
+        elif r.project_updated and _old(r.version_updated, now):
+            no_version.append({"name": r.name, "date": r.version_updated, "url": r.project_url,
+                               "project_date": r.project_updated})
+    abandoned.sort(key=lambda s: s["date"])
+    no_version.sort(key=lambda s: s["date"])
+
+    sides = Counter(r.side or "unknown" for r in installed)
+    return {
+        "by_category": by_category,
+        "totals": totals,
+        "heaviest": heaviest,
+        "stale": {"abandoned": abandoned, "no_version": no_version},
+        "game_version": game_version,
+        "orphans": _orphan_notes(_orphans(installed), installed),
+        "sides": {k: sides.get(k, 0) for k in ("client", "server", "both", "unknown")},
+    }

@@ -22,7 +22,10 @@ from pathlib import Path
 from .i18n import t
 from .murmur2 import curseforge_fingerprint
 
-CACHE_VERSION = 2  # 2: añade loader y mc_range
+CACHE_VERSION = 4  # 2: añade loader y mc_range; 3: requires y side; 4: optional
+
+# Dependencias que no son mods (el juego, el cargador, Java): no cuentan como "requeridas".
+_PLATFORM_IDS = {"minecraft", "neoforge", "forge", "java", "fabricloader", "fabric", "quilt_loader"}
 
 
 @dataclass
@@ -39,6 +42,9 @@ class ModFile:
     extra_mod_ids: list[str] = field(default_factory=list)
     loader: str | None = None
     mc_range: str | None = None
+    requires: list[str] = field(default_factory=list)  # modIds obligatorios según el propio jar
+    optional: list[str] = field(default_factory=list)  # modIds que usa si están (opcionales)
+    side: str | None = None  # "client" / "server" / "both" si el jar lo declara (Fabric)
 
     @property
     def display_name(self) -> str:
@@ -65,13 +71,21 @@ def _fabric_metadata(jar: zipfile.ZipFile) -> dict:
         data = json.loads(jar.read("fabric.mod.json").decode("utf-8", errors="replace"))
     except (ValueError, KeyError):
         return {"loader": "fabric"}
-    mc = (data.get("depends") or {}).get("minecraft") if isinstance(data, dict) else None
+    if not isinstance(data, dict):
+        return {"loader": "fabric"}
+    depends = data.get("depends") if isinstance(data.get("depends"), dict) else {}
+    mc = depends.get("minecraft")
+    env = data.get("environment")
     return {
         "loader": "fabric",
         "mod_id": data.get("id"),
         "mod_name": data.get("name"),
         "version": data.get("version") if isinstance(data.get("version"), str) else None,
         "mc_range": mc if isinstance(mc, str) else None,
+        "requires": [k for k in depends if k not in _PLATFORM_IDS],
+        "optional": [k for key in ("recommends", "suggests") if isinstance(data.get(key), dict)
+                     for k in data[key] if k not in _PLATFORM_IDS],
+        "side": {"client": "client", "server": "server", "*": "both"}.get(env) if isinstance(env, str) else None,
     }
 
 
@@ -85,6 +99,34 @@ def _mc_range(data: dict, mod_id: str | None) -> str | None:
             if isinstance(d, dict) and d.get("modId") == "minecraft" and isinstance(d.get("versionRange"), str):
                 return d["versionRange"]
     return None
+
+
+def _toml_deps(data: dict) -> tuple[list[str], list[str]]:
+    """(obligatorios, opcionales) de [[dependencies.*]]. NeoForge: type="required"/"optional";
+    Forge: mandatory=true/false. No cuentan "incompatible" ni "discouraged"."""
+    required: list[str] = []
+    optional: list[str] = []
+    deps = data.get("dependencies") or {}
+    for group in deps.values() if isinstance(deps, dict) else []:
+        for d in group if isinstance(group, list) else []:
+            if not isinstance(d, dict) or not isinstance(d.get("modId"), str) or d["modId"] in _PLATFORM_IDS:
+                continue
+            kind = str(d.get("type", "")).lower()
+            if kind == "required" or d.get("mandatory") is True:
+                target = required
+            elif kind == "optional" or d.get("mandatory") is False:
+                target = optional
+            else:
+                continue
+            if d["modId"] not in target:
+                target.append(d["modId"])
+    return required, [m for m in optional if m not in required]
+
+
+def _own_deps(data: dict, mods: list) -> dict:
+    own = {x.get("modId") for x in mods if isinstance(x, dict)}  # un jar puede traer varios mods
+    required, optional = _toml_deps(data)
+    return {"requires": [m for m in required if m not in own], "optional": [m for m in optional if m not in own]}
 
 
 def read_metadata(jar: zipfile.ZipFile) -> dict:
@@ -126,6 +168,7 @@ def read_metadata(jar: zipfile.ZipFile) -> dict:
         "version": version if isinstance(version, str) else None,
         "extra_mod_ids": [m.get("modId") for m in mods[1:] if isinstance(m, dict) and m.get("modId")],
         "mc_range": _mc_range(data, first.get("modId")),
+        **_own_deps(data, mods),
     }
 
 
@@ -257,6 +300,9 @@ def scan_folder(
                 extra_mod_ids=info.get("extra_mod_ids", []),
                 loader=info.get("loader"),
                 mc_range=info.get("mc_range"),
+                requires=info.get("requires", []),
+                optional=info.get("optional", []),
+                side=info.get("side"),
             )
         )
 

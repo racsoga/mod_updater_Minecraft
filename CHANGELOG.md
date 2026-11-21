@@ -8,7 +8,14 @@ La sección de cada versión es la que se publica como notas de la Release al cr
 
 ### Añadido
 - **Categorías** propias para todos los mods (Tecnología, Magia, Aventura y exploración, Mundo y biomas, Mobs y combate, Construcción y decoración, Almacenamiento, Comida y granjas, Mapas e información, Calidad de vida, Rendimiento y Librerías), a partir de las de CurseForge y Modrinth.
-- **Secciones** en pestañas: *Mis mods* y *Ajustes*, con navegación por teclado (flechas, Inicio y Fin).
+- **Secciones** en pestañas: *Mis mods*, *Análisis* y *Ajustes*, con navegación por teclado (flechas, Inicio y Fin).
+- **Análisis** de la colección:
+  - Gráfico de mods por categoría con bloques isométricos, con opción de incluir las librerías y vista de tabla accesible.
+  - Total de archivos (mods + librerías), tamaño, estado y fuente.
+  - Los que más ocupan y el reparto entre cliente y servidor.
+  - Mods sin actualizar en más de un año, separando los posiblemente abandonados de los que no tienen versión nueva para tu versión de Minecraft.
+  - Librerías que ningún mod pide, según CurseForge y el `mods.toml` de cada jar, indicando si alguien las usa de forma opcional.
+- Tabla de correcciones de categoría (`mod_updater/knowledge/categorias.json`); al clasificar gana la categoría más específica, no la principal de CurseForge a ciegas.
 
 ## [0.2.0] - 2026-11-21
 
