@@ -1,0 +1,2 @@
+# El hook de pre-commit lo ejecuta sh: siempre con finales de línea LF.
+.githooks/* text eol=lf

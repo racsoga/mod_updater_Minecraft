@@ -32,6 +32,7 @@
     <button class="tab" type="button" role="tab" id="tab-mods" data-tab="mods" aria-selected="true" data-i18n="ui.tab_mods"></button>
     <button class="tab" type="button" role="tab" id="tab-analysis" data-tab="analysis" aria-selected="false" tabindex="-1" data-i18n="ui.tab_analysis"></button>
     <button class="tab" type="button" role="tab" id="tab-explore" data-tab="explore" aria-selected="false" tabindex="-1" data-i18n="ui.tab_explore"></button>
+    <button class="tab" type="button" role="tab" id="tab-suggest" data-tab="suggest" aria-selected="false" tabindex="-1" data-i18n="ui.tab_suggest"></button>
     <button class="tab" type="button" role="tab" id="tab-settings" data-tab="settings" aria-selected="false" tabindex="-1" data-i18n="ui.settings"></button>
   </div>
 
@@ -272,6 +273,34 @@
     <p class="ex-status" id="ex-status" aria-live="polite"></p>
     <div class="ex-grid" id="ex-results"></div>
     <div class="ex-more"><button class="btn-secondary" type="button" id="ex-more" hidden data-i18n="ex.load_more"></button></div>
+  </section>
+
+  <!-- ============================================ Sugerencias -->
+  <section class="screen" id="screen-suggest" hidden>
+    <div class="lede">
+      <h2 data-i18n="sg.title"></h2>
+      <p data-i18n="sg.deck"></p>
+    </div>
+    <form id="sg-form" onsubmit="return false">
+      <div id="sg-questions"></div>
+      <div class="sg-actions">
+        <button class="btn-primary" type="button" id="sg-go" data-i18n="sg.go"></button>
+        <span class="help" id="sg-status" aria-live="polite"></span>
+      </div>
+    </form>
+    <div id="sg-results" hidden>
+      <p class="sg-honest" data-i18n="sg.honest"></p>
+      <p class="ex-note warn" id="sg-limit" hidden></p>
+      <div class="sg-cols" id="sg-cols"></div>
+      <details class="panel sg-unchanged" id="sg-unchanged" hidden>
+        <summary id="sg-unchanged-title"></summary>
+        <p id="sg-unchanged-list"></p>
+      </details>
+      <div class="sg-actions">
+        <button class="btn-secondary" type="button" id="sg-edit" data-i18n="sg.edit"></button>
+        <button class="btn-primary" type="button" id="sg-apply" disabled></button>
+      </div>
+    </div>
   </section>
 
   <!-- ============================================ Actualizando -->

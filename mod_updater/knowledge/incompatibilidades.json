@@ -1,0 +1,9 @@
+{
+  "formato": 1,
+  "descripcion": "Incompatibilidades conocidas además de las que declaran CurseForge y Modrinth. 'motivo' es la clave de texto sug.incompat.<motivo>.",
+  "pares": [
+    {"motivo": "renderizado",
+     "a": {"nombre": "Sodium", "curseforge": 394468, "modrinth": "AANobbMI"},
+     "b": {"nombre": "Embeddium", "curseforge": 908741, "modrinth": "sk9rgfiA"}}
+  ]
+}

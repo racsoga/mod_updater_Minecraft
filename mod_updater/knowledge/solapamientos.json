@@ -1,0 +1,33 @@
+{
+  "formato": 1,
+  "descripcion": "Grupos de mods que hacen lo mismo. El orden dentro de cada grupo es la preferencia: si tienes varios, se sugiere quedarse con el primero que tengas (salvo que otro mod necesite uno concreto). 'grupo' es la clave de texto sug.group.<grupo>.",
+  "grupos": [
+    {"grupo": "recetas", "mods": [
+      {"nombre": "Just Enough Items (JEI)", "curseforge": 238222, "modrinth": "u6dRKJwZ"},
+      {"nombre": "EMI", "curseforge": 580555, "modrinth": "fRiHVvU7"},
+      {"nombre": "Roughly Enough Items (REI)", "curseforge": 310111, "modrinth": "nfn13YXA"}]},
+    {"grupo": "minimapa", "mods": [
+      {"nombre": "Xaero's Minimap", "curseforge": 263420, "modrinth": "1bokaNcj"},
+      {"nombre": "JourneyMap", "curseforge": 32274, "modrinth": "lfHFW1mp"}]},
+    {"grupo": "mapa_mundo", "mods": [
+      {"nombre": "Xaero's World Map", "curseforge": 317780, "modrinth": "NcUtCpym"},
+      {"nombre": "JourneyMap", "curseforge": 32274, "modrinth": "lfHFW1mp"}]},
+    {"grupo": "renderizado", "mods": [
+      {"nombre": "Sodium", "curseforge": 394468, "modrinth": "AANobbMI"},
+      {"nombre": "Embeddium", "curseforge": 908741, "modrinth": "sk9rgfiA"}]},
+    {"grupo": "mochilas", "mods": [
+      {"nombre": "Sophisticated Backpacks", "curseforge": 422301, "modrinth": "TyCTlI4b"},
+      {"nombre": "Traveler's Backpack", "curseforge": 321117, "modrinth": null},
+      {"nombre": "Backpacked", "curseforge": 352835, "modrinth": null}]},
+    {"grupo": "almacen_red", "mods": [
+      {"nombre": "Applied Energistics 2", "curseforge": 223794, "modrinth": null},
+      {"nombre": "Refined Storage", "curseforge": 243076, "modrinth": "KDvYkUg3"}]},
+    {"grupo": "info_bloque", "mods": [
+      {"nombre": "Jade", "curseforge": 324717, "modrinth": "nvQzSEkH"},
+      {"nombre": "The One Probe", "curseforge": 245211, "modrinth": "Eyw0UxEx"},
+      {"nombre": "WTHIT", "curseforge": 440979, "modrinth": "6AQIaxuO"}]},
+    {"grupo": "tumbas", "mods": [
+      {"nombre": "GraveStone Mod", "curseforge": 238551, "modrinth": "RYtXKJPr"},
+      {"nombre": "Corpse", "curseforge": 316582, "modrinth": "WrpuIfhw"}]}
+  ]
+}

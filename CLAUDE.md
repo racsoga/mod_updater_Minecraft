@@ -14,6 +14,7 @@ Actualizador de mods de Minecraft (NeoForge 1.21.1) en Python. Planes: `docs/PLA
 
 ## Tests
 - Ejecutar `.venv\Scripts\python -m pytest` antes de cada commit. Si fallan, no se hace commit.
+- El hook `.githooks/pre-commit` lo hace solo (y bloquea `.env`, `.cache/`, `config.toml` y `*.jar`). Activarlo una vez por clon: `git config core.hooksPath .githooks`.
 - Los tests no usan red: clientes HTTP y sesiones falsos (ver `tests/`).
 
 ## Idioma

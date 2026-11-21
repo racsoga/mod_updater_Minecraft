@@ -1,0 +1,26 @@
+#!/bin/sh
+# Hook de pre-commit de Mod Updater (activar una vez con: git config core.hooksPath .githooks).
+# 1. No deja commitear secretos ni archivos locales (.env, .cache/, config.toml, *.jar).
+# 2. Ejecuta los tests; si fallan, el commit no se hace.
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+bad=$(printf '%s\n' "$staged" | grep -E '(^|/)\.env$|(^|/)\.cache/|(^|/)config\.toml$|\.jar$')
+if [ -n "$bad" ]; then
+    echo "pre-commit: estos archivos no deben subirse al repositorio:" >&2
+    printf '  %s\n' $bad >&2
+    exit 1
+fi
+
+if [ -x ".venv/Scripts/python.exe" ]; then
+    py=".venv/Scripts/python.exe"
+elif [ -x ".venv/bin/python" ]; then
+    py=".venv/bin/python"
+else
+    py="python"
+fi
+
+echo "pre-commit: ejecutando los tests..."
+if ! "$py" -m pytest -q -p no:cacheprovider; then
+    echo "pre-commit: los tests fallan; no se hace el commit." >&2
+    exit 1
+fi

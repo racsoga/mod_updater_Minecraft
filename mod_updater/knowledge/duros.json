@@ -1,0 +1,9 @@
+{
+  "formato": 1,
+  "descripcion": "Mods que suben mucho la dificultad (mobs y jefes muy fuertes). Con dificultad 'relajada' se sugiere quitarlos y no se proponen; con 'reto' se pueden proponer.",
+  "mods": [
+    {"nombre": "Born in Chaos", "curseforge": 686437, "modrinth": null},
+    {"nombre": "AtomicStryker's Infernal Mobs", "curseforge": 227875, "modrinth": null},
+    {"nombre": "L_Ender's Cataclysm", "curseforge": null, "modrinth": "46KJle7n"}
+  ]
+}

@@ -113,6 +113,20 @@
       }, step * chosen.length + 400);
       return { ok: true, total: chosen.length };
     },
+    // Sugerencias de ejemplo.
+    suggest_answers: async () => ({}),
+    suggest_run: async a => ({ ok: true, answers: a, total: 120, over_limit: 0,
+      remove: [{ name: "JourneyMap", reason: "Tienes dos minimapas: Xaero's Minimap y JourneyMap. Basta con uno.", file: "journeymap.jar" },
+        { name: "Mod de ejemplo", reason: "Sin versiones nuevas desde 2024: puede estar abandonado.", file: "ejemplo.jar" }],
+      review: [{ name: "Cloth Config API", reason: "Librería que ningún mod pide: puede que algún mod la use de forma opcional (por ejemplo, pantallas de configuración).", file: "cloth.jar" }],
+      unchanged: ["Balm", "Sodium", "Waystones"],
+      keep: [{ name: "Create", reason: "Encaja con tu partida de tecnología y automatización." },
+        { name: "Just Enough Items (JEI)", reason: "Útil en cualquier partida." }],
+      add: [{ name: "Mekanism", reason: "Muy popular en partidas de tecnología y automatización.", source: "curseforge", id: "268560" },
+        { name: "Terralith", reason: "Da mucho juego para explorar: estructuras, biomas y viajes.", note: "Solo afecta a mundos nuevos o zonas sin explorar.", source: "curseforge", id: "513688" }] }),
+    suggest_plan: async sel => ({ ok: true, size: 9000000, overlaps: [], manual: [], unavailable: [], already: [], blocked: [],
+      rows: [...sel.add.map((a, i) => ({ id: 100000 + i, s: "dep", name: a.name, to: "10.7", size: 9000000, neededBy: [] })),
+        ...sel.remove.map((f, i) => ({ id: 100100 + i, s: "rm", name: f, from: "1.0", neededBy: [] }))] }),
     // Lista de mods (sin archivos reales).
     modlist_export: async kind => ({ ok: true, file: kind === "mrpack" ? "Principal.mrpack" : "Principal.modlist.json",
       excluded: kind === "mrpack" ? ["Mod de ejemplo"] : [], no_loader_version: false }),

@@ -13,6 +13,7 @@ Reglas:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -30,6 +31,8 @@ from .. import profiles
 from ..categories import Catalog
 from ..launchers import detect_instances, loader_version_for
 from .. import modlist as modlist_mod
+from ..knowledge import load_knowledge
+from ..suggest import STYLES, suggest
 from .. import __version__
 from ..changelog import changelog_for
 from ..explore import PAGE_SIZE, _installed_index, detail as explore_detail_of, search as explore_search_in
@@ -176,6 +179,12 @@ class Api:
 
     def _cache(self) -> Path:
         return self._cache_dir or app_dir() / "cache"
+
+    def _scan_cache(self, mods_dir: Path) -> Path:
+        """Caché de hashes de UNA carpeta: la clave del escáner es nombre|tamaño|fecha, así que dos
+        perfiles con un jar igual de nombre, tamaño y fecha pero distinto contenido no deben compartirla."""
+        key = hashlib.sha1(os.path.normcase(str(Path(mods_dir).resolve())).encode("utf-8")).hexdigest()[:12]
+        return self._cache() / f"scan_cache_{key}.json"
 
     # ------------------------------------------------------------------ idioma
 
@@ -386,7 +395,7 @@ class Api:
         unreadable: list = []
         mods = scan_folder(
             s.mods_path,
-            cache_path=self._cache() / "scan_cache.json",
+            cache_path=self._scan_cache(s.mods_path),
             on_item=lambda i, n, p: progress("read", t("scan.reading_n", done=i, total=n), i, n),
             unreadable=unreadable,
         )
@@ -597,13 +606,72 @@ class Api:
             return {"ok": False, "message": t("scan.err_offline") if exc.kind == "offline" else t("ex.err_network")}
         blocked = {id(r) for r in plan.blocked}
         self._install = [r for r in plan.items if id(r) not in blocked]
+        overlaps = self._overlaps([r for r in chosen if id(r) not in blocked])
         rows = [{"id": 100000 + i, "s": "dep" if r.kind == INSTALL else "up", "name": r.name, "icon": r.icon_url,
                  "from": r.current_version if r.kind != INSTALL else None, "to": r.new_version,
                  "beta": r.new_channel not in (None, "release"), "neededBy": list(r.required_by), "size": r.new_size}
                 for i, r in enumerate(self._install)]
-        return {"ok": True, "rows": rows, "size": sum(r.new_size for r in self._install),
+        return {"ok": True, "rows": rows, "size": sum(r.new_size for r in self._install), "overlaps": overlaps,
                 "manual": manual, "unavailable": unavailable, "already": already,
                 "blocked": [{"name": r.name, "reason": r.note} for r in plan.blocked]}
+
+    def _overlaps(self, new: list[Resolution]) -> list[str]:
+        """Avisos: un mod nuevo hace lo mismo que otro que ya tienes (ej.: dos mochilas)."""
+        out = []
+        for g in load_knowledge()["solapamientos"]:
+            keys = [{(CF, str(m["curseforge"])) for m in [x] if m.get("curseforge")}
+                    | {(MR, str(m["modrinth"])) for m in [x] if m.get("modrinth")} for x in g["mods"]]
+            group_keys = set().union(*keys)
+            have = next((r for r in self._results if r.mod is not None and r.known_ids & group_keys), None)
+            for r in new:
+                if have is not None and r.known_ids & group_keys and not (r.known_ids & have.known_ids):
+                    out.append(t("ex.overlap", name=r.name, other=have.name, group=t(f"sug.group.{g['grupo']}")))
+        return out
+
+    # ------------------------------------------------------------------ sugerencias
+
+    def suggest_answers(self) -> dict:
+        return self._settings().answers or {}
+
+    def suggest_run(self, answers: dict) -> dict:
+        """Guarda las respuestas en el perfil y calcula Quitar · Mantener · Añadir."""
+        if not self._results:
+            return {"ok": False, "message": t("ex.need_scan")}
+        a = answers or {}
+        clean = {"players": a.get("players") if a.get("players") in ("solo", "amigos", "servidor") else "solo",
+                 "styles": [x for x in a.get("styles") or [] if x in STYLES],
+                 "difficulty": a.get("difficulty") if a.get("difficulty") in ("relajada", "normal", "reto") else "normal",
+                 "pc": a.get("pc") if a.get("pc") in ("justo", "normal", "potente") else "normal",
+                 "max": a.get("max") if a.get("max") in (0, 50, 100, 150) else 0}
+        s = self._settings()
+        s.answers = clean
+        save_settings(s, self._settings_file)
+        cf, mr = self._clients(s)
+        finder = DependencyFinder(cf, mr, loader=s.loader, game_version=s.minecraft_version, allow_beta=s.allow_beta)
+        try:
+            res = suggest(clean, self._results, finder, knowledge=load_knowledge())
+        except ApiError as exc:
+            return {"ok": False, "message": t("scan.err_offline") if exc.kind == "offline" else t("ex.err_network")}
+        return {"ok": True, "answers": clean, "total": len([r for r in self._results if r.mod is not None]), **res}
+
+    def suggest_plan(self, selection: dict) -> dict:
+        """Prepara lo marcado: añadir (con dependencias, como la cesta) y quitar (a la copia)."""
+        sel = selection or {}
+        adds = [{"source": x.get("source"), "id": x.get("id"), "name": x.get("name")} for x in sel.get("add") or []]
+        res = self.install_plan(adds) if adds else {"ok": True, "rows": [], "size": 0, "overlaps": [], "manual": [],
+                                                     "unavailable": [], "already": [], "blocked": []}
+        if not adds:
+            self._install = []
+        if not res.get("ok"):
+            return res
+        files = set(sel.get("remove") or [])
+        removals = [replace(r, kind=REMOVE) for r in self._results if r.mod is not None and r.mod.file_name in files]
+        start = len(self._install)
+        self._install += removals
+        res["rows"] += [{"id": 100000 + start + i, "s": "rm", "name": r.name, "icon": r.icon_url, "from": r.current_version,
+                         "to": None, "beta": False, "neededBy": []} for i, r in enumerate(removals)]
+        res["removals"] = [r.name for r in removals]
+        return res
 
     def install_start(self) -> dict:
         """Instala el plan preparado con install_plan (misma pantalla y copia que al actualizar)."""
@@ -725,8 +793,8 @@ class Api:
         if other is None:
             return {"ok": False, "message": t("profile.not_found")}
         try:
-            a = scan_folder(s.mods_path, cache_path=self._cache() / "scan_cache.json")
-            b = scan_folder(Path(other["mods_dir"]), cache_path=self._cache() / "scan_cache.json")
+            a = scan_folder(s.mods_path, cache_path=self._scan_cache(s.mods_path))
+            b = scan_folder(Path(other["mods_dir"]), cache_path=self._scan_cache(Path(other["mods_dir"])))
         except FileNotFoundError:
             return {"ok": False, "message": t("ml.err_compare_folder")}
         return {"ok": True, "a": self._active_name(s), "b": other.get("name"), **modlist_mod.compare_folders(a, b)}

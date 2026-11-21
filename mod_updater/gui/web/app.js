@@ -47,13 +47,13 @@ const MODS_SCREENS = ["scan", "recover", "results", "apply", "done"];
 let modsScreen = null;
 
 function show(screen) {
-  for (const s of ["setup", "analysis", "explore", ...MODS_SCREENS]) $(`#screen-${s}`).hidden = s !== screen;
+  for (const s of ["setup", "analysis", "explore", "suggest", ...MODS_SCREENS]) $(`#screen-${s}`).hidden = s !== screen;
   $("#ex-basket").hidden = screen !== "explore" || !BASKET.size;
   if (MODS_SCREENS.includes(screen)) modsScreen = screen;
   // Pestañas: ocultas en la bienvenida (primera vez) y mientras se actualiza (no se puede salir).
   $("#tabs").hidden = (screen === "setup" && setupMode === "setup") || screen === "apply";
   renderProfileSelect(screen);
-  selectTab({ setup: "settings", analysis: "analysis", explore: "explore" }[screen] || "mods");
+  selectTab({ setup: "settings", analysis: "analysis", explore: "explore", suggest: "suggest" }[screen] || "mods");
   $("#btn-rescan").hidden = screen !== "results";
   $("#actionbar").hidden = screen !== "results";
   for (const chip of [$("#chip-folder"), $("#chip-env")]) chip.hidden = screen === "setup" || !chip.textContent.trim();
@@ -620,6 +620,7 @@ async function openTab(name) {
   if (name === "settings") openSetup("settings");
   else if (name === "analysis") openAnalysis();
   else if (name === "explore") openExplore();
+  else if (name === "suggest") openSuggest();
   else goMods();
 }
 
@@ -649,6 +650,7 @@ async function switchProfile(id) {
   // Lo revisado, analizado y buscado era del perfil anterior.
   DATA = null; MODS = []; modsScreen = null; anSelected = null;
   EX.cards = []; EX.started = false; BASKET.clear(); renderBasket();
+  SG = { loaded: false, result: null };
   startScan();
 }
 
@@ -968,15 +970,24 @@ async function openExDetail(c) {
 async function reviewBasket() {
   openExDrawer(t("ex.review_title"), t("ex.basket_count", { count: BASKET.size }));
   const res = await api().install_plan([...BASKET.values()].map(c => ({ source: c.source, id: c.id, name: c.name })));
+  renderPlanReview(res, () => { BASKET.clear(); renderBasket(); });
+}
+
+// Revisión antes de instalar/quitar (la usan la cesta de Explorar y las Sugerencias).
+function renderPlanReview(res, onStart) {
   if ($("#ex-drawer").hidden) return;
   if (!res.ok) { $("#ex-d-body").innerHTML = `<p class="cl-error">${esc(res.message)}</p>`; return; }
   const list = (title, items) => items.length ? `<h3 class="ex-h">${esc(title)}</h3><ul class="an-list">${items.join("")}</ul>` : "";
   const li = (name, extra = "") => `<li><span class="an-name">${esc(name)}${extra ? `<span class="an-note">${esc(extra)}</span>` : ""}</span></li>`;
-  const mine = res.rows.filter(r => !r.neededBy.length), deps = res.rows.filter(r => r.neededBy.length);
+  const installs = res.rows.filter(r => r.s !== "rm");
+  const mine = installs.filter(r => !r.neededBy.length), deps = installs.filter(r => r.neededBy.length);
+  const removals = res.rows.filter(r => r.s === "rm");
   const ver = r => [r.to, r.size ? fmtSize(r.size) : ""].filter(Boolean).join(" · ");
-  $("#ex-d-body").innerHTML = list(t("ex.will_install"), mine.map(r => li(r.name, ver(r))))
+  $("#ex-d-body").innerHTML = (res.overlaps || []).map(o => `<p class="ex-note warn">${esc(o)}</p>`).join("")
+    + list(t("ex.will_install"), mine.map(r => li(r.name, ver(r))))
     + list(t("ex.will_add_deps"), deps.map(r => li(r.name, `${ver(r)} · ${t("ui.needed_by", { names: r.neededBy.join(", ") })}`)))
-    + (res.rows.length && res.size ? `<p class="ex-total">${esc(t("ex.total_size", { size: fmtSize(res.size), count: res.rows.length }))}</p>` : "")
+    + (installs.length && res.size ? `<p class="ex-total">${esc(t("ex.total_size", { size: fmtSize(res.size), count: installs.length }))}</p>` : "")
+    + list(t("sg.will_remove"), removals.map(r => li(r.name, r.from || "")))
     + list(t("ex.cant_manual"), res.manual.map(m => `<li><span class="an-name"><a href="${esc(m.url)}" data-external>${esc(m.name)}</a></span></li>`))
     + list(t("ex.cant_blocked"), res.blocked.map(b => li(b.name, b.reason)))
     + list(t("ex.cant_unavailable"), res.unavailable.map(n => li(n)))
@@ -984,21 +995,119 @@ async function reviewBasket() {
     + `<p class="an-hint">${esc(t("ex.safe"))}</p>`;
   $("#ex-d-foot").innerHTML = res.rows.length
     ? `<button class="btn-secondary" type="button" id="ex-d-cancel">${esc(t("ui.cancel"))}</button>
-       <button class="btn-primary" type="button" id="ex-d-install">${esc(t("ex.install_n", { count: res.rows.length }))}</button>` : "";
+       <button class="btn-primary" type="button" id="ex-d-install">${esc(t("sg.apply_n", { count: res.rows.length }))}</button>` : "";
   if (!res.rows.length) return;
   $("#ex-d-cancel").addEventListener("click", closeExDrawer);
   $("#ex-d-install").addEventListener("click", async () => {
     const go = await api().install_start();
     if (!go.ok) { $("#ex-d-body").insertAdjacentHTML("afterbegin", `<p class="cl-error">${esc(go.message)}</p>`); return; }
     closeExDrawer();
-    BASKET.clear();
-    renderBasket();
-    APPLY = res.rows.map(r => ({ ...r, state: "queued", message: "" }));
-    $("#apply-label").textContent = t("ui.apply_count", { done: 0, count: APPLY.length });
-    $("#apply-bar > span").style.width = "0%";
-    renderApply();
-    show("apply");
+    if (onStart) onStart();
+    startApplyRows(res.rows);
   });
+}
+
+/* ================================================================ sugerencias */
+
+const SG_QUESTIONS = [
+  { key: "players", type: "radio", options: ["solo", "amigos", "servidor"] },
+  { key: "styles", type: "checkbox", options: ["tecnologia", "magia", "exploracion", "construir", "granjas", "combate", "tranquilo"] },
+  { key: "difficulty", type: "radio", options: ["relajada", "normal", "reto"] },
+  { key: "pc", type: "radio", options: ["justo", "normal", "potente"] },
+  { key: "max", type: "radio", options: ["0", "50", "100", "150"] },
+];
+const SG_ICON = { tecnologia: "tecnologia", magia: "magia", exploracion: "aventura", construir: "construccion",
+  granjas: "comida", combate: "mobs", tranquilo: "calidad_vida" };
+let SG = { loaded: false, result: null };
+
+async function openSuggest() {
+  show("suggest");
+  if (!SG.loaded) {
+    SG.loaded = true;
+    renderSuggestForm(await api().suggest_answers());
+  }
+}
+
+function renderSuggestForm(saved) {
+  const defaults = { players: "solo", styles: [], difficulty: "normal", pc: "normal", max: 0 };
+  const a = { ...defaults, ...(saved || {}) };
+  $("#sg-questions").innerHTML = SG_QUESTIONS.map((q, qi) => `<fieldset class="sg-q">
+      <legend><span class="sg-num">${qi + 1}</span>${esc(t(`sg.q_${q.key}`))}</legend>
+      <div class="sg-options${q.key === "styles" ? " wide" : ""}">${q.options.map(o => {
+        const checked = q.type === "checkbox" ? a.styles.includes(o) : String(a[q.key]) === o;
+        const icon = SG_ICON[o] ? catIcon(SG_ICON[o], 22) : "";
+        return `<label class="sg-card"><input type="${q.type}" name="sg-${q.key}" value="${esc(o)}"${checked ? " checked" : ""}>
+          ${icon}<span>${esc(t(`sg.${q.key}_${o}`))}</span></label>`;
+      }).join("")}</div>
+    </fieldset>`).join("");
+  $("#sg-form").hidden = false;
+  $("#sg-results").hidden = true;
+}
+
+function readAnswers() {
+  const val = k => (document.querySelector(`input[name="sg-${k}"]:checked`) || {}).value;
+  return { players: val("players"), difficulty: val("difficulty"), pc: val("pc"), max: Number(val("max") || 0),
+           styles: [...document.querySelectorAll('input[name="sg-styles"]:checked')].map(i => i.value) };
+}
+
+async function runSuggest() {
+  const btn = $("#sg-go");
+  btn.disabled = true;
+  $("#sg-status").textContent = t("sg.thinking");
+  const res = await api().suggest_run(readAnswers());
+  btn.disabled = false;
+  $("#sg-status").textContent = res.ok ? "" : res.message;
+  if (!res.ok) return;
+  SG.result = res;
+  renderSuggestResults(res);
+}
+
+function renderSuggestResults(r) {
+  const col = (kind, items, checkable) => `<section class="panel sg-col">
+      <h3>${esc(t(`sg.col_${kind}`))} <span class="sg-count">${items.length}</span></h3>
+      <p class="an-hint">${esc(t(`sg.col_${kind}_hint`))}</p>
+      ${items.length ? `<ul class="sg-list">${items.map((it, i) => `<li>
+          ${checkable ? `<input class="check" type="checkbox" id="sg-${kind}-${i}" data-sg="${kind}" data-i="${i}">` : ""}
+          <label${checkable ? ` for="sg-${kind}-${i}"` : ""}><span class="sg-name">${esc(it.name)}</span>
+            <span class="sg-why">${esc(it.reason)}</span>${it.note ? `<span class="sg-note">${esc(it.note)}</span>` : ""}</label></li>`).join("")}</ul>`
+        : `<p class="an-hint">${esc(t("sg.none"))}</p>`}
+    </section>`;
+  $("#sg-cols").innerHTML = col("remove", r.remove, true) + col("review", r.review, true)
+    + col("keep", r.keep, false) + col("add", r.add, true);
+  $("#sg-unchanged").hidden = !r.unchanged.length;
+  $("#sg-unchanged-title").textContent = t("sg.unchanged", { count: r.unchanged.length });
+  $("#sg-unchanged-list").textContent = r.unchanged.join(" · ");
+  $("#sg-limit").hidden = !r.over_limit;
+  $("#sg-limit").textContent = t("sg.over_limit", { count: r.over_limit, max: r.answers.max });
+  $("#sg-form").hidden = true;
+  $("#sg-results").hidden = false;
+  updateSuggestApply();
+  window.scrollTo(0, 0);
+}
+
+function updateSuggestApply() {
+  const n = document.querySelectorAll("#sg-cols input[data-sg]:checked").length;
+  $("#sg-apply").disabled = !n;
+  $("#sg-apply").textContent = t("sg.apply_marked", { count: n });
+}
+
+async function applySuggestions() {
+  const marked = [...document.querySelectorAll("#sg-cols input[data-sg]:checked")];
+  const sel = { remove: [], add: [] };
+  for (const c of marked) {
+    const item = SG.result[c.dataset.sg][Number(c.dataset.i)];
+    if (c.dataset.sg === "remove" || c.dataset.sg === "review") sel.remove.push(item.file);
+    else sel.add.push({ source: item.source, id: item.id, name: item.name });
+  }
+  openExDrawer(t("sg.review_title"), t("sg.apply_marked", { count: marked.length }));
+  renderPlanReview(await api().suggest_plan(sel), () => { SG.result = null; });
+}
+
+function wireSuggest() {
+  $("#sg-go").addEventListener("click", runSuggest);
+  $("#sg-edit").addEventListener("click", () => { $("#sg-form").hidden = false; $("#sg-results").hidden = true; });
+  $("#sg-cols").addEventListener("change", updateSuggestApply);
+  $("#sg-apply").addEventListener("click", applySuggestions);
 }
 
 function wireExplore() {
@@ -1168,6 +1277,7 @@ function wireTabs() {
 
 function wire() {
   wireTabs();
+  wireSuggest();
   wireModlist();
   wireProfiles();
   wireExplore();
