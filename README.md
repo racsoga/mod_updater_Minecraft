@@ -31,6 +31,8 @@ Mod Updater revisa la carpeta `mods` de tu Minecraft, reconoce cada mod por su h
 - **Siempre hay vuelta atrás**: antes de cambiar nada guarda una copia de tus mods. Al terminar puedes **Deshacer**.
 - **No toca nada con Minecraft abierto.**
 - En **español e inglés** (usa el idioma de Windows).
+- *(próxima versión)* **Análisis de tu colección**: mods por categoría, lo que más ocupa, mods sin actualizar o posiblemente abandonados y librerías que ningún mod usa.
+- *(próxima versión)* **Ver los cambios antes de actualizar**: las notas de todas las versiones entre la tuya y la nueva, con avisos de posibles cambios que rompen partidas.
 
 <p align="center">
   <img src="docs/images/flujo.gif" width="720" alt="Animación: se pulsa Actualizar, cada mod pasa por descargando, verificado y actualizado, y aparece la pantalla final">

@@ -26,6 +26,7 @@ from urllib.parse import urlparse
 from .. import credentials, i18n
 from ..analysis import analyze
 from ..categories import Catalog
+from ..changelog import changelog_for
 from ..config import DEFAULT_USER_AGENT, default_mods_dir
 from ..curseforge import LOADER_TYPES, CurseForgeAuthError, CurseForgeClient
 from ..deps import DependencyFinder, DepPlan, plan_with_dependencies
@@ -116,6 +117,8 @@ def serialize(results: list[Resolution], plan: DepPlan, *, allow_beta: bool = Fa
             "cat": r.categories[0] if r.categories else None,  # categoría principal (categories.py)
             "cats": list(r.categories),
             "lib": r.is_library,
+            "cl": r.kind != INSTALL and bool(r.new_version) and r.status in (ACTUALIZABLE, DESCARGA_MANUAL)
+                  and r.source in (CF, MR),
         })
     return {"rows": rows, "details": list(plan.ignored), "warnings": list(plan.conflicts)}
 
@@ -142,6 +145,7 @@ class Api:
         self._rows: list[Resolution] = []   # mismo orden que las filas enviadas al JS
         self._row_s: list[str] = []         # estado de cada fila ("up", "dep", ...)
         self._applying = False              # hay una actualización en curso (aviso al cerrar)
+        self._changelogs: dict = {}         # changelogs ya descargados (por mod y rango de versiones)
         self._window = None
         self._busy = threading.Lock()
         self._results: list[Resolution] = []
@@ -430,6 +434,30 @@ class Api:
     def _is_applying(self) -> bool:
         """Para el aviso al cerrar la ventana (gui/app.py)."""
         return self._applying
+
+    # ------------------------------------------------------------------ changelog
+
+    def changelog(self, row_id: int) -> dict:
+        """Notas de todas las versiones entre la instalada y la nueva de una fila de Mis mods."""
+        try:
+            r = self._rows[int(row_id)]
+        except (IndexError, TypeError, ValueError):
+            return {"ok": False, "message": t("cl.not_found")}
+        key = (r.source, r.project_id, r.current_date, r.new_date)
+        if key not in self._changelogs:
+            s = self._settings()
+            api_key = self._get_key()[0] if s.use_curseforge else None
+            try:
+                data = changelog_for(
+                    r, curseforge=self._cf_factory(api_key) if api_key and r.source == CF else None,
+                    modrinth=self._mr_factory(DEFAULT_USER_AGENT), game_version=s.minecraft_version, loader=s.loader)
+            except ApiError as exc:
+                return {"ok": False, "message": t("scan.err_offline") if exc.kind == "offline" else t("cl.err_network")}
+            except Exception as exc:  # noqa: BLE001 - la ventana nunca debe quedarse esperando
+                return {"ok": False, "message": t("cl.err_unknown", error=type(exc).__name__)}
+            self._changelogs[key] = data
+        return {"ok": True, "name": r.name, "from": r.current_version, "to": r.new_version,
+                "url": r.project_url, **self._changelogs[key]}
 
     # ------------------------------------------------------------------ análisis
 

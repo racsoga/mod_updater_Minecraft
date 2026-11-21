@@ -72,6 +72,7 @@ class Resolution:
     current_channel: str | None = None
     current_date: str | None = None
     new_version: str | None = None
+    new_date: str | None = None  # fecha de publicación de la versión nueva (ISO)
     new_channel: str | None = None
     new_file_name: str | None = None
     download_url: str | None = None
@@ -269,6 +270,7 @@ def resolve_with_modrinth(
         if new is not None:
             f = new.primary_file
             res.new_version = new.version_number
+            res.new_date = new.date_published
             res.new_channel = new.version_type
             res.new_deps = mr_deps(new)
             res.new_incompat = mr_incompat(new)
@@ -369,6 +371,7 @@ def resolve_with_curseforge(
             res.newer_prerelease = guess_version(mod.file_name, mod.version, pre.file_name) or pre.display_name
         if new is not None:
             res.new_version = guess_version(mod.file_name, mod.version, new.file_name) or new.display_name
+            res.new_date = new.date_published
             res.new_channel = new.version_type
             res.new_file_name = new.file_name
             res.new_sha1 = new.sha1

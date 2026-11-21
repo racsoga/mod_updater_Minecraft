@@ -124,6 +124,11 @@ class CurseForgeClient:
             out.update({m["id"]: m for m in data})
         return out
 
+    def file_changelog(self, mod_id: int, file_id: int) -> str:
+        """Changelog (HTML) de un archivo; cadena vacía si no hay."""
+        data = self._call("GET", f"/v1/mods/{mod_id}/files/{file_id}/changelog")
+        return data if isinstance(data, str) else ""
+
     def categories(self) -> list[dict]:
         """Categorías de la clase Mods (id, slug, name, parentCategoryId, iconUrl...)."""
         return self._call("GET", "/v1/categories", params={"gameId": MINECRAFT_GAME_ID, "classId": 6}) or []
