@@ -1,0 +1,58 @@
+{
+  "formato": 1,
+  "descripcion": "Mods recomendados por cada respuesta del cuestionario. Clave = estilo ('base' para todos, 'amigos', 'servidor', 'rendimiento' y los estilos de juego). El motivo visible sale de sug.reason.style_<clave>. Solo se sugieren si existen para la versión y el cargador del perfil.",
+  "estilos": {
+    "base": [
+      {"nombre": "Just Enough Items (JEI)", "curseforge": 238222, "modrinth": "u6dRKJwZ"},
+      {"nombre": "Jade", "curseforge": 324717, "modrinth": "nvQzSEkH"},
+      {"nombre": "Mouse Tweaks", "curseforge": 60089, "modrinth": "aC3cM3Vq"},
+      {"nombre": "AppleSkin", "curseforge": 248787, "modrinth": "EsAfCjCV"}],
+    "tecnologia": [
+      {"nombre": "Create", "curseforge": 328085, "modrinth": "LNytGWDc"},
+      {"nombre": "Mekanism", "curseforge": 268560, "modrinth": "Ce6I4WUE"},
+      {"nombre": "Applied Energistics 2", "curseforge": 223794, "modrinth": null},
+      {"nombre": "Immersive Engineering", "curseforge": 231951, "modrinth": null}],
+    "magia": [
+      {"nombre": "Ars Nouveau", "curseforge": 401955, "modrinth": "TKB6INcv"},
+      {"nombre": "Iron's Spells 'n Spellbooks", "curseforge": 855414, "modrinth": "s4OWxYQQ"},
+      {"nombre": "Occultism", "curseforge": 361026, "modrinth": "sbJh4AZw"}],
+    "exploracion": [
+      {"nombre": "When Dungeons Arise", "curseforge": 442508, "modrinth": "8DfbfASn"},
+      {"nombre": "Explorer's Compass", "curseforge": 491794, "modrinth": "RV1qfVQ8"},
+      {"nombre": "Terralith", "curseforge": 513688, "modrinth": "8oi3bsk5"},
+      {"nombre": "The Twilight Forest", "curseforge": 227639, "modrinth": null},
+      {"nombre": "Waystones", "curseforge": 245755, "modrinth": "LOpKHB2A"},
+      {"nombre": "Xaero's Minimap", "curseforge": 263420, "modrinth": "1bokaNcj"},
+      {"nombre": "Xaero's World Map", "curseforge": 317780, "modrinth": "NcUtCpym"}],
+    "construir": [
+      {"nombre": "Chipped", "curseforge": 456956, "modrinth": "BAscRYKm"},
+      {"nombre": "Macaw's Furniture", "curseforge": 359540, "modrinth": "dtWC90iB"},
+      {"nombre": "Supplementaries", "curseforge": 412082, "modrinth": "fFEIiSDQ"},
+      {"nombre": "FramedBlocks", "curseforge": 441647, "modrinth": "wbgfS34j"},
+      {"nombre": "Handcrafted", "curseforge": 538214, "modrinth": "pJmCFF0p"}],
+    "granjas": [
+      {"nombre": "Farmer's Delight", "curseforge": 398521, "modrinth": "R2OftAxM"},
+      {"nombre": "Croptopia", "curseforge": 415438, "modrinth": null}],
+    "combate": [
+      {"nombre": "Mowzie's Mobs", "curseforge": 250498, "modrinth": "BFbX9xcm"},
+      {"nombre": "L_Ender's Cataclysm", "curseforge": null, "modrinth": "46KJle7n"},
+      {"nombre": "Born in Chaos", "curseforge": 686437, "modrinth": null}],
+    "tranquilo": [
+      {"nombre": "Comforts", "curseforge": 276951, "modrinth": "SaCpeal4"},
+      {"nombre": "Handcrafted", "curseforge": 538214, "modrinth": "pJmCFF0p"},
+      {"nombre": "Farmer's Delight", "curseforge": 398521, "modrinth": "R2OftAxM"}],
+    "amigos": [
+      {"nombre": "Simple Voice Chat", "curseforge": 416089, "modrinth": "9eGKb6K1"},
+      {"nombre": "GraveStone Mod", "curseforge": 238551, "modrinth": "RYtXKJPr"}],
+    "servidor": [
+      {"nombre": "Simple Voice Chat", "curseforge": 416089, "modrinth": "9eGKb6K1"},
+      {"nombre": "Open Parties and Claims", "curseforge": 636608, "modrinth": "gF3BGWvG"},
+      {"nombre": "GraveStone Mod", "curseforge": 238551, "modrinth": "RYtXKJPr"}],
+    "rendimiento": [
+      {"nombre": "Sodium", "curseforge": 394468, "modrinth": "AANobbMI"},
+      {"nombre": "FerriteCore", "curseforge": 429235, "modrinth": null},
+      {"nombre": "ModernFix", "curseforge": 790626, "modrinth": "nmDcB62a"},
+      {"nombre": "ImmediatelyFast", "curseforge": 686911, "modrinth": "5ZwdcRci"},
+      {"nombre": "Entity Culling", "curseforge": 448233, "modrinth": "NNAgCjsB"}]
+  }
+}

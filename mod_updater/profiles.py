@@ -16,7 +16,7 @@ from pathlib import Path
 from . import i18n
 from .i18n import t
 
-PROFILE_FIELDS = ("mods_dir", "minecraft_version", "loader", "allow_beta", "backups_to_keep")
+PROFILE_FIELDS = ("mods_dir", "minecraft_version", "loader", "allow_beta", "backups_to_keep", "answers")
 
 
 def _norm(folder: str) -> str:
