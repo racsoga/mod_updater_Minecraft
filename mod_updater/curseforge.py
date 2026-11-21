@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 import requests
 
 from .i18n import t
-from .net import ApiError, request_with_retry
+from .net import ApiError, batches, parallel_map, request_with_retry
 
 BASE_URL = "https://api.curseforge.com"
 MINECRAFT_GAME_ID = 432
@@ -108,9 +108,9 @@ class CurseForgeClient:
         """{fingerprint: CfMatch} para los archivos reconocidos exactamente."""
         out: dict[int, CfMatch] = {}
         unique = sorted(set(fingerprints))
-        for i in range(0, len(unique), BATCH):
-            chunk = unique[i : i + BATCH]
-            data = self._call("POST", f"/v1/fingerprints/{MINECRAFT_GAME_ID}", json={"fingerprints": chunk}) or {}
+        pages = parallel_map(lambda chunk: self._call("POST", f"/v1/fingerprints/{MINECRAFT_GAME_ID}",
+                                                      json={"fingerprints": chunk}) or {}, batches(unique, BATCH))
+        for data in pages:
             for m in data.get("exactMatches") or []:
                 f = CfFile.from_api(m["file"])
                 if f.fingerprint is not None:
@@ -122,8 +122,8 @@ class CurseForgeClient:
     def mods(self, mod_ids: list[int]) -> dict[int, dict]:
         out: dict[int, dict] = {}
         ids = sorted(set(mod_ids))
-        for i in range(0, len(ids), BATCH):
-            data = self._call("POST", "/v1/mods", json={"modIds": ids[i : i + BATCH]}) or []
+        for data in parallel_map(lambda chunk: self._call("POST", "/v1/mods", json={"modIds": chunk}) or [],
+                                 batches(ids, BATCH)):
             out.update({m["id"]: m for m in data})
         return out
 
@@ -156,8 +156,8 @@ class CurseForgeClient:
     def files(self, file_ids: list[int]) -> dict[str, CfFile]:
         out: dict[str, CfFile] = {}
         ids = sorted(set(file_ids))
-        for i in range(0, len(ids), BATCH):
-            data = self._call("POST", "/v1/mods/files", json={"fileIds": ids[i : i + BATCH]}) or []
+        for data in parallel_map(lambda chunk: self._call("POST", "/v1/mods/files", json={"fileIds": chunk}) or [],
+                                 batches(ids, BATCH)):
             for d in data:
                 f = CfFile.from_api(d)
                 out[f.id] = f

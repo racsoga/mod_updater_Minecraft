@@ -427,6 +427,12 @@ def resolve_all(
         return resolve_with_modrinth(mods, modrinth, **opts)
 
     phase("cf")
+    # Mientras CurseForge responde, se pide ya a Modrinth la versión de cada archivo por su hash
+    # (hace falta al final para los IDs de Modrinth): no depende de CurseForge.
+    from concurrent.futures import ThreadPoolExecutor
+    pool = ThreadPoolExecutor(max_workers=1)
+    mr_prefetch = pool.submit(modrinth.versions_from_hashes, [m.sha1 for m in mods])
+    pool.shutdown(wait=False)
     try:
         cf_results = resolve_with_curseforge(mods, curseforge, catalog=catalog, **opts)
     except CurseForgeAuthError:
@@ -479,7 +485,7 @@ def resolve_all(
     pending = [r for r in merged if r.source == CF and not any(src == MR for src, _ in r.known_ids)]
     if pending and MR not in failed:
         try:
-            mr_current = modrinth.versions_from_hashes([r.mod.sha1 for r in pending])
+            mr_current = mr_prefetch.result()
         except ApiError:
             failed.append(MR)
             mr_current = {}

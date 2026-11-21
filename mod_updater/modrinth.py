@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 import requests
 
-from .net import ApiError, request_with_retry
+from .net import ApiError, batches, parallel_map, request_with_retry
 
 BASE_URL = "https://api.modrinth.com"
 BATCH = 100
@@ -104,9 +104,9 @@ class ModrinthClient:
     def versions_from_hashes(self, sha1s: list[str]) -> dict[str, MrVersion]:
         """Identifica la versión actual de cada archivo. Devuelve {sha1: versión}."""
         out: dict[str, MrVersion] = {}
-        for i in range(0, len(sha1s), BATCH):
-            chunk = sha1s[i : i + BATCH]
-            data = self._call("POST", "/v2/version_files", json={"hashes": chunk, "algorithm": "sha1"}) or {}
+        for data in parallel_map(lambda chunk: self._call("POST", "/v2/version_files",
+                                                          json={"hashes": chunk, "algorithm": "sha1"}) or {},
+                                 batches(sha1s, BATCH)):
             out.update({h: MrVersion.from_api(v) for h, v in data.items()})
         return out
 
@@ -116,9 +116,9 @@ class ModrinthClient:
         """Última versión compatible (cualquier canal) por hash. {sha1: versión}."""
         out: dict[str, MrVersion] = {}
         body = {"algorithm": "sha1", "loaders": [loader], "game_versions": [game_version]}
-        for i in range(0, len(sha1s), BATCH):
-            chunk = sha1s[i : i + BATCH]
-            data = self._call("POST", "/v2/version_files/update", json={**body, "hashes": chunk}) or {}
+        for data in parallel_map(lambda chunk: self._call("POST", "/v2/version_files/update",
+                                                          json={**body, "hashes": chunk}) or {},
+                                 batches(sha1s, BATCH)):
             out.update({h: MrVersion.from_api(v) for h, v in data.items()})
         return out
 
