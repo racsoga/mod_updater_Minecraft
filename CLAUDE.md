@@ -1,6 +1,6 @@
 # Reglas del proyecto mod_updater_Minecraft
 
-Actualizador de mods de Minecraft (NeoForge 1.21.1) en Python. Planes: `docs/PLAN.md` (v1, CLI) y `docs/PLAN_v2.md` (interfaz gráfica). Repo privado: github.com/racsoga/mod_updater_Minecraft.
+Actualizador de mods de Minecraft (NeoForge 1.21.1) en Python. Planes: `docs/PLAN.md` (v1, CLI) y `docs/PLAN_v2.md` (interfaz gráfica). Repo **público**: github.com/racsoga/mod_updater_Minecraft (`main` protegida: exige que pasen los tests). Copia privada con el historial anterior: `mod_updater_Minecraft-archivo`.
 
 ## Seguridad (obligatorio)
 - **Nunca** leer, imprimir, copiar ni commitear `.env`, la API key de CurseForge ni ninguna otra credencial. Para saber si hay key, basta con que el programa la use; no mostrarla ni en parte.
