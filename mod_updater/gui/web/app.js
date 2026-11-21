@@ -146,6 +146,7 @@ async function openSetup(mode) {
   if (!first) renderProfiles();
   if (!first) refreshBackups();
   $("#allow-beta").checked = !!s.allow_beta;
+  $("#check-updates").checked = s.check_updates !== false;
   $("#backups").value = s.backups_to_keep;
   fillLanguages(s.language || "auto");
   $("#btn-nokey").hidden = $("#nokey-note").hidden = !first || state.has_key;
@@ -165,6 +166,7 @@ async function saveSetup(useCurseforge) {
       key: $("#cf-key").value.trim(),
       use_curseforge: useCurseforge,
       allow_beta: $("#allow-beta").checked,
+      check_updates: $("#check-updates").checked,
       backups_to_keep: Number($("#backups").value) || 1,
       language: $("#language").value,
     });
@@ -1403,11 +1405,31 @@ function wireRecover() {
   $("#btn-recover-skip").addEventListener("click", startScan);
 }
 
+/* ================================================================ nuevas versiones de la app */
+
+async function checkAppUpdate() {
+  const info = await api().app_update();
+  const pill = $("#app-update");
+  pill.hidden = !info;
+  if (!info) return;
+  pill.innerHTML = `<span class="long">${esc(t("up.pill", { version: info.version }))}</span>`
+    + `<span class="short">${esc(t("up.pill_short", { version: info.version }))}</span>`;
+  pill.title = t("up.pill", { version: info.version });
+  pill.onclick = () => {
+    openExDrawer(t("up.title", { version: info.version }), t("up.sub"));
+    $("#ex-d-body").innerHTML = `<p class="ex-note">${esc(t("up.sha_hint"))}</p>`
+      + (info.notes_html ? `<div class="cl-html">${info.notes_html}</div>` : "");
+    $("#ex-d-foot").innerHTML = `<button class="btn-primary" type="button" id="up-download">${esc(t("up.download"))}</button>`;
+    $("#up-download").addEventListener("click", () => api().open_url(info.url));
+  };
+}
+
 async function boot() {
   wire();
   wireRecover();
   state = await api().get_state();
   applyStrings(state.lang, state.strings);
+  if (state.settings.setup_done) checkAppUpdate();  // en segundo plano; sin red no molesta
   if (!state.settings.setup_done) return openSetup("setup");
   const pending = await api().interrupted();
   if (pending) showRecover(pending);

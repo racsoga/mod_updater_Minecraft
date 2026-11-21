@@ -29,6 +29,7 @@ class Settings:
     setup_done: bool = False  # ya pasó por la pantalla de bienvenida
     use_curseforge: bool = True  # False = "continuar sin key (solo Modrinth)"
     language: str = "auto"  # "auto" = idioma de la interfaz de Windows; o "es", "en"
+    check_updates: bool = True  # avisar de nuevas versiones de la app (como mucho una vez al día)
     answers: dict = field(default_factory=dict)  # cuestionario de Sugerencias (por perfil)
     profiles: list = field(default_factory=list)  # [{id, name, mods_dir, minecraft_version, loader, ...}]
     active_profile: str = ""  # id del perfil activo (sus campos se reflejan arriba)

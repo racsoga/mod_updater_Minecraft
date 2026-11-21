@@ -35,6 +35,7 @@ Mod Updater revisa la carpeta `mods` de tu Minecraft, reconoce cada mod por su h
 - *(próxima versión)* **Explorar e instalar mods nuevos**: busca en CurseForge y Modrinth a la vez, solo lo que existe para tu versión, y los instala con sus dependencias.
 - *(próxima versión)* **Perfiles**: varias carpetas o instancias (launcher oficial, CurseForge, Prism, MultiMC, Modrinth App), cada una con su versión y cargador.
 - *(próxima versión)* **Compartir tu lista de mods**: exporta e importa la lista (o un `.mrpack`) para que otra persona tenga exactamente los mismos mods.
+- *(próxima versión)* **Sugerencias para tu partida**: qué quitar, revisar, mantener y añadir según cómo juegas, siempre con el motivo.
 - *(próxima versión)* **Ver los cambios antes de actualizar**: las notas de todas las versiones entre la tuya y la nueva, con avisos de posibles cambios que rompen partidas.
 
 <p align="center">

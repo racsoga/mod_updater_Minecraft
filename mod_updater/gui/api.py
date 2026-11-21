@@ -23,6 +23,8 @@ import webbrowser
 from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Callable
+
+import requests
 from urllib.parse import urlparse
 
 from .. import credentials, i18n
@@ -31,6 +33,7 @@ from .. import profiles
 from ..categories import Catalog
 from ..launchers import detect_instances, loader_version_for
 from .. import modlist as modlist_mod
+from ..app_update import check_latest
 from ..knowledge import load_knowledge
 from ..suggest import STYLES, suggest
 from .. import __version__
@@ -343,6 +346,8 @@ class Api:
         s.use_curseforge = bool(data.get("use_curseforge", True))
         if "allow_beta" in data:
             s.allow_beta = bool(data["allow_beta"])
+        if "check_updates" in data:
+            s.check_updates = bool(data["check_updates"])
         if "backups_to_keep" in data:
             s.backups_to_keep = max(1, int(data["backups_to_keep"] or 1))
         s.setup_done = True
@@ -627,6 +632,16 @@ class Api:
                 if have is not None and r.known_ids & group_keys and not (r.known_ids & have.known_ids):
                     out.append(t("ex.overlap", name=r.name, other=have.name, group=t(f"sug.group.{g['grupo']}")))
         return out
+
+    # ------------------------------------------------------------------ nuevas versiones de la app
+
+    def app_update(self) -> dict | None:
+        """¿Hay una versión nueva de Mod Updater? (None si no, sin red o si el aviso está desactivado)."""
+        if not self._settings().check_updates:
+            return None
+        session = requests.Session()
+        session.headers["User-Agent"] = DEFAULT_USER_AGENT
+        return check_latest(__version__, cache_path=self._cache() / "app_update.json", session=session)
 
     # ------------------------------------------------------------------ sugerencias
 

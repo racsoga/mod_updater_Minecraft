@@ -375,6 +375,13 @@
 
   "ui.tabs_label": "Secciones",
   "profile.default_name": "Principal",
+  "up.pill": "Mod Updater {version} disponible · Ver novedades",
+  "up.pill_short": "Versión {version}",
+  "up.title": "Mod Updater {version}",
+  "up.sub": "Versión nueva disponible",
+  "up.sha_hint": "La descarga se abre en el navegador, en la página oficial de Releases. Antes de abrir el .exe, comprueba que su SHA-256 coincide con el de la página (ver Preguntas frecuentes).",
+  "up.download": "Descargar",
+  "up.setting": "Avisar cuando haya una versión nueva de Mod Updater",
   "ui.tab_mods": "Mis mods",
   "cat.tecnologia": "Tecnología",
   "cat.magia": "Magia",
