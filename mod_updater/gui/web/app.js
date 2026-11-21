@@ -1069,10 +1069,14 @@ function renderSuggestResults(r) {
       ${items.length ? `<ul class="sg-list">${items.map((it, i) => `<li>
           ${checkable ? `<input class="check" type="checkbox" id="sg-${kind}-${i}" data-sg="${kind}" data-i="${i}">` : ""}
           <label${checkable ? ` for="sg-${kind}-${i}"` : ""}><span class="sg-name">${esc(it.name)}</span>
-            <span class="sg-why">${esc(it.reason)}</span></label></li>`).join("")}</ul>`
+            <span class="sg-why">${esc(it.reason)}</span>${it.note ? `<span class="sg-note">${esc(it.note)}</span>` : ""}</label></li>`).join("")}</ul>`
         : `<p class="an-hint">${esc(t("sg.none"))}</p>`}
     </section>`;
-  $("#sg-cols").innerHTML = col("remove", r.remove, true) + col("keep", r.keep, false) + col("add", r.add, true);
+  $("#sg-cols").innerHTML = col("remove", r.remove, true) + col("review", r.review, true)
+    + col("keep", r.keep, false) + col("add", r.add, true);
+  $("#sg-unchanged").hidden = !r.unchanged.length;
+  $("#sg-unchanged-title").textContent = t("sg.unchanged", { count: r.unchanged.length });
+  $("#sg-unchanged-list").textContent = r.unchanged.join(" · ");
   $("#sg-limit").hidden = !r.over_limit;
   $("#sg-limit").textContent = t("sg.over_limit", { count: r.over_limit, max: r.answers.max });
   $("#sg-form").hidden = true;
@@ -1092,7 +1096,7 @@ async function applySuggestions() {
   const sel = { remove: [], add: [] };
   for (const c of marked) {
     const item = SG.result[c.dataset.sg][Number(c.dataset.i)];
-    if (c.dataset.sg === "remove") sel.remove.push(item.file);
+    if (c.dataset.sg === "remove" || c.dataset.sg === "review") sel.remove.push(item.file);
     else sel.add.push({ source: item.source, id: item.id, name: item.name });
   }
   openExDrawer(t("sg.review_title"), t("sg.apply_marked", { count: marked.length }));

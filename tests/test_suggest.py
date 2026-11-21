@@ -78,18 +78,47 @@ def test_known_incompatibility():
     assert "Embeddium" in names(r["remove"])
 
 
-def test_abandoned_and_orphan_library():
+def test_abandoned_and_orphan_library_go_to_review_not_remove():
     old = inst("Viejo", 1, updated="2024-02-01T00:00:00Z")
     lib = inst("Lib Sola", 2, cats=["librerias"])
     r = run([old, lib, inst("Otro", 3)])
-    rm = {i["name"]: i for i in r["remove"]}
-    assert "2024" in rm["Viejo"]["reason"] and "Lib Sola" in rm
+    rv = {i["name"]: i for i in r["review"]}
+    assert "2024" in rv["Viejo"]["reason"] and "opcional" in rv["Lib Sola"]["reason"]
+    assert names(r["remove"]) == []
 
 
-def test_relaxed_difficulty_removes_hard_mods_and_never_adds_them():
+def test_no_library_is_ever_in_remove():
+    # Una librería que además está en un grupo de solapamiento (inventado) o es pesada: nunca en Quitar
+    lib = inst("Lib Pesada", 2, cats=["librerias"], size=90_000_000)
+    r = run([lib, inst("Otro", 3)], pc="justo")
+    assert "Lib Pesada" not in names(r["remove"])
+
+
+def test_abandoned_with_alternative_goes_to_remove():
+    old_map = inst("JourneyMap", 32274, cats=["mapas"], updated="2024-01-01T00:00:00Z")
+    r = run([inst("Xaero's Minimap", 263420, cats=["mapas"]), old_map])
+    assert "JourneyMap" in names(r["remove"]) and "JourneyMap" not in names(r["review"])
+
+
+def test_unchanged_section_has_the_rest():
+    r = run([inst("Create", 328085), inst("Cualquiera", 77, cats=["comida"])], styles=["tecnologia"])
+    assert "Cualquiera" in r["unchanged"] and "Create" not in r["unchanged"]
+
+
+@pytest.mark.parametrize("difficulty", ["relajada", "normal"])
+def test_hard_mods_go_to_review_unless_challenge(difficulty):
+    infernal = inst("AtomicStryker's Infernal Mobs", 227875, cats=["mobs"])
+    r = run([infernal], styles=["combate"], difficulty=difficulty)
+    assert "AtomicStryker's Infernal Mobs" in names(r["review"]) and not r["remove"]
+    assert "dificultad" in r["review"][0]["reason"]
+    assert "AtomicStryker's Infernal Mobs" not in names(r["keep"])
+    r = run([infernal], styles=["combate"], difficulty="reto")
+    assert "AtomicStryker's Infernal Mobs" not in names(r["review"])
+
+
+def test_relaxed_difficulty_never_adds_hard_mods():
     born = inst("Born in Chaos", 686437, cats=["mobs"])
     r = run([born], styles=["combate"], difficulty="relajada")
-    assert "Born in Chaos" in names(r["remove"])
     assert not any(a["id"] == "686437" or a["name"] == "Born in Chaos" for a in r["add"])
     r = run([], styles=["combate"], difficulty="reto")
     assert any(a["name"] == "Born in Chaos" for a in r["add"])
@@ -98,7 +127,7 @@ def test_relaxed_difficulty_removes_hard_mods_and_never_adds_them():
 def test_weak_pc_flags_heavy_mods_and_suggests_performance():
     heavy = inst("Enorme", 5, size=90_000_000)
     r = run([heavy], pc="justo")
-    assert "Enorme" in names(r["remove"])
+    assert "Enorme" in names(r["review"])
     assert {"Sodium", "ModernFix"} <= {a["name"] for a in r["add"]}
 
 
@@ -113,6 +142,13 @@ def test_adds_only_what_exists_for_the_version_and_not_installed():
     added = {a["name"] for a in r["add"]}
     assert "Mekanism" in added and "Create" not in added and "Immersive Engineering" not in added
     assert "Create" in names(r["keep"])
+    assert next(k for k in r["keep"] if k["name"] == "Create")["reason"].startswith("Encaja con tu partida")
+
+
+def test_worldgen_additions_warn_about_new_chunks():
+    r = run([], styles=["exploracion"])
+    terra = next(a for a in r["add"] if a["name"] == "Terralith")
+    assert "mundos nuevos" in terra["note"]
 
 
 def test_does_not_add_one_from_a_group_already_covered():
@@ -130,7 +166,7 @@ def test_max_mods_limit():
 
 def test_every_reason_is_a_sentence():
     r = run([inst("Xaero's Minimap", 263420), inst("JourneyMap", 32274)], styles=["magia"])
-    for col in ("remove", "keep", "add"):
+    for col in ("remove", "review", "keep", "add"):
         for item in r[col]:
             assert item["reason"] and not item["reason"].startswith("sug.")
 

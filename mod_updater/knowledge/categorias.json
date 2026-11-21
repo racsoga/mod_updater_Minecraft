@@ -71,9 +71,25 @@
       "nombre": "Create Aeronautics: Mekanism Compatibility",
       "categoria": "tecnologia",
       "motivo": "Compatibilidad entre dos mods de tecnología."
+    },
+    "445838": {
+      "nombre": "Animal Feeding Trough",
+      "categoria": "comida",
+      "motivo": "Comederos para granjas de animales."
+    },
+    "938917": {
+      "nombre": "Accessories",
+      "categoria": "librerias",
+      "motivo": "API de ranuras de accesorios que usan otros mods."
     }
   },
-  "modrinth": {},
+  "modrinth": {
+    "jtmvUHXj": {
+      "nombre": "Accessories",
+      "categoria": "librerias",
+      "motivo": "API de ranuras de accesorios que usan otros mods."
+    }
+  },
   "palabras_clave": {
     "backpack": "almacenamiento",
     "backpacks": "almacenamiento",

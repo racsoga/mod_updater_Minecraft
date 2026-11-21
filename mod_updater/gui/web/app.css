@@ -463,7 +463,11 @@ mark.cl-flag { background: rgba(242, 181, 68, 0.18); color: var(--warn); border-
 .sg-card:has(input:focus-visible) { outline: 2px solid var(--link); outline-offset: 2px; }
 .sg-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
 .sg-honest { margin: 0 0 14px; font-size: 14px; color: var(--muted); }
-.sg-cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 16px; }
+.sg-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 16px; }
+.sg-note { font-size: 12.5px; color: var(--warn); }
+.sg-unchanged { padding: 16px 20px; margin-bottom: 16px; }
+.sg-unchanged summary { cursor: pointer; font-weight: 600; font-size: 15px; }
+.sg-unchanged p { margin: 12px 0 0; font-size: 13px; line-height: 1.7; color: var(--muted-strong); }
 .sg-col { padding: 20px 20px 12px; }
 .sg-col h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 17px; }
 .sg-count { font-size: 13px; color: var(--muted); font-weight: 500; }
@@ -552,7 +556,7 @@ mark.cl-flag { background: rgba(242, 181, 68, 0.18); color: var(--warn); border-
   .row:not(.manual) .source { display: none; }
   .apply-row { grid-template-columns: 32px minmax(0, 1fr) auto; }
   .an-grid { grid-template-columns: minmax(0, 1fr); }
-  .sg-cols { grid-template-columns: minmax(0, 1fr); }
+
   .an-card { padding: 14px 16px; }
   .an-card-value { font-size: 22px; }
   .an-chart { padding: 20px 16px 16px; }
