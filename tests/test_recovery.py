@@ -1,6 +1,7 @@
 """Actualizaciones interrumpidas: la poda no borra lo necesario, Deshacer no toca lo que no
 cambió y la app ofrece restaurar al abrirse."""
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -18,6 +19,8 @@ from test_downloader import NEW_CONTENT, FakeResp, make_res, mods_dir, run  # no
 from test_gui_api import make_api  # noqa: F401 (fixture)
 
 ROOT = Path(__file__).resolve().parent.parent
+# El proceso hijo escribe en UTF-8 sea cual sea la codificación de la consola (cp1252 en Windows).
+UTF8_ENV = {**os.environ, "PYTHONIOENCODING": "utf-8"}
 
 
 def interrupt_after_step1(mods_dir, old="a-1.0.jar", new="a-1.1.jar", project="a"):
@@ -122,11 +125,11 @@ def test_api_offers_and_restores_interrupted(make_api, mods_dir):
 
 def test_cli_argparse_errors_translated():
     out = subprocess.run([sys.executable, "-m", "mod_updater", "--lang", "es", "--opcion-que-no-existe"],
-                         cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+                         cwd=ROOT, capture_output=True, text=True, encoding="utf-8", env=UTF8_ENV)
     assert out.returncode == 2
     assert "unrecognized arguments" not in out.stderr and "--opcion-que-no-existe" in out.stderr
     out = subprocess.run([sys.executable, "-m", "mod_updater", "--lang", "es", "--keep-backups", "x"],
-                         cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+                         cwd=ROOT, capture_output=True, text=True, encoding="utf-8", env=UTF8_ENV)
     assert "invalid" not in out.stderr and "--keep-backups" in out.stderr
 
 
