@@ -69,7 +69,7 @@ def make_api(tmp_path, monkeypatch):
 
     def factory(key=SECRET, cf=OkClient):
         a = Api(tmp_path / "settings.json", get_key=lambda: (key, "keyring" if key else None),
-                cf_factory=cf, run_async=lambda fn: fn())
+                cf_factory=cf, run_async=lambda fn: fn(), cache_dir=tmp_path / "cache")
         a._saved = saved
         return a
     return factory

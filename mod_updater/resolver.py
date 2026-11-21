@@ -11,6 +11,8 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import Protocol, Sequence, TypeVar
 
+from . import categories as categories_mod
+from .categories import Catalog
 from .i18n import t
 from .curseforge import CfFile, CurseForgeAuthError, CurseForgeClient, latest_file_ids
 from .net import ApiError
@@ -87,6 +89,11 @@ class Resolution:
     new_deps: list[Dep] = field(default_factory=list)
     known_ids: set[tuple[str, str]] = field(default_factory=set)
     required_by: list[str] = field(default_factory=list)
+    categories: list[str] = field(default_factory=list)  # propias (categories.py), la principal primero
+
+    @property
+    def is_library(self) -> bool:
+        return categories_mod.is_library(self.categories)
 
     @property
     def name(self) -> str:
@@ -212,6 +219,7 @@ def resolve_with_modrinth(
             project_url=f"https://modrinth.com/mod/{project.get('slug') or cur.project_id}",
             slug=project.get("slug"),
             icon_url=project.get("icon_url"),
+            categories=categories_mod.from_modrinth(project),
             current_version=cur.version_number or mod.version,
             current_channel=cur.version_type,
             current_date=cur.date_published,
@@ -268,6 +276,7 @@ def resolve_with_curseforge(
     loader: str,
     game_version: str,
     allow_beta: bool = False,
+    catalog: Catalog | None = None,
 ) -> list[Resolution]:
     matches = client.match_fingerprints([m.cf_fingerprint for m in mods])
     cf_mods = client.mods([mt.mod_id for mt in matches.values()]) if matches else {}
@@ -306,6 +315,7 @@ def resolve_with_curseforge(
             project_url=cf_project_url(info, match.mod_id),
             slug=info.get("slug"),
             icon_url=(info.get("logo") or {}).get("thumbnailUrl"),
+            categories=categories_mod.from_curseforge(info, catalog),
             current_version=mod.version or cur.display_name,
             current_channel=cur.version_type,
             current_date=cur.date_published,
@@ -359,6 +369,7 @@ def resolve_all(
     allow_beta: bool = False,
     on_phase=None,
     failed: list[str] | None = None,
+    catalog: Catalog | None = None,
 ) -> list[Resolution]:
     """CurseForge como fuente principal y Modrinth como respaldo.
 
@@ -380,7 +391,7 @@ def resolve_all(
 
     phase("cf")
     try:
-        cf_results = resolve_with_curseforge(mods, curseforge, **opts)
+        cf_results = resolve_with_curseforge(mods, curseforge, catalog=catalog, **opts)
     except CurseForgeAuthError:
         raise
     except ApiError:
@@ -411,17 +422,20 @@ def resolve_all(
                 mr.add_note(t("note.cf_gone_mr"))
                 mr.known_ids |= cf.known_ids
                 mr.duplicate = mr.duplicate or cf.duplicate
+                mr.categories = mr.categories or cf.categories
                 merged.append(mr)
         elif mr.status == ACTUALIZABLE:
             # CurseForge no deja descargar; Modrinth sí.
             mr.add_note(t("note.cf_blocked_use_mr"))
             mr.known_ids |= cf.known_ids
+            mr.categories = cf.categories or mr.categories  # CurseForge es la fuente principal
             mr.duplicate = mr.duplicate or cf.duplicate
             merged.append(mr)
         else:
             # Modrinth no ofrece la versión nueva: queda como descarga manual desde la web.
             cf.add_note(t("note.download_manually", url=cf.project_url))
             cf.known_ids |= mr.known_ids
+            cf.categories = cf.categories or mr.categories
             merged.append(cf)
 
     # IDs de Modrinth de los mods resueltos por CurseForge (una petición en lote).
