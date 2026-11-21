@@ -124,6 +124,10 @@ class CurseForgeClient:
             out.update({m["id"]: m for m in data})
         return out
 
+    def categories(self) -> list[dict]:
+        """Categorías de la clase Mods (id, slug, name, parentCategoryId, iconUrl...)."""
+        return self._call("GET", "/v1/categories", params={"gameId": MINECRAFT_GAME_ID, "classId": 6}) or []
+
     def files(self, file_ids: list[int]) -> dict[str, CfFile]:
         out: dict[str, CfFile] = {}
         ids = sorted(set(file_ids))

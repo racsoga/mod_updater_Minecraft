@@ -24,6 +24,7 @@ from typing import Callable
 from urllib.parse import urlparse
 
 from .. import credentials, i18n
+from ..categories import Catalog
 from ..config import DEFAULT_USER_AGENT, default_mods_dir
 from ..curseforge import LOADER_TYPES, CurseForgeAuthError, CurseForgeClient
 from ..deps import DependencyFinder, DepPlan, plan_with_dependencies
@@ -111,6 +112,9 @@ def serialize(results: list[Resolution], plan: DepPlan, *, allow_beta: bool = Fa
             "sub": sub,
             "neededBy": list(r.required_by) if r.kind == INSTALL else [],
             "checked": id(r) in in_plan,
+            "cat": r.categories[0] if r.categories else None,  # categoría principal (categories.py)
+            "cats": list(r.categories),
+            "lib": r.is_library,
         })
     return {"rows": rows, "details": list(plan.ignored), "warnings": list(plan.conflicts)}
 
@@ -314,8 +318,11 @@ class Api:
             progress(code, labels.get(code, code))
 
         failed: list[str] = []
+        # Jerarquía de categorías de CurseForge (caché de una semana; sin key o sin red, la caché o nada).
+        catalog = Catalog.load(self._cache() / "categories.json", curseforge=cf)
         try:
-            results = resolve_all(mods, curseforge=cf, modrinth=mr, on_phase=on_phase, failed=failed, **opts)
+            results = resolve_all(mods, curseforge=cf, modrinth=mr, on_phase=on_phase, failed=failed,
+                                  catalog=catalog, **opts)
         except CurseForgeAuthError:
             notices.append(t("notice.key_rejected"))
             cf = None

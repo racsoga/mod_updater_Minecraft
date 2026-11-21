@@ -365,5 +365,21 @@
   "recover.restore": "Restore",
   "recover.skip": "Not now",
   "recover.continue": "Check mods",
-  "recover.done_title": "Folder restored."
+  "recover.done_title": "Folder restored.",
+
+  "ui.tabs_label": "Sections",
+  "ui.tab_mods": "My mods",
+  "cat.tecnologia": "Technology",
+  "cat.magia": "Magic",
+  "cat.aventura": "Adventure and exploration",
+  "cat.mundo": "World and biomes",
+  "cat.mobs": "Mobs and combat",
+  "cat.construccion": "Building and decoration",
+  "cat.almacenamiento": "Storage",
+  "cat.comida": "Food and farming",
+  "cat.mapas": "Maps and information",
+  "cat.calidad_vida": "Quality of life",
+  "cat.rendimiento": "Performance",
+  "cat.librerias": "Libraries",
+  "cat.otras": "Other"
 }

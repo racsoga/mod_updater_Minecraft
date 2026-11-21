@@ -365,5 +365,21 @@
   "recover.restore": "Restaurar",
   "recover.skip": "Ahora no",
   "recover.continue": "Revisar mods",
-  "recover.done_title": "Carpeta restaurada."
+  "recover.done_title": "Carpeta restaurada.",
+
+  "ui.tabs_label": "Secciones",
+  "ui.tab_mods": "Mis mods",
+  "cat.tecnologia": "Tecnología",
+  "cat.magia": "Magia",
+  "cat.aventura": "Aventura y exploración",
+  "cat.mundo": "Mundo y biomas",
+  "cat.mobs": "Mobs y combate",
+  "cat.construccion": "Construcción y decoración",
+  "cat.almacenamiento": "Almacenamiento",
+  "cat.comida": "Comida y granjas",
+  "cat.mapas": "Mapas e información",
+  "cat.calidad_vida": "Calidad de vida",
+  "cat.rendimiento": "Rendimiento",
+  "cat.librerias": "Librerías",
+  "cat.otras": "Otras"
 }
