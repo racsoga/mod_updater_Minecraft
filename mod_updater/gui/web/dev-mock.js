@@ -14,7 +14,18 @@
   const load = async code => (cache[code] ??= await (await fetch(`../../locales/${code}.json`)).json());
   const resolve = code => (["es", "en"].includes(code) ? code : "es");
   const strings = async code => ({ ...(await load("en")), ...(await load(resolve(code))) });
-  const state = async () => ({ settings: { ...settings }, default_mods_dir: settings.mods_dir,
+  // Perfiles de ejemplo (?oneprofile: solo uno). Carpetas inventadas.
+  let profs = [
+    { id: "principal", name: "Principal", mods_dir: settings.mods_dir, minecraft_version: "1.21.1", loader: "neoforge", active: true, exists: true },
+    { id: "servidor", name: "Servidor con Ana", mods_dir: "C:\\Users\\Ana\\curseforge\\minecraft\\Instances\\Servidor\\mods", minecraft_version: "1.21.1", loader: "neoforge", active: false, exists: true },
+    { id: "antiguo", name: "Antiguo 1.20.1", mods_dir: "D:\\Juegos\\viejo\\mods", minecraft_version: "1.20.1", loader: "forge", active: false, exists: false },
+  ];
+  if (params.has("oneprofile")) profs = profs.slice(0, 1);
+  // Los ajustes de arriba reflejan el perfil activo (como en la app real).
+  const activeView = () => { const a = profs.find(p => p.active);
+    return { mods_dir: a.mods_dir, minecraft_version: a.minecraft_version, loader: a.loader }; };
+  const state = async () => ({ settings: { ...settings, ...(params.has("done") ? activeView() : {}), active_profile: profs.find(p => p.active).id },
+    profiles: params.has("done") ? profs.map(p => ({ ...p })) : [], same_folder: [], default_mods_dir: settings.mods_dir,
     folder: { exists: true, jars: 125, minecraft_version: "1.21.1", loader: "neoforge" },
     has_key: !!keySource, key_hint: keySource === "keyring" ? "••••3f9a" : keySource === "env" ? "••••c0de" : null, key_source: keySource,
     loaders, languages, lang: resolve(settings.language), strings: await strings(settings.language) });
@@ -36,6 +47,15 @@
   const emit = (e, p) => window.onBackend(e, p);
   window.pywebview = { api: {
     get_state: state,
+    profile_switch: async id => { profs.forEach(p => p.active = p.id === id); return { ok: true, state: await state() }; },
+    profile_rename: async (id, name) => { profs.find(p => p.id === id).name = name.trim() || "?"; return { ok: true, state: await state() }; },
+    profile_remove: async id => { const was = profs.find(p => p.id === id).active; profs = profs.filter(p => p.id !== id);
+      if (was) profs[0].active = true; return { ok: true, switched: was, state: await state() }; },
+    profile_detect: async () => [{ launcher: "prism", name: "Fabric con amigos", mods_dir: "C:\\Users\\Ana\\AppData\\Roaming\\PrismLauncher\\instances\\Amigos\\minecraft\\mods",
+      loader: "fabric", minecraft_version: "1.21.1", exists: true }],
+    profile_add: async d => { const id = "nuevo" + profs.length; profs.push({ id, name: d.name || "Nuevo", mods_dir: d.mods_dir,
+      minecraft_version: d.minecraft_version || "1.21.1", loader: d.loader || "neoforge", active: false, exists: true });
+      return { ok: true, id, state: await state() }; },
     get_strings: async code => ({ lang: resolve(code), strings: await strings(code) }),
     mc_versions: async include => [...new Set(["26.3", "26.2", "26.1.2", "26.1.1", "26.1", "1.21.11", "1.21.10", "1.21.1", "1.21", "1.20.1", ...(include || [])])],
     peek: async () => (await state()).folder,

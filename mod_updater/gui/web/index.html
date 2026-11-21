@@ -15,7 +15,10 @@
     <h1 class="brand"><img class="brand-logo" src="logo.svg" alt="" width="32" height="32">Mod Updater</h1>
     <span class="spacer"></span>
     <!-- Hueco para el selector de perfil (hito 5 del plan v3). -->
-    <span id="profile-slot"></span>
+    <span id="profile-slot" hidden>
+      <label class="sr-only" for="profile-select" data-i18n="profile.select"></label>
+      <select class="select profile-select" id="profile-select"></select>
+    </span>
     <span class="chip hide-sm" id="chip-folder" hidden></span>
     <span class="chip" id="chip-env" hidden></span>
     <button class="navbtn" type="button" id="btn-rescan" hidden data-i18n-aria-label="ui.rescan">
@@ -38,6 +41,21 @@
       <h2 id="setup-title"></h2>
       <p id="setup-deck"></p>
     </div>
+    <section class="panel profiles-panel" id="profiles-panel" aria-labelledby="profiles-title" hidden>
+      <div class="field">
+        <h3 class="label" id="profiles-title" data-i18n="profile.panel_title"></h3>
+        <p class="help" data-i18n="profile.panel_help"></p>
+        <ul class="prof-list" id="prof-list"></ul>
+        <p class="help bad" id="prof-warn" hidden></p>
+        <div class="row-inline prof-add">
+          <button class="btn-small" type="button" id="prof-detect" data-i18n="profile.detect"></button>
+          <button class="btn-small" type="button" id="prof-folder" data-i18n="profile.add_folder"></button>
+        </div>
+        <ul class="prof-list prof-found" id="prof-found"></ul>
+        <p class="help" id="prof-help" aria-live="polite"></p>
+      </div>
+    </section>
+
     <form class="panel" id="setup-form" novalidate>
       <div class="field">
         <span class="label" id="lbl-folder" data-i18n="ui.folder"></span>

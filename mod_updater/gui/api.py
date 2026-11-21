@@ -25,7 +25,9 @@ from urllib.parse import urlparse
 
 from .. import credentials, i18n
 from ..analysis import analyze
+from .. import profiles
 from ..categories import Catalog
+from ..launchers import detect_instances
 from ..changelog import changelog_for
 from ..explore import PAGE_SIZE, _installed_index, detail as explore_detail_of, search as explore_search_in
 from ..config import DEFAULT_USER_AGENT, default_mods_dir
@@ -195,6 +197,8 @@ class Api:
             "languages": [{"value": "auto", "label": None}] + [{"value": c, "label": LANGUAGE_NAMES[c]} for c in i18n.SUPPORTED],
             "lang": lang,
             "strings": i18n.strings(lang),
+            "profiles": profiles.listing(s),
+            "same_folder": profiles.same_folder(s),
         }
 
     def mc_versions(self, include: list[str] | None = None) -> list[str]:
@@ -215,6 +219,76 @@ class Api:
             return None
         path = picked[0] if isinstance(picked, (list, tuple)) else picked
         return {"path": path, "folder": peek_folder(Path(path))}
+
+    # ------------------------------------------------------------------ perfiles
+
+    def _reset_session(self) -> None:
+        """Al cambiar de perfil, lo revisado del anterior ya no vale."""
+        self._results, self._plan, self._rows, self._row_s = [], None, [], []
+        self._explore_cache.clear()
+        self._changelogs.clear()
+        self._install = []
+
+    def profile_switch(self, profile_id: str) -> dict:
+        if not self._busy.acquire(blocking=False):
+            return {"ok": False, "message": t("apply.busy")}
+        try:
+            s = self._settings()
+            profiles.switch(s, str(profile_id))
+            save_settings(s, self._settings_file)
+            self._reset_session()
+        except KeyError:
+            return {"ok": False, "message": t("profile.not_found")}
+        finally:
+            self._busy.release()
+        return {"ok": True, "state": self.get_state()}
+
+    def profile_detect(self) -> list[dict]:
+        """Instancias de launchers que aún no son un perfil."""
+        known = {os.path.normcase(os.path.normpath(p.get("mods_dir", ""))) for p in self._settings().profiles}
+        try:
+            found = detect_instances()
+        except OSError:
+            return []
+        return [i for i in found if os.path.normcase(os.path.normpath(i["mods_dir"])) not in known]
+
+    def profile_add(self, data: dict) -> dict:
+        data = data or {}
+        mods_dir = Path(str(data.get("mods_dir") or "")).expanduser()
+        if not mods_dir.is_dir():
+            return {"ok": False, "message": t("setup.err_folder", path=mods_dir)}
+        peek = peek_folder(mods_dir)
+        loader = data.get("loader") or peek.get("loader") or "neoforge"
+        version = data.get("minecraft_version") or peek.get("minecraft_version") or "1.21.1"
+        if loader not in LOADER_TYPES:
+            loader = "neoforge"
+        s = self._settings()
+        name = str(data.get("name") or "").strip() or mods_dir.parent.name or t("profile.default_name")
+        pid = profiles.add(s, name=name, mods_dir=str(mods_dir), minecraft_version=version, loader=loader)
+        save_settings(s, self._settings_file)
+        return {"ok": True, "id": pid, "state": self.get_state()}
+
+    def profile_rename(self, profile_id: str, name: str) -> dict:
+        s = self._settings()
+        try:
+            profiles.rename(s, str(profile_id), name)
+        except KeyError:
+            return {"ok": False, "message": t("profile.not_found")}
+        save_settings(s, self._settings_file)
+        return {"ok": True, "state": self.get_state()}
+
+    def profile_remove(self, profile_id: str) -> dict:
+        """Quita el perfil de la lista; su carpeta y sus mods no se tocan."""
+        s = self._settings()
+        was_active = s.active_profile == profile_id
+        try:
+            profiles.remove(s, str(profile_id))
+        except ValueError:
+            return {"ok": False, "message": t("profile.last")}
+        save_settings(s, self._settings_file)
+        if was_active:
+            self._reset_session()
+        return {"ok": True, "switched": was_active, "state": self.get_state()}
 
     def test_key(self, key: str = "") -> dict:
         """Prueba la key escrita (o la que está en uso si viene vacía). Nunca la devuelve."""
