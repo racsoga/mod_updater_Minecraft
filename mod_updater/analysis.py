@@ -43,7 +43,7 @@ def _orphans(installed: list[Resolution]) -> list[Resolution]:
         for r in remaining:
             if not r.is_library:
                 continue
-            own_ids = {r.mod.mod_id, *r.mod.extra_mod_ids} - {None} if r.mod else set()
+            own_ids = _ids(r)
             others_keys = needed_keys - {d.key for d in r.current_deps}
             if not (r.known_ids & others_keys) and not (own_ids & needed_ids):
                 found.append(r)
@@ -53,7 +53,31 @@ def _orphans(installed: list[Resolution]) -> list[Resolution]:
         remaining = [r for r in remaining if r not in found]
 
 
-def analyze(results: list[Resolution], *, include_libraries: bool = False, now: float | None = None) -> dict:
+def _ids(r: Resolution) -> set[str]:
+    return {r.mod.mod_id, *r.mod.extra_mod_ids} - {None} if r.mod else set()
+
+
+def _orphan_notes(orphans: list[Resolution], installed: list[Resolution]) -> list[dict]:
+    """Para cada librería sin usar: quién la usa de forma opcional y si solo la necesita otra
+    librería que tampoco usa nadie (p. ej. Placebo, que solo pide Apothic Attributes)."""
+    out = []
+    for o in orphans:
+        ids = _ids(o)
+        optional_by = sorted((r.name for r in installed if r is not o and r.mod and ids & set(r.mod.optional)),
+                             key=str.lower)
+        needed_by = sorted((x.name for x in orphans if x is not o and (
+            (x.mod and ids & set(x.mod.requires)) or (o.known_ids & {d.key for d in x.current_deps}))), key=str.lower)
+        out.append({"name": o.name, "size": o.mod.size, "optional_by": optional_by, "needed_by_orphans": needed_by})
+    return out
+
+
+def _old(iso: str | None, now: float) -> bool:
+    ts = _timestamp(iso)
+    return ts is not None and now - ts > STALE_DAYS * 24 * 3600
+
+
+def analyze(results: list[Resolution], *, include_libraries: bool = False, now: float | None = None,
+            game_version: str | None = None) -> dict:
     now = time.time() if now is None else now
     installed = [r for r in results if r.mod is not None]
 
@@ -83,19 +107,25 @@ def analyze(results: list[Resolution], *, include_libraries: bool = False, now: 
     heaviest = [{"name": r.name, "size": r.mod.size}
                 for r in sorted(installed, key=lambda r: -r.mod.size)[:TOP_HEAVIEST]]
 
-    stale = []
+    # Sin actualizar en más de un año: "posiblemente abandonado" si el proyecto entero lleva más de
+    # un año sin versiones; "sin versión nueva para esta versión" si sí publica, pero para otras.
+    abandoned, no_version = [], []
     for r in installed:
-        ts = _timestamp(r.project_updated)
-        if ts is not None and now - ts > STALE_DAYS * 24 * 3600:
-            stale.append({"name": r.name, "date": r.project_updated, "url": r.project_url})
-    stale.sort(key=lambda s: s["date"])
+        if _old(r.project_updated, now):
+            abandoned.append({"name": r.name, "date": r.project_updated, "url": r.project_url})
+        elif r.project_updated and _old(r.version_updated, now):
+            no_version.append({"name": r.name, "date": r.version_updated, "url": r.project_url,
+                               "project_date": r.project_updated})
+    abandoned.sort(key=lambda s: s["date"])
+    no_version.sort(key=lambda s: s["date"])
 
     sides = Counter(r.side or "unknown" for r in installed)
     return {
         "by_category": by_category,
         "totals": totals,
         "heaviest": heaviest,
-        "stale": stale,
-        "orphans": [{"name": r.name, "size": r.mod.size} for r in _orphans(installed)],
+        "stale": {"abandoned": abandoned, "no_version": no_version},
+        "game_version": game_version,
+        "orphans": _orphan_notes(_orphans(installed), installed),
         "sides": {k: sides.get(k, 0) for k in ("client", "server", "both", "unknown")},
     }

@@ -106,8 +106,10 @@
         totals: { mods: 29, libraries: 7, size: 186400000, up_to_date: 25, updates: 4, sources: { curseforge: 24, modrinth: 4, none: 1 } },
         heaviest: [{ name: "Create", size: 19100000 }, { name: "Mekanism", size: 15800000 }, { name: "Alex's Mobs", size: 14300000 },
           { name: "Applied Energistics 2", size: 9900000 }, { name: "Immersive Engineering", size: 8700000 }],
-        stale: [{ name: "Mod de ejemplo", date: "2024-10-15T00:00:00Z", url: "https://example.org" }],
-        orphans: [{ name: "Cloth Config API", size: 1200000 }],
+        stale: { abandoned: [{ name: "Mod de ejemplo", date: "2024-10-15T00:00:00Z", url: "https://example.org" }],
+                 no_version: [{ name: "Croptopia", date: "2025-02-03T00:00:00Z", url: "https://example.org" }] },
+        game_version: "1.21.1",
+        orphans: [{ name: "Cloth Config API", size: 1200000, optional_by: ["Sound Physics Remastered"], needed_by_orphans: [] }],
         sides: { client: 5, server: 1, both: 21, unknown: 2 } };
     },
     // ?interrupted: simula que la última actualización se cortó a medias

@@ -1,0 +1,21 @@
+{
+  "formato": 1,
+  "descripcion": "Correcciones de categoría para mods que las reglas de categories.py no clasifican bien. Clave: id del proyecto en la fuente. 'categoria' es una de las 12 propias (categories.OURS). 'nombre' y 'motivo' solo documentan.",
+  "curseforge": {
+    "412082": {"nombre": "Supplementaries", "categoria": "construccion", "motivo": "Sobre todo bloques decorativos; CurseForge lo tiene en Miscelánea."},
+    "245755": {"nombre": "Waystones", "categoria": "aventura", "motivo": "Viajar entre piedras de teletransporte."},
+    "428151": {"nombre": "Icarus", "categoria": "aventura", "motivo": "Alas para volar: transporte."},
+    "250832": {"nombre": "OpenBlocks Elevator", "categoria": "aventura", "motivo": "Ascensores: transporte."},
+    "820977": {"nombre": "Create: Central Kitchen", "categoria": "comida", "motivo": "Addon de Create para cocinar."},
+    "1249131": {"nombre": "Create: Integrated Farming", "categoria": "comida", "motivo": "Addon de Create para granjas."},
+    "64760": {"nombre": "Security Craft", "categoria": "tecnologia", "motivo": "Bloques de seguridad y redstone; los minerales son secundarios."},
+    "254284": {"nombre": "AmbientSounds", "categoria": "calidad_vida", "motivo": "Sonidos de ambiente."},
+    "238551": {"nombre": "GraveStone Mod", "categoria": "calidad_vida", "motivo": "Guarda el inventario al morir."},
+    "423421": {"nombre": "Jump Over Fences", "categoria": "calidad_vida", "motivo": "Saltar vallas."},
+    "561885": {"nombre": "Just Zoom", "categoria": "calidad_vida", "motivo": "Zoom con una tecla."},
+    "388800": {"nombre": "Polymorph", "categoria": "calidad_vida", "motivo": "Elegir entre recetas en conflicto."},
+    "254268": {"nombre": "Torchmaster", "categoria": "mobs", "motivo": "Antorchas que impiden la aparición de mobs."},
+    "1536749": {"nombre": "Create Aeronautics: Mekanism Compatibility", "categoria": "tecnologia", "motivo": "Compatibilidad entre dos mods de tecnología."}
+  },
+  "modrinth": {}
+}

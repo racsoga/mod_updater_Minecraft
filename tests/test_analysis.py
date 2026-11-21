@@ -44,7 +44,7 @@ modId = "emi"
 type = "optional"
 '''
     meta = read_metadata(jar({"META-INF/neoforge.mods.toml": toml}))
-    assert meta["requires"] == ["mezzconfig"]
+    assert meta["requires"] == ["mezzconfig"] and meta["optional"] == ["emi"]
 
 
 def test_forge_mandatory_dependencies():
@@ -77,13 +77,13 @@ def test_fabric_dependencies_and_environment():
 
 
 def mod(name, *, cats=(), status=AL_DIA, source=CF, pid=None, size=1_000_000, updated="2026-06-01T00:00:00Z",
-        deps=(), requires=(), mod_id=None, side=None):
+        version_updated=None, deps=(), requires=(), optional=(), mod_id=None, side=None):
     m = ModFile(path=Path(f"{name}.jar"), file_name=f"{name}.jar", size=size, sha1=name, sha512="",
-                cf_fingerprint=0, mod_id=mod_id or name.lower(), requires=list(requires))
+                cf_fingerprint=0, mod_id=mod_id or name.lower(), requires=list(requires), optional=list(optional))
     pid = pid or name
     return Resolution(mod=m, status=status, source=source, project_id=pid, project_name=name,
-                      categories=list(cats), project_updated=updated, current_deps=list(deps),
-                      known_ids={(source, pid)} if source else set(), side=side)
+                      categories=list(cats), project_updated=updated, version_updated=version_updated or updated,
+                      current_deps=list(deps), known_ids={(source, pid)} if source else set(), side=side)
 
 
 def test_counts_by_category_without_libraries():
@@ -123,14 +123,19 @@ def test_heaviest_top_five():
     assert data["heaviest"][0]["size"] == 7_000_000
 
 
-def test_stale_more_than_a_year_and_without_date():
+def test_stale_abandoned_versus_no_new_version_for_this_minecraft():
     data = analyze([
         mod("Viejo", cats=["magia"], updated="2024-03-01T10:00:00Z"),
         mod("Reciente", cats=["magia"], updated="2026-10-01T10:00:00Z"),
-        mod("SinFecha", cats=["magia"], updated=None),
-    ], now=NOW)
-    assert [s["name"] for s in data["stale"]] == ["Viejo"]
-    assert data["stale"][0]["date"].startswith("2024-03-01")
+        # Activo para otras versiones de Minecraft, pero nada nuevo para la nuestra desde 2025-01
+        mod("OtraVersion", cats=["magia"], updated="2026-09-01T10:00:00Z", version_updated="2025-01-10T10:00:00Z"),
+        mod("SinFecha", cats=["magia"], updated=None, version_updated=None),
+    ], now=NOW, game_version="1.21.1")
+    assert [s["name"] for s in data["stale"]["abandoned"]] == ["Viejo"]
+    assert data["stale"]["abandoned"][0]["date"].startswith("2024-03-01")
+    nv = data["stale"]["no_version"]
+    assert [s["name"] for s in nv] == ["OtraVersion"] and nv[0]["date"].startswith("2025-01-10")
+    assert data["game_version"] == "1.21.1"
 
 
 def test_orphan_libraries_by_api_and_by_jar():
@@ -139,8 +144,19 @@ def test_orphan_libraries_by_api_and_by_jar():
     cloth = mod("Cloth Config", cats=["librerias"], pid="348521", mod_id="cloth_config")
     waystones = mod("Waystones", cats=["calidad_vida"], deps=[Dep(CF, "531761")])  # necesita Balm (API)
     mowzie = mod("Mowzie's Mobs", cats=["mobs"], requires=["geckolib"])  # necesita GeckoLib (jar)
-    data = analyze([balm, geckolib, cloth, waystones, mowzie], now=NOW)
+    sound = mod("Sound Physics", cats=["calidad_vida"], optional=["cloth_config"])  # la usa opcionalmente
+    data = analyze([balm, geckolib, cloth, waystones, mowzie, sound], now=NOW)
     assert [o["name"] for o in data["orphans"]] == ["Cloth Config"]
+    assert data["orphans"][0]["optional_by"] == ["Sound Physics"]
+
+
+def test_library_needed_only_by_an_orphan_says_so():
+    placebo = mod("Placebo", cats=["librerias"], pid="1", mod_id="placebo")
+    apothic = mod("Apothic Attributes", cats=["librerias"], pid="2", mod_id="apothic_attributes", requires=["placebo"])
+    orphans = {o["name"]: o for o in analyze([placebo, apothic, mod("X", cats=["magia"])], now=NOW)["orphans"]}
+    assert set(orphans) == {"Placebo", "Apothic Attributes"}
+    assert orphans["Placebo"]["needed_by_orphans"] == ["Apothic Attributes"]
+    assert orphans["Apothic Attributes"]["needed_by_orphans"] == []
 
 
 def test_library_needed_only_by_another_library_is_not_orphan():
@@ -159,6 +175,7 @@ def test_sides():
 def test_empty_collection():
     data = analyze([], now=NOW)
     assert data["by_category"] == [] and data["totals"]["mods"] == 0 and data["heaviest"] == []
+    assert data["stale"] == {"abandoned": [], "no_version": []}
 
 
 def test_side_from_modrinth_for_curseforge_mods():

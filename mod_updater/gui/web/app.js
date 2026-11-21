@@ -589,8 +589,8 @@ function renderAnalysis(d) {
   const T = d.totals;
 
   $("#an-cards").innerHTML = [
-    anCard(t("an.card_mods"), T.mods),
-    anCard(t("an.card_libs"), T.libraries),
+    anCard(t("an.card_total"), t("an.files", { count: T.mods }),
+      t("an.total_sub", { mods: T.mods - T.libraries, libs: T.libraries })),
     anCard(t("an.card_size"), fmtSize(T.size)),
     anCard(t("an.card_status"), T.up_to_date, t("an.card_updates", { count: T.updates })),
     anCard(t("an.card_sources"), T.sources.curseforge + T.sources.modrinth,
@@ -600,7 +600,7 @@ function renderAnalysis(d) {
 
   const bars = d.by_category.map(b => ({
     id: b.cat, count: b.count, mods: b.mods,
-    name: t(`cat.${b.cat}`), short: t(`cat_short.${b.cat}`), icon: catIcon(b.cat, 18),
+    name: t(`cat.${b.cat}`), short: t(`cat_short.${b.cat}`), icon: catIcon(b.cat, 26),
   }));
   if (!bars.some(b => b.id === anSelected)) anSelected = bars.length ? bars[0].id : null;
   renderBlockChart($("#an-chart"), bars, {
@@ -621,13 +621,26 @@ function renderAnalysis(d) {
        <span class="an-meter" aria-hidden="true"><span style="width:${(d.sides[k] / sideMax) * 100}%"></span></span>
        <span class="an-num">${d.sides[k]}</span></li>`).join("");
 
-  $("#an-stale").innerHTML = d.stale.length
-    ? d.stale.map(s => `<li><span class="an-name">${s.url ? `<a href="${esc(s.url)}" data-external>${esc(s.name)}</a>` : esc(s.name)}</span>
-        <span class="an-num">${esc(fmtMonth(s.date))}</span></li>`).join("")
-    : `<li class="an-none">${esc(t("an.stale_none"))}</li>`;
+  const staleRows = list => list.map(s => `<li><span class="an-name">${s.url
+      ? `<a href="${esc(s.url)}" data-external>${esc(s.name)}</a>` : esc(s.name)}</span>
+      <span class="an-num">${esc(fmtMonth(s.date))}</span></li>`).join("");
+  const version = d.game_version || "";
+  const { abandoned, no_version: noVersion } = d.stale;
+  $("#an-stale").innerHTML = !abandoned.length && !noVersion.length
+    ? `<p class="an-hint">${esc(t("an.stale_none"))}</p>`
+    : [abandoned.length ? `<h4 class="an-sub">${esc(t("an.abandoned", { count: abandoned.length }))}</h4>
+         <p class="an-hint">${esc(t("an.abandoned_hint"))}</p><ul class="an-list">${staleRows(abandoned)}</ul>` : "",
+       noVersion.length ? `<h4 class="an-sub">${esc(t("an.no_version", { count: noVersion.length, version }))}</h4>
+         <p class="an-hint">${esc(t("an.no_version_hint", { version }))}</p><ul class="an-list">${staleRows(noVersion)}</ul>` : "",
+      ].join("");
 
   $("#an-orphans").innerHTML = d.orphans.length
-    ? d.orphans.map(o => `<li><span class="an-name">${esc(o.name)}</span><span class="an-num">${esc(fmtSize(o.size))}</span></li>`).join("")
+    ? d.orphans.map(o => {
+        const note = o.needed_by_orphans.length ? t("an.orphan_chain", { names: o.needed_by_orphans.join(", ") })
+          : o.optional_by.length ? t("an.orphan_optional", { names: o.optional_by.join(", ") }) : "";
+        return `<li><span class="an-name">${esc(o.name)}${note ? `<span class="an-note">${esc(note)}</span>` : ""}</span>
+          <span class="an-num">${esc(fmtSize(o.size))}</span></li>`;
+      }).join("")
     : `<li class="an-none">${esc(t("an.orphans_none"))}</li>`;
 }
 
@@ -640,7 +653,7 @@ function selectCategory(id) {
   }
   const bar = anData && anData.by_category.find(b => b.cat === id);
   $("#an-detail").innerHTML = bar
-    ? `<h4>${catIcon(id, 16)}<span>${esc(t("an.detail_title", { count: bar.count, name: t(`cat.${id}`) }))}</span></h4>
+    ? `<h4>${catIcon(id, 22)}<span>${esc(t("an.detail_title", { count: bar.count, name: t(`cat.${id}`) }))}</span></h4>
        <ul class="an-chips">${bar.mods.map(m => `<li>${esc(m)}</li>`).join("")}</ul>`
     : "";
 }

@@ -255,3 +255,46 @@ def test_every_category_has_a_name_in_both_languages():
         table = i18n._load(code)
         for c in OURS + (OTHER,):
             assert table.get(f"cat.{c}") and table.get(f"cat_short.{c}"), f"{code}: falta cat(_short).{c}"
+
+
+# --------------------------------------------------------------------------- prioridad y correcciones
+
+
+def test_specific_subcategory_beats_generic_primary():
+    # Waystones: principal technology-player-transport (subcategoría) -> aventura (transporte)
+    assert from_curseforge(cf_info(414, 422, 419, 435, primary=414))[0] == "aventura"
+    # Integrated Farming: principal "create" (addon -> tecnología) y technology-farming -> comida
+    assert from_curseforge(cf_info(6484, 426, 412, 4843, 416, primary=6484))[0] == "comida"
+
+
+def test_technology_stays_when_nothing_more_specific():
+    # Create: technology + redstone + cosmetic + armas, todas de primer nivel
+    assert from_curseforge(cf_info(4558, 424, 412, 434, primary=412))[0] == "tecnologia"
+    # Mekanism: sus subcategorías también son de tecnología
+    assert from_curseforge(cf_info(434, 412, 420, 415, 413, primary=412))[0] == "tecnologia"
+
+
+def test_overrides_from_knowledge_base():
+    from mod_updater.categories import overrides
+    table = overrides()
+    assert table["curseforge"]["412082"] == "construccion"  # Supplementaries
+    assert table["curseforge"]["820977"] == "comida"  # Create: Central Kitchen
+    info = cf_info(425, 4558, 424, 420, primary=425) | {"id": 412082}
+    assert from_curseforge(info)[0] == "construccion"
+    # La corrección puede asignar una categoría que el mod no tenía en CurseForge
+    assert from_curseforge({"id": 254284, **cf_info(425)}) [0] == "calidad_vida"  # AmbientSounds
+
+
+def test_override_table_only_uses_valid_categories():
+    from mod_updater.categories import overrides
+    for source, table in overrides().items():
+        for pid, cat in table.items():
+            assert cat in OURS, f"{source} {pid}: {cat}"
+
+
+def test_modrinth_override():
+    from mod_updater.categories import overrides
+    table = overrides()
+    if table.get("modrinth"):
+        pid, cat = next(iter(table["modrinth"].items()))
+        assert from_modrinth({"id": pid, "categories": ["cursed"]})[0] == cat

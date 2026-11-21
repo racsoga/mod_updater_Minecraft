@@ -22,7 +22,7 @@ from pathlib import Path
 from .i18n import t
 from .murmur2 import curseforge_fingerprint
 
-CACHE_VERSION = 3  # 2: añade loader y mc_range; 3: requires y side
+CACHE_VERSION = 4  # 2: añade loader y mc_range; 3: requires y side; 4: optional
 
 # Dependencias que no son mods (el juego, el cargador, Java): no cuentan como "requeridas".
 _PLATFORM_IDS = {"minecraft", "neoforge", "forge", "java", "fabricloader", "fabric", "quilt_loader"}
@@ -43,6 +43,7 @@ class ModFile:
     loader: str | None = None
     mc_range: str | None = None
     requires: list[str] = field(default_factory=list)  # modIds obligatorios según el propio jar
+    optional: list[str] = field(default_factory=list)  # modIds que usa si están (opcionales)
     side: str | None = None  # "client" / "server" / "both" si el jar lo declara (Fabric)
 
     @property
@@ -82,6 +83,8 @@ def _fabric_metadata(jar: zipfile.ZipFile) -> dict:
         "version": data.get("version") if isinstance(data.get("version"), str) else None,
         "mc_range": mc if isinstance(mc, str) else None,
         "requires": [k for k in depends if k not in _PLATFORM_IDS],
+        "optional": [k for key in ("recommends", "suggests") if isinstance(data.get(key), dict)
+                     for k in data[key] if k not in _PLATFORM_IDS],
         "side": {"client": "client", "server": "server", "*": "both"}.get(env) if isinstance(env, str) else None,
     }
 
@@ -98,19 +101,32 @@ def _mc_range(data: dict, mod_id: str | None) -> str | None:
     return None
 
 
-def _toml_requires(data: dict) -> list[str]:
-    """modIds obligatorios de [[dependencies.*]] (NeoForge: type="required"; Forge: mandatory=true)."""
-    out: list[str] = []
+def _toml_deps(data: dict) -> tuple[list[str], list[str]]:
+    """(obligatorios, opcionales) de [[dependencies.*]]. NeoForge: type="required"/"optional";
+    Forge: mandatory=true/false. No cuentan "incompatible" ni "discouraged"."""
+    required: list[str] = []
+    optional: list[str] = []
     deps = data.get("dependencies") or {}
     for group in deps.values() if isinstance(deps, dict) else []:
         for d in group if isinstance(group, list) else []:
-            if not isinstance(d, dict):
+            if not isinstance(d, dict) or not isinstance(d.get("modId"), str) or d["modId"] in _PLATFORM_IDS:
                 continue
-            mod_id = d.get("modId")
-            required = str(d.get("type", "")).lower() == "required" or d.get("mandatory") is True
-            if required and isinstance(mod_id, str) and mod_id not in _PLATFORM_IDS and mod_id not in out:
-                out.append(mod_id)
-    return out
+            kind = str(d.get("type", "")).lower()
+            if kind == "required" or d.get("mandatory") is True:
+                target = required
+            elif kind == "optional" or d.get("mandatory") is False:
+                target = optional
+            else:
+                continue
+            if d["modId"] not in target:
+                target.append(d["modId"])
+    return required, [m for m in optional if m not in required]
+
+
+def _own_deps(data: dict, mods: list) -> dict:
+    own = {x.get("modId") for x in mods if isinstance(x, dict)}  # un jar puede traer varios mods
+    required, optional = _toml_deps(data)
+    return {"requires": [m for m in required if m not in own], "optional": [m for m in optional if m not in own]}
 
 
 def read_metadata(jar: zipfile.ZipFile) -> dict:
@@ -152,7 +168,7 @@ def read_metadata(jar: zipfile.ZipFile) -> dict:
         "version": version if isinstance(version, str) else None,
         "extra_mod_ids": [m.get("modId") for m in mods[1:] if isinstance(m, dict) and m.get("modId")],
         "mc_range": _mc_range(data, first.get("modId")),
-        "requires": [m for m in _toml_requires(data) if m not in {x.get("modId") for x in mods if isinstance(x, dict)}],
+        **_own_deps(data, mods),
     }
 
 
@@ -285,6 +301,7 @@ def scan_folder(
                 loader=info.get("loader"),
                 mc_range=info.get("mc_range"),
                 requires=info.get("requires", []),
+                optional=info.get("optional", []),
                 side=info.get("side"),
             )
         )

@@ -91,6 +91,7 @@ class Resolution:
     required_by: list[str] = field(default_factory=list)
     categories: list[str] = field(default_factory=list)  # propias (categories.py), la principal primero
     project_updated: str | None = None  # fecha de la última versión publicada del proyecto (ISO)
+    version_updated: str | None = None  # la de la última versión para esta versión de Minecraft y cargador
     side: str | None = None  # "client" / "server" / "both" / None (desconocido)
 
     @property
@@ -105,6 +106,12 @@ class Resolution:
 
     def add_note(self, text: str) -> None:
         self.note = "; ".join(filter(None, [self.note, text]))
+
+
+def _latest_date(dates: list[str | None]) -> str | None:
+    """La más reciente de varias fechas ISO (todas en el mismo formato de la API)."""
+    known = [d for d in dates if d]
+    return max(known) if known else None
 
 
 def mr_side(project: dict) -> str | None:
@@ -255,6 +262,7 @@ def resolve_with_modrinth(
         if not candidates:
             res.add_note(t("note.no_versions", game_version=game_version, loader=loader))
 
+        res.version_updated = _latest_date([cur.date_published] + [c.date_published for c in candidates])
         new = choose_update(cur, candidates, allow_beta)
         if new is None and (pre := newer_prerelease(cur, candidates)) is not None:
             res.newer_prerelease = pre.version_number
@@ -355,6 +363,7 @@ def resolve_with_curseforge(
         if not candidates:
             res.add_note(t("note.no_versions", game_version=game_version, loader=loader))
 
+        res.version_updated = _latest_date([cur.date_published] + [c.date_published for c in candidates or []])
         new = choose_update(cur, candidates, allow_beta)
         if new is None and (pre := newer_prerelease(cur, candidates)) is not None:
             res.newer_prerelease = guess_version(mod.file_name, mod.version, pre.file_name) or pre.display_name

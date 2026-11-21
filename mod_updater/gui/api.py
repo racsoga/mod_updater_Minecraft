@@ -437,7 +437,8 @@ class Api:
         """Cifras de la colección según la última revisión (pestaña Análisis)."""
         if not self._results:
             return {"ready": False}
-        return {"ready": True, **analyze(self._results, include_libraries=bool(include_libraries))}
+        return {"ready": True, **analyze(self._results, include_libraries=bool(include_libraries),
+                                          game_version=self._settings().minecraft_version)}
 
     # ------------------------------------------------------------------ backups y deshacer
 

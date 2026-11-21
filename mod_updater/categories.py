@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 
 
@@ -23,6 +24,7 @@ OURS: tuple[str, ...] = (
 OTHER = "otras"
 LIBRARY = "librerias"
 CACHE_MAX_AGE = 7 * 24 * 3600  # una semana
+KNOWLEDGE_FILE = Path(__file__).resolve().parent / "knowledge" / "categorias.json"
 
 # CurseForge, clase Mods (classId 6). Las específicas mandan sobre su padre
 # (p. ej. technology-farming es comida aunque su padre sea technology).
@@ -30,13 +32,14 @@ CF_SLUGS: dict[str, str] = {
     # Tecnología
     "technology": "tecnologia", "technology-automation": "tecnologia", "technology-energy": "tecnologia",
     "technology-genetics": "tecnologia", "technology-item-fluid-energy-transport": "tecnologia",
-    "technology-player-transport": "tecnologia", "technology-processing": "tecnologia", "redstone": "tecnologia",
+    "technology-processing": "tecnologia", "redstone": "tecnologia",
     "create": "tecnologia", "addons-buildcraft": "tecnologia", "addons-industrialcraft": "tecnologia",
     "addons-thermalexpansion": "tecnologia", "integrated-dynamics": "tecnologia",
     # Magia
     "magic": "magia", "addons-thaumcraft": "magia", "blood-magic": "magia",
     # Aventura y exploración
     "adventure-rpg": "aventura", "horror": "aventura", "twilight-forest": "aventura", "galacticraft": "aventura",
+    "technology-player-transport": "aventura",  # ascensores, waystones, alas: moverse por el mundo
     # Mundo y biomas
     "world-gen": "mundo", "world-biomes": "mundo", "world-dimensions": "mundo", "world-ores-resources": "mundo",
     "world-structures": "mundo", "skyblock": "mundo",
@@ -73,7 +76,7 @@ CF_TOP_IDS: dict[int, str] = {
 
 # Modrinth: solo las etiquetas de tipo "categories" (no los cargadores ni las resoluciones).
 MR_SLUGS: dict[str, str] = {
-    "technology": "tecnologia", "transportation": "tecnologia", "magic": "magia", "adventure": "aventura",
+    "technology": "tecnologia", "transportation": "aventura", "magic": "magia", "adventure": "aventura",
     "worldgen": "mundo", "mobs": "mobs", "equipment": "mobs", "decoration": "construccion",
     "storage": "almacenamiento", "food": "comida", "utility": "calidad_vida", "management": "calidad_vida",
     "optimization": "rendimiento", "library": "librerias",
@@ -151,25 +154,64 @@ def _cf_one(cat: dict, catalog: Catalog | None) -> str:
     return OTHER
 
 
+@lru_cache(maxsize=1)
+def overrides() -> dict[str, dict[str, str]]:
+    """Tabla de correcciones (`knowledge/categorias.json`): {fuente: {id de proyecto: categoría}}.
+    Para los mods que ninguna regla clasifica bien (p. ej. Supplementaries)."""
+    try:
+        data = json.loads(KNOWLEDGE_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {src: {str(pid): entry["categoria"] for pid, entry in (data.get(src) or {}).items()
+                  if isinstance(entry, dict) and entry.get("categoria") in OURS}
+            for src in ("curseforge", "modrinth")}
+
+
+def _with_override(cats: list[str], source: str, project_id) -> list[str]:
+    fixed = overrides().get(source, {}).get(str(project_id)) if project_id is not None else None
+    if not fixed:
+        return cats
+    return [fixed] + [c for c in cats if c != fixed]
+
+
+def _is_subcategory(cat: dict) -> bool:
+    """Las subcategorías de CurseForge (p. ej. technology-farming) son más específicas que las de
+    primer nivel, cuyo padre es la propia clase Mods (6)."""
+    parent = cat.get("parentCategoryId")
+    return bool(parent) and parent not in (6, cat.get("classId"))
+
+
 def from_curseforge(info: dict, catalog: Catalog | None = None) -> list[str]:
-    """Categorías propias de un mod de CurseForge; la de `primaryCategoryId` primero
-    (salvo que sea "otras" y haya alguna más)."""
+    """Categorías propias de un mod de CurseForge, la principal primero.
+
+    `primaryCategoryId` no se usa a ciegas: gana la categoría más específica (una subcategoría
+    gana a una de primer nivel) y, entre subcategorías, cualquier otra gana a Tecnología, que es la
+    más genérica (un addon de Create para granjas es de Comida). Entre categorías de primer nivel
+    decide la principal de CurseForge. "Otras" nunca es la principal si hay otra. La tabla de correcciones manda.
+    """
     raw = [c for c in (info.get("categories") or []) if isinstance(c, dict)]
-    primary = info.get("primaryCategoryId")
-    raw.sort(key=lambda c: c.get("id") != primary)  # estable: la principal primero
-    cats = _unique([_cf_one(c, catalog) for c in raw])
-    if cats[:1] == [OTHER] and LIBRARY in cats:
-        # Principal "miscelánea" pero marcado como librería (p. ej. Bookshelf): es una librería.
-        cats.remove(LIBRARY)
-        cats.insert(0, LIBRARY)
-    return _other_last(cats)
+    primary_id = info.get("primaryCategoryId")
+    scored = [(_cf_one(c, catalog), _is_subcategory(c), c.get("id") == primary_id, -i) for i, c in enumerate(raw)]
+    all_cats = _unique([s[0] for s in scored])
+    primary = next((s[0] for s in scored if s[2]), None)
+    if primary == LIBRARY or (primary == OTHER and LIBRARY in all_cats):
+        # Librería (también si la principal es "miscelánea" y está marcada como librería: Bookshelf).
+        best = LIBRARY
+    else:
+        content = [s for s in scored if s[0] not in (OTHER, LIBRARY)]
+        # (subcategoría, subcategoría que no es Tecnología, principal de CurseForge, orden)
+        best = max(content, key=lambda s: (s[1], s[1] and s[0] != "tecnologia", s[2], s[3]))[0] if content else (
+            LIBRARY if LIBRARY in all_cats else (OTHER if all_cats else None))
+    cats = ([best] if best else []) + [c for c in all_cats if c != best]
+    return _with_override(_other_last(cats), "curseforge", info.get("id"))
 
 
 def from_modrinth(project: dict) -> list[str]:
     """Categorías propias de un proyecto de Modrinth. La principal es la primera que no
-    sea "otras" (Modrinth no marca ninguna como principal)."""
+    sea "otras" (Modrinth no marca ninguna como principal); la tabla de correcciones manda."""
     slugs = list(project.get("categories") or []) + list(project.get("additional_categories") or [])
-    return _other_last(_unique([MR_SLUGS[s] for s in slugs if s in MR_SLUGS]))
+    cats = _other_last(_unique([MR_SLUGS[s] for s in slugs if s in MR_SLUGS]))
+    return _with_override(cats, "modrinth", project.get("id"))
 
 
 def is_library(cats: list[str]) -> bool:
