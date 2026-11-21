@@ -40,7 +40,10 @@ $env:MODUPDATER_ONEDIR = "1"
 if ($LASTEXITCODE -ne 0) { throw "Falló la compilación (carpeta)" }
 Remove-Item Env:MODUPDATER_ONEDIR
 $zip = "dist\ModUpdater-$version-carpeta.zip"
-Compress-Archive -Path dist\carpeta\ModUpdater -DestinationPath $zip -Force
+# Con zipfile de Python: Compress-Archive de PowerShell 5.1 falla con archivos que un antivirus
+# tiene abiertos un instante (p. ej. base_library.zip).
+& $Python -c "import shutil, sys; shutil.make_archive(sys.argv[1], 'zip', 'dist/carpeta', 'ModUpdater')" ($zip -replace '\.zip$', '')
+if ($LASTEXITCODE -ne 0) { throw "No se pudo crear el zip" }
 Remove-Item -Recurse -Force dist\carpeta
 
 foreach ($file in @("dist\ModUpdater.exe", $zip)) {
