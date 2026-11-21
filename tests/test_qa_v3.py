@@ -193,3 +193,16 @@ def test_abandoned_without_alternative_goes_to_review_not_remove(tmp_path):
                                  "https://cdn.modrinth.com/a b.png"])
 def test_image_urls_with_tricks_are_dropped(url):
     assert "img" not in sanitize_html(f'<p>x</p><img src="{url}">')
+
+
+def test_parallel_map_keeps_order_and_propagates_errors():
+    from mod_updater.net import ApiError, batches, parallel_map
+    assert batches(list(range(5)), 2) == [[0, 1], [2, 3], [4]]
+    assert parallel_map(lambda x: x * 2, [3, 1, 2]) == [6, 2, 4]
+
+    def boom(x):
+        if x == 2:
+            raise ApiError("caída")
+        return x
+    with pytest.raises(ApiError):
+        parallel_map(boom, [1, 2, 3])

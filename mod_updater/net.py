@@ -36,6 +36,24 @@ def _notify(url: str, reason: str, wait: float) -> None:
             pass
 
 
+MAX_PARALLEL = 4  # peticiones a la vez como mucho (lotes de una misma consulta)
+
+
+def batches(items: list, size: int) -> list[list]:
+    return [items[i : i + size] for i in range(0, len(items), size)]
+
+
+def parallel_map(fn: Callable, items: list, max_workers: int = MAX_PARALLEL) -> list:
+    """`[fn(x) for x in items]` con varias peticiones a la vez, en el mismo orden. Si una falla,
+    el error se propaga igual que en el bucle normal. Con un solo elemento, sin hilos."""
+    if len(items) <= 1:
+        return [fn(x) for x in items]
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=min(max_workers, len(items))) as pool:
+        return list(pool.map(fn, items))
+
+
 def request_with_retry(
     session: requests.Session,
     method: str,
