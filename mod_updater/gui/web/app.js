@@ -52,6 +52,7 @@ function show(screen) {
   if (MODS_SCREENS.includes(screen)) modsScreen = screen;
   // Pestañas: ocultas en la bienvenida (primera vez) y mientras se actualiza (no se puede salir).
   $("#tabs").hidden = (screen === "setup" && setupMode === "setup") || screen === "apply";
+  renderProfileSelect(screen);
   selectTab({ setup: "settings", analysis: "analysis", explore: "explore" }[screen] || "mods");
   $("#btn-rescan").hidden = screen !== "results";
   $("#actionbar").hidden = screen !== "results";
@@ -141,6 +142,8 @@ async function openSetup(mode) {
   keyStatus();
 
   $("#advanced").hidden = first;
+  $("#profiles-panel").hidden = first;
+  if (!first) renderProfiles();
   if (!first) refreshBackups();
   $("#allow-beta").checked = !!s.allow_beta;
   $("#backups").value = s.backups_to_keep;
@@ -619,6 +622,127 @@ async function openTab(name) {
   else goMods();
 }
 
+/* ================================================================ perfiles */
+
+const LAUNCHER_LABEL = { official: "profile.launcher_official", curseforge: "profile.launcher_curseforge",
+  prism: "profile.launcher_prism", multimc: "profile.launcher_multimc", modrinth: "profile.launcher_modrinth" };
+
+function envText(p) {
+  const loader = (state.loaders.find(l => l.value === p.loader) || {}).label || p.loader;
+  return p.minecraft_version && loader ? `${loader} ${p.minecraft_version}` : t("profile.env_unknown");
+}
+
+function renderProfileSelect(screen) {
+  const list = state.profiles || [];
+  const hide = !list.length || (screen === "setup" && setupMode === "setup") || screen === "apply";
+  $("#profile-slot").hidden = hide;
+  if (hide) return;
+  $("#profile-select").innerHTML = list.map(p =>
+    `<option value="${esc(p.id)}"${p.active ? " selected" : ""}>${esc(p.name)}${p.exists ? "" : esc(t("profile.missing_suffix"))}</option>`).join("");
+}
+
+async function switchProfile(id) {
+  const res = await api().profile_switch(id);
+  if (!res.ok) { $("#prof-help").className = "help bad"; $("#prof-help").textContent = res.message; renderProfileSelect(); return; }
+  setState(res.state);
+  // Lo revisado, analizado y buscado era del perfil anterior.
+  DATA = null; MODS = []; modsScreen = null; anSelected = null;
+  EX.cards = []; EX.started = false; BASKET.clear(); renderBasket();
+  startScan();
+}
+
+function setState(next) {
+  state = { ...state, ...next };
+}
+
+function renderProfiles(help = "") {
+  const list = state.profiles || [];
+  $("#prof-list").innerHTML = list.map(p => `<li data-prof="${esc(p.id)}">
+      <div class="prof-info">
+        <span class="prof-name"><span class="prof-label">${esc(p.name)}</span>
+          ${p.active ? `<span class="prof-tag">${esc(t("profile.active"))}</span>` : ""}
+          ${p.exists ? "" : `<span class="prof-tag bad">${esc(t("profile.missing"))}</span>`}</span>
+        <span class="prof-meta" title="${esc(p.mods_dir)}">${esc(envText(p))} · ${esc(p.mods_dir)}</span>
+      </div>
+      <div class="prof-actions">
+        ${p.active ? "" : `<button class="btn-small" type="button" data-prof-use>${esc(t("profile.use"))}</button>`}
+        <button class="btn-small" type="button" data-prof-rename>${esc(t("profile.rename"))}</button>
+        ${list.length > 1 ? `<button class="btn-small" type="button" data-prof-remove>${esc(t("profile.remove"))}</button>` : ""}
+      </div>
+    </li>`).join("");
+  const dup = state.same_folder || [];
+  $("#prof-warn").hidden = !dup.length;
+  $("#prof-warn").textContent = dup.map(names => t("profile.same_folder", { names: joinList(names) })).join(" ");
+  $("#prof-help").className = "help";
+  $("#prof-help").textContent = help;
+}
+
+async function addProfile(data) {
+  const res = await api().profile_add(data);
+  if (!res.ok) { $("#prof-help").className = "help bad"; $("#prof-help").textContent = res.message; return; }
+  setState(res.state);
+  renderProfileSelect("setup");
+  $("#prof-found").innerHTML = "";
+  renderProfiles(t("profile.added", { name: (res.state.profiles.find(p => p.id === res.id) || {}).name || "" }));
+}
+
+function wireProfiles() {
+  $("#profile-select").addEventListener("change", e => switchProfile(e.target.value));
+  $("#prof-list").addEventListener("click", async e => {
+    const li = e.target.closest("[data-prof]");
+    if (!li) return;
+    const id = li.dataset.prof;
+    if (e.target.closest("[data-prof-use]")) { switchProfile(id); return; }
+    const rm = e.target.closest("[data-prof-remove]");
+    if (rm) {
+      if (!rm.dataset.confirm) { rm.dataset.confirm = "1"; rm.textContent = t("profile.remove_confirm"); rm.classList.add("danger"); return; }
+      const res = await api().profile_remove(id);
+      if (!res.ok) { $("#prof-help").className = "help bad"; $("#prof-help").textContent = res.message; return; }
+      setState(res.state);
+      if (res.switched) { switchProfile(res.state.settings.active_profile); return; }
+      renderProfiles();
+      renderProfileSelect("setup");
+      return;
+    }
+    if (e.target.closest("[data-prof-rename]")) {
+      const label = li.querySelector(".prof-label");
+      const current = label.textContent;
+      label.innerHTML = `<input class="prof-rename" maxlength="60" aria-label="${esc(t("profile.name_label"))}" value="${esc(current)}">`;
+      const input = label.querySelector("input");
+      input.focus(); input.select();
+      const save = async () => {
+        const res = await api().profile_rename(id, input.value);
+        if (res.ok) setState(res.state);
+        renderProfiles();
+        renderProfileSelect("setup");
+      };
+      input.addEventListener("keydown", ev => {
+        if (ev.key === "Enter") { ev.preventDefault(); save(); }
+        if (ev.key === "Escape") { ev.preventDefault(); renderProfiles(); }
+      });
+      input.addEventListener("blur", save, { once: true });
+    }
+  });
+  $("#prof-detect").addEventListener("click", async () => {
+    $("#prof-help").className = "help"; $("#prof-help").textContent = t("profile.detecting");
+    const found = await api().profile_detect();
+    $("#prof-help").textContent = found.length ? "" : t("profile.detect_none");
+    $("#prof-found").innerHTML = found.map((f, i) => `<li>
+        <div class="prof-info"><span class="prof-name">${esc(f.name)} <span class="prof-tag">${esc(t(LAUNCHER_LABEL[f.launcher] || "profile.launcher_official"))}</span></span>
+          <span class="prof-meta" title="${esc(f.mods_dir)}">${esc(envText(f))} · ${esc(f.mods_dir)}</span></div>
+        <div class="prof-actions"><button class="btn-small" type="button" data-found="${i}">${esc(t("profile.add"))}</button></div>
+      </li>`).join("");
+    $("#prof-found").onclick = e => {
+      const b = e.target.closest("[data-found]");
+      if (b) addProfile(found[Number(b.dataset.found)]);
+    };
+  });
+  $("#prof-folder").addEventListener("click", async () => {
+    const res = await api().choose_folder();
+    if (res) addProfile({ mods_dir: res.path });
+  });
+}
+
 /* ================================================================ explorar */
 
 const BASKET = new Map();    // clave "fuente:id" -> tarjeta
@@ -951,6 +1075,7 @@ function wireTabs() {
 
 function wire() {
   wireTabs();
+  wireProfiles();
   wireExplore();
   wireChangelog();
   wireAnalysis();

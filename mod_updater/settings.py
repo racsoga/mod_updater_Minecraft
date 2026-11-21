@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
 from .config import default_mods_dir
@@ -29,6 +29,8 @@ class Settings:
     setup_done: bool = False  # ya pasó por la pantalla de bienvenida
     use_curseforge: bool = True  # False = "continuar sin key (solo Modrinth)"
     language: str = "auto"  # "auto" = idioma de la interfaz de Windows; o "es", "en"
+    profiles: list = field(default_factory=list)  # [{id, name, mods_dir, minecraft_version, loader, ...}]
+    active_profile: str = ""  # id del perfil activo (sus campos se reflejan arriba)
 
     @property
     def mods_path(self) -> Path:
@@ -50,12 +52,20 @@ def load_settings(path: Path | None = None) -> Settings:
     for k, v in (data.items() if isinstance(data, dict) else []):
         if k in known:
             setattr(s, k, v)
+    if not isinstance(s.profiles, list):
+        s.profiles = []
+    from . import profiles  # aquí para no crear un import circular
+    profiles.ensure(s)
+    profiles.apply_active(s)
     s.backups_to_keep = max(1, int(s.backups_to_keep or 1))
     return s
 
 
 def save_settings(s: Settings, path: Path | None = None) -> None:
     path = path or settings_path()
+    from . import profiles
+    profiles.ensure(s)
+    profiles.sync_active(s)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(asdict(s), ensure_ascii=False, indent=2), encoding="utf-8")
