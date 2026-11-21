@@ -144,3 +144,17 @@ def test_install_plan_adds_dependencies_skips_installed_and_reports_manual(tmp_p
     assert a.install_start()["ok"] is True
     assert started == [(["JEI", "MezzConfig"], [100000, 100001])]
     assert a.install_start()["ok"] is False  # el plan ya se ha usado
+
+
+def test_different_mods_with_the_same_name_are_not_merged():
+    cf = Cf([cf_mod(1, "Backpacks", "backpacks-cf", author="Ana")])
+    mr = Mr([mr_hit("ZZZ", "Backpacks", "backpacks-mr")])  # mismo nombre, otro slug y otro autor
+    cards = search(cf, mr, query="", category=None, sort="popular", page=0, installed=[], **OPTS)
+    assert [(c["source"], c["also_on"]) for c in cards] == [(CF, []), (MR, [])]
+
+
+def test_same_name_and_author_is_the_same_mod():
+    cf = Cf([cf_mod(1, "Mochilas", "mochilas-forge", author="Otro")])
+    mr = Mr([mr_hit("ZZZ", "Mochilas", "mochilas")])
+    cards = search(cf, mr, query="", category=None, sort="popular", page=0, installed=[], **OPTS)
+    assert len(cards) == 1 and cards[0]["also_on"] == [MR]

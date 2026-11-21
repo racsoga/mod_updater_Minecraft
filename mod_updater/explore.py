@@ -64,6 +64,18 @@ def _keys(card: dict) -> set[str]:
     return {k for k in (name_key(card["name"]), name_key(card.get("slug"))) if k}
 
 
+def _same_mod(a: dict, b: dict) -> bool:
+    """¿Es el mismo mod en las dos fuentes? Mismo slug, o mismo nombre y mismo autor. Dos mods
+    distintos pueden llamarse igual, así que el nombre solo no basta."""
+    if a["source"] == b["source"]:
+        return a["id"] == b["id"]
+    slug_a, slug_b = name_key(a.get("slug")), name_key(b.get("slug"))
+    if slug_a and slug_a == slug_b:
+        return True
+    return name_key(a["name"]) == name_key(b["name"]) and bool(name_key(a["author"])) \
+        and name_key(a["author"]) == name_key(b["author"])
+
+
 def _installed_index(installed: list[Resolution]) -> tuple[set[tuple[str, str]], set[str]]:
     ids: set[tuple[str, str]] = set()
     names: set[str] = set()
@@ -91,16 +103,13 @@ def search(curseforge, modrinth, *, query: str, category: str | None, sort: str,
 
     # Fusión sin duplicados: CurseForge primero (fuente principal); de Modrinth solo lo que no esté ya.
     merged: list[dict] = []
-    by_key: dict[str, dict] = {}
     for card in cf_cards + mr_cards:
-        twin = next((by_key[k] for k in _keys(card) if k in by_key), None)
+        twin = next((m for m in merged if _same_mod(m, card)), None)
         if twin is not None:
             if card["source"] not in twin["also_on"] and card["source"] != twin["source"]:
                 twin["also_on"].append(card["source"])
             continue
         merged.append(card)
-        for k in _keys(card):
-            by_key[k] = card
 
     if category:  # la API filtra por sus categorías; aquí, por la principal propia
         merged = [c for c in merged if category in c["cats"]]

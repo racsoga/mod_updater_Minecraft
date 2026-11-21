@@ -217,3 +217,19 @@ def test_scan_cache_is_per_folder(api, tmp_path):
     save_settings(s, api._settings_file)
     assert api.compare_profiles(pid)["different"] == ["jei"]
     assert api.compare_profiles(pid)["different"] == ["jei"]  # también con la caché ya escrita
+
+
+def test_mrpack_env_follows_the_side_of_each_mod():
+    def ver(pid):
+        return MrVersion(id="v" + pid, project_id=pid, name="v", version_number="1", version_type="release",
+                         date_published="2026-01-01",
+                         files=[MrFile(f"https://cdn.modrinth.com/data/{pid}/x.jar", f"{pid}.jar", "s1" + pid, "s512" + pid, 1, True)])
+    mods = [inst("Mapa", MR, "A"), inst("Servidor", MR, "B"), inst("Ambos", MR, "C"), inst("Nose", MR, "D")]
+    for r, side in zip(mods, ("client", "server", "both", None)):
+        r.side = side
+    blob, _ = build_mrpack(mods, {f"sha-{r.name}": ver(r.project_id) for r in mods}, name="x", minecraft="1.21.1",
+                           loader="neoforge", loader_version=None)
+    with zipfile.ZipFile(io.BytesIO(blob)) as z:
+        env = [f["env"] for f in json.loads(z.read("modrinth.index.json"))["files"]]
+    assert env == [{"client": "required", "server": "unsupported"}, {"client": "unsupported", "server": "required"},
+                   {"client": "required", "server": "required"}, {"client": "required", "server": "required"}]

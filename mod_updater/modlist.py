@@ -133,6 +133,12 @@ def compare_folders(a: list, b: list) -> dict:
     }
 
 
+MRPACK_ENV = {  # lado en que hace falta el mod -> campo env del .mrpack
+    "client": {"client": "required", "server": "unsupported"},
+    "server": {"client": "unsupported", "server": "required"},
+}
+
+
 def build_mrpack(results: list[Resolution], mr_by_sha1: dict, *, name: str, minecraft: str, loader: str,
                  loader_version: str | None) -> tuple[bytes, list[str]]:
     """Paquete .mrpack con los mods cuyo archivo exacto está en Modrinth (u otro dominio admitido).
@@ -147,7 +153,8 @@ def build_mrpack(results: list[Resolution], mr_by_sha1: dict, *, name: str, mine
             excluded.append(r.name)
             continue
         files.append({"path": f"mods/{f.filename}", "hashes": {"sha1": f.sha1, "sha512": f.sha512},
-                      "env": {"client": "required", "server": "required"}, "downloads": [f.url], "fileSize": f.size})
+                      "env": dict(MRPACK_ENV.get(r.side, {"client": "required", "server": "required"})),
+                      "downloads": [f.url], "fileSize": f.size})
     deps = {"minecraft": minecraft}
     if loader_version and loader in MRPACK_LOADER_KEYS:
         deps[MRPACK_LOADER_KEYS[loader]] = loader_version

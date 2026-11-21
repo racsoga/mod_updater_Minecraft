@@ -628,6 +628,7 @@
   "sug.reason.overlap": "Tienes dos {group}: {keep} y {other}. Basta con uno.",
   "sug.reason.incompatible": "Se sabe que da problemas junto con {other}.",
   "sug.reason.abandoned": "Sin versiones nuevas desde {year}: puede estar abandonado.",
+  "sug.reason.config_lib": "Librería de configuración: algunos mods la usan de forma opcional para su menú de ajustes, aunque no la pidan. Si la quitas, puede que ese menú desaparezca.",
   "sug.reason.orphan": "Librería que ningún mod pide: puede que algún mod la use de forma opcional (por ejemplo, pantallas de configuración).",
   "sug.reason.hard": "Sube mucho la dificultad.",
   "sug.reason.heavy": "Ocupa {size} MB: pesa bastante para un PC justo.",

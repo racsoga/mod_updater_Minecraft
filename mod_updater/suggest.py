@@ -55,14 +55,20 @@ def suggest(answers: dict, installed: list[Resolution], finder, *, knowledge: di
                    for o in inst)
 
     decided: dict[int, tuple[str, dict]] = {}  # id(r) -> (columna, sugerencia); la primera decisión gana
+    # Librerías de configuración: muchos mods las usan sin pedirlas, para su menú de ajustes.
+    config_libs = {id(r) for m in knowledge.get("configuracion", []) for r in find_installed(m)}
 
     def mark(r: Resolution, column: str, reason: str) -> None:
         if id(r) in decided or needed(r):
             return
+        if id(r) in config_libs:
+            column, reason = "review", t("sug.reason.config_lib")  # nunca a Quitar: solo el aviso
         if column == "remove" and r.is_library:
             column = "review"  # una librería nunca va a Quitar
         decided[id(r)] = (column, {"name": r.name, "reason": reason, "source": r.source, "id": r.project_id,
                                    "file": r.mod.file_name})
+
+    abandoned = {s["name"] for s in data["stale"]["abandoned"]}
 
     # --- Quitar: problemas claros
     groups_of: dict[int, str] = {}
@@ -78,7 +84,8 @@ def suggest(answers: dict, installed: list[Resolution], finder, *, knowledge: di
         if present:
             covered_groups.add(g["grupo"])
         if len(present) > 1:
-            keeper = next((r for r in present if needed(r)), present[0])
+            # Se queda el que otro necesita; si no, uno que siga activo (nunca el abandonado si hay alternativa).
+            keeper = next((r for r in present if needed(r)), None)                 or next((r for r in present if r.name not in abandoned), present[0])
             for o in present:
                 if o is not keeper:
                     mark(o, "remove", t("sug.reason.overlap", group=t(f"sug.group.{g['grupo']}"), keep=keeper.name, other=o.name))
@@ -99,14 +106,19 @@ def suggest(answers: dict, installed: list[Resolution], finder, *, knowledge: di
             continue
         year = (s["date"] or "")[:4]
         group = groups_of.get(id(r))
-        alternative = group and any(o is not r and decided.get(id(o), ("",))[0] != "remove" for o in members_of[group])
-        if alternative:  # hay otro mod instalado que hace lo mismo y que se queda
+        # Alternativa: otro mod instalado que hace lo mismo, que se queda y que sigue activo.
+        alternative = group and any(o is not r and o.name not in abandoned and decided.get(id(o), ("",))[0] != "remove"
+                                    for o in members_of[group])
+        if alternative:
             mark(r, "remove", t("sug.reason.abandoned_alt", year=year, group=t(f"sug.group.{group}")))
         else:
             mark(r, "review", t("sug.reason.abandoned", year=year))
     for o in data["orphans"]:
         if o["name"] in by_name:
             mark(by_name[o["name"]], "review", t("sug.reason.orphan"))
+    for r in inst:  # las de configuración que nadie pide, aunque CurseForge no las marque como librería
+        if id(r) in config_libs:
+            mark(r, "review", t("sug.reason.config_lib"))
     hard_keys = set().union(*(_keys(m) for m in knowledge["duros"])) if knowledge["duros"] else set()
     if difficulty != "reto":
         for m in knowledge["duros"]:

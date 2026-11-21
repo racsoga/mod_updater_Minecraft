@@ -573,7 +573,7 @@ class Api:
         args = dict(query=str(opts.get("query") or "").strip()[:100], category=opts.get("category") or None,
                     sort=opts.get("sort") or "popular", page=max(0, int(opts.get("page") or 0)),
                     hide_installed=bool(opts.get("hide_installed")))
-        key = (s.minecraft_version, s.loader, tuple(sorted(args.items())), len(self._results))
+        key = (str(s.mods_path), s.minecraft_version, s.loader, tuple(sorted(args.items())), len(self._results))
         if key not in self._explore_cache:
             cf, mr = self._clients(s)
             try:

@@ -206,3 +206,58 @@ def test_parallel_map_keeps_order_and_propagates_errors():
         return x
     with pytest.raises(ApiError):
         parallel_map(boom, [1, 2, 3])
+
+
+# ---------------------------------------------------------------- punto de control D
+
+
+def test_explore_cache_depends_on_the_profile_folder(tmp_path, monkeypatch):
+    from mod_updater.gui import api as api_mod
+    a_mods, b_mods = tmp_path / "a", tmp_path / "b"
+    a_mods.mkdir()
+    b_mods.mkdir()
+    a = make_api(tmp_path, a_mods)
+    calls = []
+    monkeypatch.setattr(api_mod, "explore_search_in", lambda *x, **k: calls.append(1) or [])
+    a.explore_search({})
+    # mismo perfil, otra carpeta desde Ajustes: "Ya instalado" se vuelve a calcular
+    assert a.save_setup({"mods_dir": str(b_mods), "loader": "neoforge", "minecraft_version": "1.21.1"})["ok"]
+    a.explore_search({})
+    assert len(calls) == 2
+
+
+def test_two_abandoned_mods_of_a_group_are_not_alternatives(tmp_path):
+    kb = load_knowledge()
+    xaero = inst("Xaero's Minimap", tmp_path, pid="263420", updated="2024-01-01T00:00:00Z", cats=("mapas",))
+    jm = inst("JourneyMap", tmp_path, pid="32274", updated="2024-01-01T00:00:00Z", cats=("mapas",))
+
+    class F:
+        def find(self, dep): return None
+    r = suggest({"styles": [], "difficulty": "normal", "pc": "potente"}, [xaero, jm], F(), knowledge=kb)
+    assert r["remove"] == [] or all("abandon" not in x["reason"] for x in r["remove"])
+    assert {x["name"] for x in r["review"] + r["remove"]} == {"Xaero's Minimap", "JourneyMap"}
+
+
+@pytest.mark.parametrize("players", ["solo", "servidor"])
+def test_config_libraries_only_get_a_notice(tmp_path, players):
+    kb = load_knowledge()
+    cloth = inst("Cloth Config API", tmp_path, pid="348521", cats=("calidad",))  # sin marcar como librería
+    cloth = replace(cloth, side="client")
+
+    class F:
+        def find(self, dep): return None
+    r = suggest({"styles": [], "difficulty": "normal", "pc": "potente", "players": players}, [cloth], F(), knowledge=kb)
+    assert r["remove"] == []
+    assert [x["name"] for x in r["review"]] == ["Cloth Config API"]
+    assert "ajustes" in r["review"][0]["reason"] or "settings" in r["review"][0]["reason"]
+
+
+def test_overlap_keeps_the_active_mod_and_removes_the_abandoned_one(tmp_path):
+    kb = load_knowledge()
+    old = inst("Xaero's Minimap", tmp_path, pid="263420", updated="2024-01-01T00:00:00Z", cats=("mapas",))
+    active = inst("JourneyMap", tmp_path, pid="32274", cats=("mapas",))
+
+    class F:
+        def find(self, dep): return None
+    r = suggest({"styles": [], "difficulty": "normal", "pc": "potente"}, [old, active], F(), knowledge=kb)
+    assert [x["name"] for x in r["remove"]] == ["Xaero's Minimap"]

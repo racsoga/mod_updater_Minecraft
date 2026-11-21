@@ -1,6 +1,6 @@
 """Base de conocimiento propia (JSON versionados en esta carpeta, con tests): correcciones de
 categoría, mods que hacen lo mismo, incompatibilidades conocidas, mods recomendados por estilo
-de partida y mods que suben mucho la dificultad."""
+de partida, mods que suben mucho la dificultad y librerías de configuración."""
 
 from __future__ import annotations
 
@@ -25,4 +25,5 @@ def load_knowledge() -> dict:
         "incompatibilidades": _read("incompatibilidades.json").get("pares") or [],
         "esenciales": _read("esenciales.json").get("estilos") or {},
         "duros": _read("duros.json").get("mods") or [],
+        "configuracion": _read("configuracion.json").get("mods") or [],
     }

@@ -628,6 +628,7 @@
   "sug.reason.overlap": "You have two {group}: {keep} and {other}. One is enough.",
   "sug.reason.incompatible": "Known to cause problems together with {other}.",
   "sug.reason.abandoned": "No new versions since {year}: it may be abandoned.",
+  "sug.reason.config_lib": "Config library: some mods use it optionally for their settings menu, even if they don't ask for it. If you remove it, that menu may disappear.",
   "sug.reason.orphan": "A library no mod asks for: some mod may use it optionally (for example, config screens).",
   "sug.reason.hard": "It makes the game much harder.",
   "sug.reason.heavy": "It takes {size} MB: quite heavy for a modest PC.",
