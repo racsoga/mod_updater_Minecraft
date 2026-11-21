@@ -122,6 +122,8 @@ def test_failure_placing_new_restores_old(mods_dir, monkeypatch):
     calls = []
 
     def flaky_replace(src, dst):
+        if not str(dst).endswith(".jar"):  # escrituras de cambios.json: no cuentan
+            return real_replace(src, dst)
         calls.append((src, dst))
         if len(calls) == 2:  # 2º paso: colocar el nuevo
             raise PermissionError("archivo en uso")

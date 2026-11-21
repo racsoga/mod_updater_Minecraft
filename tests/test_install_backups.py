@@ -53,7 +53,7 @@ def test_changelog_json(mods_dir):
         bad.download_url: FakeResp(status=404),
     })
     data = json.loads((backup / "cambios.json").read_text(encoding="utf-8"))
-    assert data["version"] == 1 and data["mods_dir"] == str(mods_dir)
+    assert data["version"] == 2 and data["complete"] is True and data["mods_dir"] == str(mods_dir)
     by_file = {c["new_file"] or c["old_file"]: c for c in data["changes"]}
     u = by_file["old-1.1.jar"]
     assert (u["ok"], u["action"], u["old_file"], u["backup_file"]) == (True, "update", "old-1.0.jar", "old-1.0.jar")

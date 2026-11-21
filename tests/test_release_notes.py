@@ -41,6 +41,12 @@ def test_current_version_has_changelog_section():
 def test_main_output_includes_footer(tmp_path, capsys):
     sha = tmp_path / "x.sha256"
     sha.write_text("abc123  ModUpdater.exe", encoding="ascii")
-    assert release_notes.main(["x", f"v{mod_updater.__version__}", str(sha)]) == 0
+    zsha = tmp_path / "z.sha256"
+    zsha.write_text("def456  ModUpdater-0.2.0-carpeta.zip\n", encoding="ascii")
+    assert release_notes.main(["x", f"v{mod_updater.__version__}", str(sha), str(zsha)]) == 0
     out = capsys.readouterr().out
-    assert "abc123  ModUpdater.exe" in out and "Ejecutar de todas formas" in out
+    assert "Ejecutar de todas formas" in out and "carpeta.zip" in out
+    assert "`ModUpdater.exe` · SHA-256 `abc123`" in out
+    assert "https://www.virustotal.com/gui/file/abc123" in out
+    assert "https://www.virustotal.com/gui/file/def456" in out
+    assert "{hashes}" not in out

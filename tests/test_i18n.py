@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PKG = ROOT / "mod_updater"
 LOCALES = {code: json.loads((i18n.LOCALES_DIR / f"{code}.json").read_text(encoding="utf-8")) for code in i18n.SUPPORTED}
 PLACEHOLDER = re.compile(r"\{(\w+)\}")
-STATUS_CODES = ("up", "ok", "manual", "missing", "dep")
+STATUS_CODES = ("up", "ok", "manual", "missing", "dep", "unreadable")
 
 
 def test_all_languages_have_the_same_keys():

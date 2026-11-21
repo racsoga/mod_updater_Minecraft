@@ -70,6 +70,12 @@ It appears because the executable isn't signed with a paid certificate, not beca
 </details>
 
 <details>
+<summary><b>My antivirus blocks the <code>.exe</code></b></summary>
+
+Some antivirus products flag programs built with PyInstaller by resemblance (a common false positive). Each Release's notes link to the VirusTotal scan of the exact file. If yours blocks it, download **`ModUpdater-…-carpeta.zip`** from the same Release: it's the same program as a folder; unzip it and open the `ModUpdater.exe` inside.
+</details>
+
+<details>
 <summary><b>Where is my key stored? Is it safe?</b></summary>
 
 - It's stored in **Windows Credential Manager**, not in a file.

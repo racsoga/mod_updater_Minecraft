@@ -12,7 +12,8 @@ from dataclasses import dataclass, field
 from typing import Protocol, Sequence, TypeVar
 
 from .i18n import t
-from .curseforge import CfFile, CurseForgeClient, latest_file_ids
+from .curseforge import CfFile, CurseForgeAuthError, CurseForgeClient, latest_file_ids
+from .net import ApiError
 from .modrinth import ModrinthClient, MrVersion
 from .scanner import ModFile
 
@@ -78,6 +79,10 @@ class Resolution:
     duplicate: bool = False  # el mismo proyecto aparece varias veces en la carpeta
     only_prerelease: bool = False  # instalación: no existe ninguna versión estable
     newer_prerelease: str | None = None  # al día, pero hay una beta/alpha más nueva (no se propone)
+    cf_gone: bool = False  # CurseForge reconoce el archivo pero el proyecto ya no existe
+    unreadable: bool = False  # el jar no se pudo leer (permisos, OneDrive sin descargar...)
+    current_incompat: list[Dep] = field(default_factory=list)  # incompatibilidades que declara
+    new_incompat: list[Dep] = field(default_factory=list)
     current_deps: list[Dep] = field(default_factory=list)
     new_deps: list[Dep] = field(default_factory=list)
     known_ids: set[tuple[str, str]] = field(default_factory=set)
@@ -99,6 +104,14 @@ def cf_deps(file: CfFile) -> list[Dep]:
 
 def mr_deps(version: MrVersion) -> list[Dep]:
     return [Dep(MR, pid, vid) for pid, vid in version.required_deps if pid]
+
+
+def cf_incompat(file: CfFile) -> list[Dep]:
+    return [Dep(CF, str(mid)) for mid in file.incompatible_mod_ids]
+
+
+def mr_incompat(version: MrVersion) -> list[Dep]:
+    return [Dep(MR, pid) for pid in version.incompatible_ids]
 
 
 # --------------------------------------------------------------------------- regla de canal
@@ -203,6 +216,7 @@ def resolve_with_modrinth(
             current_channel=cur.version_type,
             current_date=cur.date_published,
             current_deps=mr_deps(cur),
+            current_incompat=mr_incompat(cur),
             known_ids={(MR, cur.project_id)},
         )
         if dup_count[cur.project_id] > 1:
@@ -225,6 +239,7 @@ def resolve_with_modrinth(
             res.new_version = new.version_number
             res.new_channel = new.version_type
             res.new_deps = mr_deps(new)
+            res.new_incompat = mr_incompat(new)
             if f and f.url:
                 res.status = ACTUALIZABLE
                 res.new_file_name = f.filename
@@ -295,11 +310,16 @@ def resolve_with_curseforge(
             current_channel=cur.version_type,
             current_date=cur.date_published,
             current_deps=cf_deps(cur),
+            current_incompat=cf_incompat(cur),
             known_ids={(CF, str(match.mod_id))},
         )
         if dup_count[match.mod_id] > 1:
             res.duplicate = True
             res.add_note(t("note.duplicate"))
+        if not info:
+            # La huella sigue en CurseForge pero el proyecto ya no existe: resolve_all prueba Modrinth.
+            res.cf_gone = True
+            res.add_note(t("note.cf_gone"))
 
         candidates = candidates_by_mod.get(match.mod_id)
         if not candidates:
@@ -316,6 +336,7 @@ def resolve_with_curseforge(
             res.new_file_name = new.file_name
             res.new_sha1 = new.sha1
             res.new_deps = cf_deps(new)
+            res.new_incompat = cf_incompat(new)
             if new.download_url:
                 res.status = ACTUALIZABLE
                 res.download_url = new.download_url
@@ -337,14 +358,20 @@ def resolve_all(
     game_version: str,
     allow_beta: bool = False,
     on_phase=None,
+    failed: list[str] | None = None,
 ) -> list[Resolution]:
     """CurseForge como fuente principal y Modrinth como respaldo.
 
-    Se usa Modrinth para los mods que CurseForge no identifica y para los que
-    tienen versión nueva pero no se pueden descargar por API. Además se anotan
-    en cada resultado los IDs del mod en ambas fuentes (`known_ids`), que
-    `deps.py` usa para saber qué dependencias ya están instaladas.
+    Se usa Modrinth para los mods que CurseForge no identifica, para los que tienen
+    versión nueva pero no se pueden descargar por API y para los retirados de
+    CurseForge. Además se anotan en cada resultado los IDs del mod en ambas fuentes
+    (`known_ids`), que `deps.py` usa para saber qué dependencias ya están instaladas.
+
+    Si una de las dos fuentes no responde, se devuelven los resultados de la otra y se
+    añade su nombre ("curseforge" / "modrinth") a `failed`. Solo si fallan todas las
+    fuentes disponibles se lanza ApiError. CurseForgeAuthError (key rechazada) se propaga.
     """
+    failed = failed if failed is not None else []
     opts = dict(loader=loader, game_version=game_version, allow_beta=allow_beta)
     phase = on_phase or (lambda text: None)
     if curseforge is None:
@@ -352,10 +379,23 @@ def resolve_all(
         return resolve_with_modrinth(mods, modrinth, **opts)
 
     phase("cf")
-    cf_results = resolve_with_curseforge(mods, curseforge, **opts)
+    try:
+        cf_results = resolve_with_curseforge(mods, curseforge, **opts)
+    except CurseForgeAuthError:
+        raise
+    except ApiError:
+        # CurseForge no responde: todo por Modrinth (si también falla, se propaga).
+        failed.append(CF)
+        phase("mr")
+        return resolve_with_modrinth(mods, modrinth, **opts)
+
     phase("mr")
-    need_mr = [r.mod for r in cf_results if r.status in (NO_ENCONTRADO, DESCARGA_MANUAL)]
-    mr_by_path = {r.mod.path: r for r in resolve_with_modrinth(need_mr, modrinth, **opts)} if need_mr else {}
+    need_mr = [r.mod for r in cf_results if r.status in (NO_ENCONTRADO, DESCARGA_MANUAL) or r.cf_gone]
+    try:
+        mr_by_path = {r.mod.path: r for r in resolve_with_modrinth(need_mr, modrinth, **opts)} if need_mr else {}
+    except ApiError:
+        failed.append(MR)
+        mr_by_path = {}
 
     merged: list[Resolution] = []
     for cf in cf_results:
@@ -364,6 +404,14 @@ def resolve_all(
             merged.append(cf)
         elif cf.status == NO_ENCONTRADO:
             merged.append(mr)
+        elif cf.cf_gone:
+            if mr.status == NO_ENCONTRADO:
+                merged.append(cf)  # tampoco está en Modrinth: queda con la nota de retirado
+            else:
+                mr.add_note(t("note.cf_gone_mr"))
+                mr.known_ids |= cf.known_ids
+                mr.duplicate = mr.duplicate or cf.duplicate
+                merged.append(mr)
         elif mr.status == ACTUALIZABLE:
             # CurseForge no deja descargar; Modrinth sí.
             mr.add_note(t("note.cf_blocked_use_mr"))
@@ -377,9 +425,13 @@ def resolve_all(
             merged.append(cf)
 
     # IDs de Modrinth de los mods resueltos por CurseForge (una petición en lote).
-    pending = [r for r in merged if r.source == CF and not any(s == MR for s, _ in r.known_ids)]
-    if pending:
-        mr_current = modrinth.versions_from_hashes([r.mod.sha1 for r in pending])
+    pending = [r for r in merged if r.source == CF and not any(src == MR for src, _ in r.known_ids)]
+    if pending and MR not in failed:
+        try:
+            mr_current = modrinth.versions_from_hashes([r.mod.sha1 for r in pending])
+        except ApiError:
+            failed.append(MR)
+            mr_current = {}
         for r in pending:
             v = mr_current.get(r.mod.sha1)
             if v:

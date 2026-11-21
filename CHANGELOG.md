@@ -21,9 +21,25 @@ Primera versión con ventana propia.
 - Ajustes: carpeta, key, betas, número de copias que se guardan, borrar copias e idioma.
 - Logo propio (yunque en pixel art) e icono en la ventana y el ejecutable.
 
+- Avisa si dos mods declaran que son **incompatibles** entre sí.
+- Además del `.exe`, cada Release trae una **versión en carpeta (zip)** por si un antivirus bloquea el `.exe`, y las notas incluyen el SHA-256 y el enlace a VirusTotal.
+
 ### Cambiado
 - Solo se guarda la última copia de seguridad (configurable) y cada una incluye `cambios.json`.
 - Línea de comandos: confirmación `[S/n]`, estados con nombres claros y opción `--lang`.
+- `cambios.json` se escribe desde el principio y se actualiza tras cada mod: si se cierra la ventana a mitad, **Deshacer** sabe qué quedó a medias. Al cerrar durante una actualización, la app pide confirmación.
+- **Deshacer** busca la última actualización que se puede deshacer, aunque después haya habido un intento fallido.
+- Si CurseForge o Modrinth no responde, se muestran los resultados de la otra fuente con un aviso.
+- Un mod retirado de CurseForge se busca en Modrinth.
+- La ventana se adapta al tamaño de la pantalla y la barra inferior se compacta en ventanas bajas.
+- Mensajes de error traducidos y sin rutas técnicas; progreso visible al esperar sin conexión o por límite de peticiones; mensaje propio para una carpeta vacía y si falta WebView2.
+- Ejecutable con información de versión, sin UPX y con el cargador de PyInstaller compilado desde el código fuente. Dependencias y acciones de GitHub fijadas a versiones exactas.
+
+### Corregido
+- Un jar que no se puede leer ya no detiene la revisión: aparece en *Requieren atención*.
+- Errores del Administrador de credenciales de Windows al guardar u olvidar la key se muestran en lugar de fallar.
+- La key de CurseForge no se reenvía si la API responde con una redirección.
+- El foco del teclado ya no queda oculto bajo la barra inferior; los nombres largos muestran el nombre completo al pasar el ratón.
 
 ## [0.1.0] - 2026-11-20
 

@@ -207,12 +207,17 @@ def scan_file(path: Path) -> dict:
     return info
 
 
-def scan_folder(mods_dir: Path, cache_path: Path | None = None, progress=None, on_item=None) -> list[ModFile]:
+def scan_folder(
+    mods_dir: Path, cache_path: Path | None = None, progress=None, on_item=None, unreadable: list | None = None
+) -> list[ModFile]:
     """Escanea todos los .jar de `mods_dir` (no recursivo).
 
     `progress`, si se pasa, es un callable(path) que se invoca antes de
     procesar cada archivo que no esté en caché. `on_item`, si se pasa, es un
     callable(índice, total, path) que se invoca para cada jar (en caché o no).
+
+    Un jar que no se puede leer (sin permiso, bloqueado, OneDrive sin descargar...)
+    no aborta el escaneo: se salta y se añade `(path, error)` a `unreadable`.
     """
     if not mods_dir.is_dir():
         raise FileNotFoundError(t("scan.no_folder", path=mods_dir))
@@ -225,13 +230,18 @@ def scan_folder(mods_dir: Path, cache_path: Path | None = None, progress=None, o
     for i, path in enumerate(jars, 1):
         if on_item:
             on_item(i, len(jars), path)
-        st = path.stat()
-        key = f"{path.name}|{st.st_size}|{st.st_mtime_ns}"
-        info = cache.get(key)
-        if info is None:
-            if progress:
-                progress(path)
-            info = scan_file(path)
+        try:
+            st = path.stat()
+            key = f"{path.name}|{st.st_size}|{st.st_mtime_ns}"
+            info = cache.get(key)
+            if info is None:
+                if progress:
+                    progress(path)
+                info = scan_file(path)
+        except OSError as exc:
+            if unreadable is not None:
+                unreadable.append((path, exc))
+            continue
         new_cache[key] = info
         result.append(
             ModFile(

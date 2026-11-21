@@ -40,4 +40,5 @@ Actualizador de mods de Minecraft (NeoForge 1.21.1) en Python. Planes: `docs/PLA
 - Validar el mockup con el usuario antes de programar pantallas.
 
 ## Entorno
+- Compilar con `packaging\build.ps1` (cargador de PyInstaller compilado desde el código fuente, info de versión, sin UPX; genera el `.exe`, el zip en carpeta y sus SHA-256). Dependencias y acciones de GitHub con versiones exactas.
 - Windows 11, Python en `.venv`. En el shell Bash de Claude Code los heredocs pierden las barras invertidas: para escribir código con `\` usar las herramientas Write/Edit.

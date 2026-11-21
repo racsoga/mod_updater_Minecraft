@@ -17,7 +17,7 @@ from . import __version__, i18n
 from .config import load_config
 from .curseforge import CurseForgeAuthError, CurseForgeClient
 from .deps import DependencyFinder, DepPlan, plan_with_dependencies
-from .downloader import apply_updates, backup_root, prune_backups, updatable
+from .downloader import apply_updates, backup_root, friendly_error, prune_backups, updatable
 from .i18n import t
 from .modrinth import ModrinthClient
 from .net import ApiError
@@ -30,7 +30,26 @@ from .scanner import scan_folder
 YES_ANSWERS = {"s", "si", "sí", "y", "yes"}
 
 
+# Textos fijos de argparse ("usage:", "options", "show this help message..."), traducidos.
+_ARGPARSE_TEXTS = {
+    "usage: ": "cli.ap_usage",
+    "options": "cli.ap_options",
+    "show this help message and exit": "cli.ap_help",
+    "show program's version number and exit": "cli.ap_version",
+    "%(prog)s: error: %(message)s\n": "cli.ap_error",
+}
+
+
+def _translate_argparse() -> None:
+    def translated(text: str) -> str:
+        key = _ARGPARSE_TEXTS.get(text)
+        return t(key) if key else text
+
+    argparse._ = translated  # argparse llama a _() al generar la ayuda y los errores
+
+
 def build_parser() -> argparse.ArgumentParser:
+    _translate_argparse()
     p = argparse.ArgumentParser(prog="mod_updater", description=t("cli.description"))
     p.add_argument("--mods-dir", type=Path, help=t("cli.help_mods_dir"))
     p.add_argument("--config", type=Path, help=t("cli.help_config"))
@@ -91,11 +110,13 @@ def main(argv: list[str] | None = None) -> int:
 
     console.print(t("cli.header", path=escape(str(cfg.mods_dir)), version=cfg.minecraft_version, loader=cfg.loader))
     try:
+        unreadable: list = []
         with console.status(t("cli.hashing")) as status:
             mods = scan_folder(
                 cfg.mods_dir,
                 cache_path=None if args.no_cache else cfg.scan_cache,
                 progress=lambda path: status.update(t("cli.hashing_file", name=path.name)),
+                unreadable=unreadable,
             )
     except FileNotFoundError as exc:
         console.print(f"[red]{escape(str(exc))}[/]")
@@ -109,14 +130,20 @@ def main(argv: list[str] | None = None) -> int:
     if curseforge is None:
         console.print(f"[yellow]{t('cli.no_key')}[/]")
     opts = dict(loader=cfg.loader, game_version=cfg.minecraft_version, allow_beta=args.allow_beta)
+    failed: list[str] = []
     try:
         with console.status(t("cli.querying")):
             try:
-                results = resolve_all(mods, curseforge=curseforge, modrinth=modrinth, **opts)
+                results = resolve_all(mods, curseforge=curseforge, modrinth=modrinth, failed=failed, **opts)
             except CurseForgeAuthError as exc:
                 console.print(f"[yellow]{escape(t('cli.key_rejected_fallback', error=exc))}[/]")
                 curseforge = None
-                results = resolve_all(mods, curseforge=None, modrinth=modrinth, **opts)
+                results = resolve_all(mods, curseforge=None, modrinth=modrinth, failed=failed, **opts)
+        if "curseforge" in failed:
+            console.print(f"[yellow]{escape(t('notice.cf_down'))}[/]")
+            curseforge = None
+        if "modrinth" in failed:
+            console.print(f"[yellow]{escape(t('notice.mr_down'))}[/]")
 
         shown = results
         if args.only:
@@ -129,14 +156,21 @@ def main(argv: list[str] | None = None) -> int:
 
         with console.status(t("cli.checking_deps")):
             finder = DependencyFinder(curseforge, modrinth, **opts)
-            plan = plan_with_dependencies(results, selected, finder)
+            try:
+                plan = plan_with_dependencies(results, selected, finder)
+            except ApiError:
+                console.print(f"[yellow]{escape(t('notice.deps_unchecked'))}[/]")
+                plan = DepPlan(items=list(selected))
     except ApiError as exc:
-        console.print(f"[red]{escape(t('cli.network_error', error=exc))}[/]")
+        key = "scan.err_offline" if exc.kind == "offline" else "scan.err_network"
+        console.print(f"[red]{escape(t(key))}[/]")
         return 1
 
     print_report(shown, console, plan=plan, show_up_to_date=not args.hide_up_to_date)
     for r in skipped:
         console.print(f"[yellow]{escape(t('cli.skipped_duplicate', name=r.name))}[/]")
+    for path, exc in unreadable:
+        console.print(f"[yellow]{escape(t('cli.unreadable', name=path.name, error=friendly_error(exc)))}[/]")
 
     if not args.apply:
         console.print(f"[dim]{t('cli.dry_run')}[/]")

@@ -27,8 +27,11 @@ from .. import credentials, i18n
 from ..config import DEFAULT_USER_AGENT, default_mods_dir
 from ..curseforge import LOADER_TYPES, CurseForgeAuthError, CurseForgeClient
 from ..deps import DependencyFinder, DepPlan, plan_with_dependencies
+from .. import net
 from ..downloader import (
     Outcome,
+    friendly_error,
+    last_undoable,
     apply_updates,
     backup_info,
     clear_backups,
@@ -41,8 +44,8 @@ from ..i18n import t
 from ..modrinth import ModrinthClient
 from ..net import ApiError
 from ..procs import minecraft_running
-from ..resolver import ACTUALIZABLE, AL_DIA, DESCARGA_MANUAL, INSTALL, NO_ENCONTRADO, Resolution, resolve_all
-from ..scanner import peek_folder, scan_folder
+from ..resolver import ACTUALIZABLE, AL_DIA, CF, DESCARGA_MANUAL, INSTALL, MR, NO_ENCONTRADO, Resolution, resolve_all
+from ..scanner import ModFile, peek_folder, scan_folder
 from ..settings import Settings, app_dir, load_settings, save_settings
 from ..versions import minecraft_versions
 
@@ -74,7 +77,9 @@ def serialize(results: list[Resolution], plan: DepPlan, *, allow_beta: bool = Fa
     for r in plan.installs + results:
         s = "dep" if r.kind == INSTALL else STATUS_CODE.get(r.status, "missing")
         sub, url = "", r.project_url
-        if id(r) in broken:
+        if r.unreadable:
+            s, sub = "unreadable", r.note  # el jar no se pudo leer: requiere atención
+        elif id(r) in broken:
             # Instalado y ya roto: le falta algo que no se puede instalar solo. Requiere atención.
             b = broken[id(r)]
             s, sub, url = "manual", b.reason[:1].upper() + b.reason[1:], b.url or r.project_url
@@ -87,6 +92,8 @@ def serialize(results: list[Resolution], plan: DepPlan, *, allow_beta: bool = Fa
             sub = file_name if file_name != r.name else t("row.missing_default")
         elif id(r) in added:
             sub = t("row.needed_by", names=", ".join(r.required_by))
+        elif s == "ok" and r.cf_gone:
+            sub = t("row.cf_gone")
         elif s == "ok" and r.newer_prerelease:
             sub = t("row.newer_beta", version=r.newer_prerelease)
         rows.append({
@@ -104,7 +111,7 @@ def serialize(results: list[Resolution], plan: DepPlan, *, allow_beta: bool = Fa
             "neededBy": list(r.required_by) if r.kind == INSTALL else [],
             "checked": id(r) in in_plan,
         })
-    return {"rows": rows, "details": list(plan.ignored)}
+    return {"rows": rows, "details": list(plan.ignored), "warnings": list(plan.conflicts)}
 
 
 class Api:
@@ -128,6 +135,7 @@ class Api:
         self._running = running
         self._rows: list[Resolution] = []   # mismo orden que las filas enviadas al JS
         self._row_s: list[str] = []         # estado de cada fila ("up", "dep", ...)
+        self._applying = False              # hay una actualización en curso (aviso al cerrar)
         self._window = None
         self._busy = threading.Lock()
         self._results: list[Resolution] = []
@@ -225,7 +233,10 @@ class Api:
 
         key = str(data.get("key") or "").strip()
         if key:
-            credentials.set_key(key)
+            try:
+                credentials.set_key(key)
+            except Exception:  # noqa: BLE001 - KeyringError, RuntimeError, OSError...
+                return {"ok": False, "field": "key", "message": t("key.store_failed")}
         s.mods_dir, s.loader, s.minecraft_version = str(mods_dir), loader, version
         s.use_curseforge = bool(data.get("use_curseforge", True))
         if "allow_beta" in data:
@@ -237,7 +248,10 @@ class Api:
         return {"ok": True, "state": self.get_state()}
 
     def forget_key(self) -> dict:
-        credentials.delete_key()
+        try:
+            credentials.delete_key()
+        except Exception:  # noqa: BLE001
+            return self.get_state() | {"error": t("key.delete_failed")}
         return self.get_state()
 
     # ------------------------------------------------------------------ revisión
@@ -253,12 +267,19 @@ class Api:
             self._emit("results", self._do_scan())
         except FileNotFoundError as exc:
             self._emit("error", {"message": t("scan.err_folder", error=exc)})
-        except ApiError:
-            self._emit("error", {"message": t("scan.err_network")})
+        except ApiError as exc:
+            msg = t("scan.err_offline") if exc.kind == "offline" else t("scan.err_network")
+            self._emit("error", {"message": msg})
         except Exception as exc:  # noqa: BLE001 - la ventana no debe quedarse colgada
             self._emit("error", {"message": t("scan.err_unknown", error=type(exc).__name__)})
         finally:
+            net.retry_listener = None
             self._busy.release()
+
+    def _retry_label(self, host: str, reason: str, wait: float) -> str:
+        source = "CurseForge" if ("curseforge" in host or "forgecdn" in host) else "Modrinth" if "modrinth" in host else host
+        key = {"offline": "net.retry_offline", "busy": "net.retry_busy"}.get(reason, "net.retry_error")
+        return t(key, source=source, seconds=max(1, round(wait)))
 
     def _do_scan(self) -> dict:
         s = self._settings()
@@ -269,11 +290,15 @@ class Api:
             self._emit("progress", {"phase": phase, "label": label, "done": done, "total": total})
 
         progress("read", t("scan.reading"))
+        unreadable: list = []
         mods = scan_folder(
             s.mods_path,
             cache_path=self._cache() / "scan_cache.json",
             on_item=lambda i, n, p: progress("read", t("scan.reading_n", done=i, total=n), i, n),
+            unreadable=unreadable,
         )
+        current_phase = {"code": "cf"}
+        net.retry_listener = lambda host, reason, wait: progress(current_phase["code"], self._retry_label(host, reason, wait))
 
         key = self._get_key()[0] if s.use_curseforge else None
         cf = self._cf_factory(key) if key else None
@@ -282,17 +307,38 @@ class Api:
             notices.append(t("notice.no_key"))
         opts = dict(loader=s.loader, game_version=s.minecraft_version, allow_beta=s.allow_beta)
         labels = {"cf": t("scan.querying_cf"), "mr": t("scan.querying_mr")}
-        on_phase = lambda code: progress(code, labels.get(code, code))  # noqa: E731
+
+        def on_phase(code: str) -> None:
+            current_phase["code"] = code
+            progress(code, labels.get(code, code))
+
+        failed: list[str] = []
         try:
-            results = resolve_all(mods, curseforge=cf, modrinth=mr, on_phase=on_phase, **opts)
+            results = resolve_all(mods, curseforge=cf, modrinth=mr, on_phase=on_phase, failed=failed, **opts)
         except CurseForgeAuthError:
             notices.append(t("notice.key_rejected"))
             cf = None
-            results = resolve_all(mods, curseforge=None, modrinth=mr, on_phase=on_phase, **opts)
+            results = resolve_all(mods, curseforge=None, modrinth=mr, on_phase=on_phase, failed=failed, **opts)
+        if CF in failed:
+            notices.append(t("notice.cf_down"))
+            cf = None
+        if MR in failed:
+            notices.append(t("notice.mr_down"))
 
         progress("deps", t("scan.checking_deps"))
+        current_phase["code"] = "deps"
         selected, _ = updatable(results)
-        plan = plan_with_dependencies(results, selected, DependencyFinder(cf, mr, **opts))
+        try:
+            plan = plan_with_dependencies(results, selected, DependencyFinder(cf, mr, **opts))
+        except ApiError:
+            notices.append(t("notice.deps_unchecked"))
+            plan = DepPlan(items=list(selected))
+
+        # Jars que no se pudieron leer: se muestran en "Requieren atención" sin abortar la revisión.
+        for path, exc in unreadable:
+            mod = ModFile(path=path, file_name=path.name, size=0, sha1="", sha512="", cf_fingerprint=0)
+            results.append(Resolution(mod=mod, status=NO_ENCONTRADO, unreadable=True,
+                                      note=t("row.unreadable", error=friendly_error(exc))))
         self._results, self._plan = results, plan
 
         data = serialize(results, plan, allow_beta=s.allow_beta)
@@ -330,6 +376,9 @@ class Api:
     def _apply(self, chosen: list[Resolution], s: Settings) -> None:
         index = {id(r): i for i, r in enumerate(self._rows)}
         total, done = len(chosen), 0
+        self._applying = True
+        net.retry_listener = lambda host, reason, wait: self._emit(
+            "apply_wait", {"label": self._retry_label(host, reason, wait)})
         try:
             key = self._get_key()[0] if s.use_curseforge else None
             cf = self._cf_factory(key) if key else None
@@ -363,28 +412,37 @@ class Api:
             })
         except Exception as exc:  # noqa: BLE001 - la ventana no debe quedarse colgada
             self._emit("apply_done", {"updated": 0, "installed": 0, "failed": [], "backup": None, "pruned": 0,
-                                      "error": t("scan.err_unknown", error=type(exc).__name__)})
+                                      "error": t("apply.err_unknown", error=friendly_error(exc))})
         finally:
+            self._applying = False
+            net.retry_listener = None
             self._busy.release()
+
+    def _is_applying(self) -> bool:
+        """Para el aviso al cerrar la ventana (gui/app.py)."""
+        return self._applying
 
     # ------------------------------------------------------------------ backups y deshacer
 
     def backups_info(self) -> dict:
-        backups = list_backups(self._settings().mods_path)
-        return {"count": len(backups), "last": backup_info(backups[-1]) if backups else None}
+        mods_path = self._settings().mods_path
+        backups = list_backups(mods_path)
+        target = last_undoable(mods_path)
+        return {"count": len(backups), "last": backup_info(target) if target else None}
 
     def undo_last(self) -> dict:
-        """Deshace la última actualización (la del backup más reciente)."""
+        """Deshace la última actualización que se pueda deshacer (aunque después haya
+        habido un intento fallido o una actualización interrumpida a medias)."""
         s = self._settings()
-        backups = list_backups(s.mods_path)
-        if not backups or not backup_info(backups[-1])["undoable"]:
+        target = last_undoable(s.mods_path)
+        if target is None:
             return {"ok": False, "message": t("undo.none")}
         if self._running(s.mods_path.parent):
             return {"ok": False, "reason": "minecraft", "message": t("undo.minecraft_open")}
         if not self._busy.acquire(blocking=False):
             return {"ok": False, "message": t("apply.busy")}
         try:
-            r = undo_backup(backups[-1])
+            r = undo_backup(target)
         finally:
             self._busy.release()
         self._plan = None

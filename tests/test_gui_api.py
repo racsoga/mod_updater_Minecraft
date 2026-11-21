@@ -218,12 +218,19 @@ def test_scan_network_error_is_reported(make_api, monkeypatch, mods_dir):
     a._attach(win)
     monkeypatch.setattr(api_mod, "scan_folder", lambda *a, **k: [])
 
-    def boom(*a, **k):
-        raise ApiError("sin red")
-    monkeypatch.setattr(api_mod, "resolve_all", boom)
+    def offline(*a, **k):
+        raise ApiError("sin red", kind="offline")
+    monkeypatch.setattr(api_mod, "resolve_all", offline)
     a.start_scan()
     event, payload = win.events()[-1]
     assert event == "error" and "conexión" in payload["message"]
+
+    def both_down(*a, **k):
+        raise ApiError("HTTP 503")
+    monkeypatch.setattr(api_mod, "resolve_all", both_down)
+    a.start_scan()
+    event, payload = win.events()[-1]
+    assert event == "error" and "no responden" in payload["message"]
 
 
 # --------------------------------------------------------------------------- deducir versión y loader

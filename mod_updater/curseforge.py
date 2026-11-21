@@ -19,6 +19,7 @@ LOADER_TYPES = {"forge": 1, "fabric": 4, "quilt": 5, "neoforge": 6}
 RELEASE_TYPES = {1: "release", 2: "beta", 3: "alpha"}
 HASH_SHA1 = 1
 REL_REQUIRED = 3
+REL_INCOMPATIBLE = 5
 BATCH = 100
 
 
@@ -61,6 +62,10 @@ class CfFile:
     def required_mod_ids(self) -> list[int]:
         return [dep["modId"] for dep in self.dependencies if dep.get("relationType") == REL_REQUIRED]
 
+    @property
+    def incompatible_mod_ids(self) -> list[int]:
+        return [dep["modId"] for dep in self.dependencies if dep.get("relationType") == REL_INCOMPATIBLE]
+
 
 @dataclass
 class CfMatch:
@@ -76,13 +81,17 @@ class CurseForgeClient:
         self.session.headers.update({"x-api-key": api_key, "Accept": "application/json"})
 
     def _call(self, method: str, path: str, **kwargs):
-        resp = request_with_retry(self.session, method, BASE_URL + path, min_interval=0.1, **kwargs)
+        # Sin seguir redirecciones: requests reenviaría la cabecera x-api-key al nuevo destino.
+        resp = request_with_retry(self.session, method, BASE_URL + path, min_interval=0.1, allow_redirects=False, **kwargs)
+        if resp.is_redirect:
+            raise ApiError(f"CurseForge {method} {path}: redirección a {resp.headers.get('Location', '?')} (no se sigue)")
         if resp.status_code in (401, 403):
             raise CurseForgeAuthError(t("cf.key_rejected", status=resp.status_code))
         if resp.status_code == 404:
             return None
         if not resp.ok:
-            raise ApiError(f"CurseForge {method} {path}: HTTP {resp.status_code} {resp.text[:200]}")
+            kind = "busy" if resp.status_code == 429 else "http"
+            raise ApiError(f"CurseForge {method} {path}: HTTP {resp.status_code} {resp.text[:200]}", kind=kind, status=resp.status_code)
         return resp.json().get("data")
 
     def check(self) -> None:

@@ -70,6 +70,12 @@ Sale porque el ejecutable no está firmado con un certificado de pago, no porque
 </details>
 
 <details>
+<summary><b>Mi antivirus bloquea el <code>.exe</code></b></summary>
+
+Algunos antivirus marcan por parecido los programas hechos con PyInstaller (falso positivo habitual). Las notas de cada Release enlazan al análisis de VirusTotal del archivo exacto. Si el tuyo lo bloquea, descarga **`ModUpdater-…-carpeta.zip`** de la misma Release: es el mismo programa en carpeta, descomprímelo y abre `ModUpdater.exe` de dentro.
+</details>
+
+<details>
 <summary><b>¿Dónde se guarda mi key? ¿Es seguro?</b></summary>
 
 - Se guarda en el **Administrador de credenciales de Windows**, no en un archivo.

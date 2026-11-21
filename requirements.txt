@@ -1,6 +1,40 @@
-requests>=2.32
-rich>=13.7
-python-dotenv>=1.0
-pytest>=8.0
-pywebview>=6.0
-keyring>=25.0
+# Versiones exactas (incluidas las dependencias indirectas) para que cada compilación
+# del .exe use exactamente lo mismo. Para actualizar: cambiar aquí, pasar los tests y
+# probar el .exe antes de publicar.
+
+# --- Directas
+requests==2.34.2
+rich==15.0.0
+python-dotenv==1.2.4
+pywebview==6.2.1
+keyring==25.7.0
+pytest==9.2.0
+
+# --- Indirectas: requests
+certifi==2026.10.23
+charset-normalizer==3.5.2
+idna==3.20
+urllib3==2.8.0
+# --- Indirectas: rich
+markdown-it-py==4.3.0
+mdurl==0.1.2
+Pygments==2.21.0
+# --- Indirectas: pywebview (Windows: pythonnet + WebView2)
+bottle==0.13.4
+proxy_tools==0.1.0
+pythonnet==3.2.1
+clr_loader==0.3.1
+cffi==2.1.1
+pycparser==3.12
+typing_extensions==4.16.0
+# --- Indirectas: keyring
+jaraco.classes==3.4.0
+jaraco.context==6.1.2
+jaraco.functools==4.6.0
+more-itertools==11.2.1
+pywin32-ctypes==0.2.3
+# --- Indirectas: pytest
+iniconfig==2.3.1
+packaging==26.3
+pluggy==1.7.0
+colorama==0.4.6

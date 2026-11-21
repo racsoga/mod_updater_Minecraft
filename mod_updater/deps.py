@@ -63,6 +63,7 @@ class DepPlan:
     blocked: list[Resolution] = field(default_factory=list)  # actualizaciones bloqueadas
     broken: list[Broken] = field(default_factory=list)  # mods instalados que ya están rotos
     ignored: list[str] = field(default_factory=list)  # dependencias sin versión para este loader
+    conflicts: list[str] = field(default_factory=list)  # incompatibilidades declaradas (aviso, no bloquea)
 
     @property
     def installs(self) -> list[Resolution]:
@@ -199,7 +200,7 @@ def plan_with_dependencies(results: list[Resolution], selected: list[Resolution]
     for r in final:
         r.required_by = [p.name for p, c in edges if c is r and id(p) not in blocked] or r.required_by
 
-    out = DepPlan(items=final, ignored=ignored)
+    out = DepPlan(items=final, ignored=ignored, conflicts=_conflicts(results, final, installed))
     for rid, (reason, url) in blocked.items():
         res = origin[rid]
         if res.kind == INSTALL:
@@ -211,6 +212,33 @@ def plan_with_dependencies(results: list[Resolution], selected: list[Resolution]
         elif rid not in final_ids:
             out.broken.append(Broken(res, reason, url))
     return out
+
+
+def _conflicts(results: list[Resolution], final: list[Resolution], installed: dict) -> list[str]:
+    """Avisos de incompatibilidades que declaran los mods (CurseForge relación 5, Modrinth
+    "incompatible") entre lo que quedará en la carpeta tras aplicar el plan."""
+    planned = {id(r) for r in final}
+    after: dict[tuple[str, str], Resolution] = dict(installed)  # lo instalado + lo que se va a instalar
+    for r in final:
+        if r.kind == INSTALL:
+            for k in r.known_ids:
+                after[k] = r
+    messages: list[str] = []
+    seen: set[frozenset] = set()
+    for r in [x for x in results if x.mod is not None] + [x for x in final if x.kind == INSTALL]:
+        updating = id(r) in planned
+        declared = r.new_incompat if updating else r.current_incompat
+        for dep in declared:
+            other = after.get(dep.key)
+            if other is None or other is r:
+                continue
+            pair = frozenset({id(r), id(other)})
+            if pair in seen:
+                continue
+            seen.add(pair)
+            version = r.new_version if updating else r.current_version
+            messages.append(t("deps.incompatible", name=r.name, version=version or "", other=other.name))
+    return messages
 
 
 def _ignore(ignored: list[str], parent: Resolution, dep: Dep, finder: Finder) -> None:

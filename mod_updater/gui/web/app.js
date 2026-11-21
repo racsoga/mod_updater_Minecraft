@@ -159,7 +159,7 @@ async function saveSetup(useCurseforge) {
     });
     $("#cf-key").value = "";
     if (!res.ok) {
-      const target = { mods_dir: "#folder-help", minecraft_version: "#env-help", loader: "#env-help" }[res.field] || "#folder-help";
+      const target = { mods_dir: "#folder-help", minecraft_version: "#env-help", loader: "#env-help", key: "#key-help" }[res.field] || "#folder-help";
       $(target).className = "help bad";
       $(target).textContent = res.message;
       return;
@@ -206,7 +206,7 @@ function onProgress(p) {
 /* ================================================================ resultados */
 
 const selectable = m => m.s === "up" || m.s === "dep";
-const isAttention = m => m.s === "manual" || m.s === "missing";
+const isAttention = m => m.s === "manual" || m.s === "missing" || m.s === "unreadable";
 const GROUPS = [
   { key: "attention", title: "ui.group_attention", match: isAttention },
   { key: "changes", title: "ui.group_changes", match: selectable },
@@ -231,7 +231,8 @@ function showResults(data) {
   $("#q").value = "";
   setTopbarEnv(data.env);
   // Cabecera: solo lo que afecta a lo que ves (p. ej. revisión sin key).
-  $("#notices").innerHTML = data.notices.map(n => `<li>${esc(n)}</li>`).join("");
+  $("#notices").innerHTML = (data.warnings || []).map(n => `<li class="bad">${esc(n)}</li>`).join("")
+    + data.notices.map(n => `<li>${esc(n)}</li>`).join("");
   // Detalles: avisos que no requieren nada de ti.
   $("#details").hidden = !data.details.length;
   $("#details-summary").textContent = t("ui.details", { count: data.details.length });
@@ -289,7 +290,7 @@ function row(m) {
   const help = t(`status_help.${m.s}`);
   return `<div class="row ${m.s}">
     ${cb}${logo(m)}
-    <div class="name"><div class="title">${esc(m.name)}</div>${sub(m)}</div>
+    <div class="name"><div class="title" title="${esc(m.name)}">${esc(m.name)}</div>${sub(m)}</div>
     ${versions(m)}
     <span class="badge ${m.s}" data-tip="${esc(help)}"><span class="dot" aria-hidden="true"></span>${esc(t(`status.${m.s}`))}<span class="sr-only" id="${helpId}">. ${esc(help)}</span></span>
     <span class="source">${source}</span>
@@ -328,8 +329,9 @@ function render() {
     html += `<div class="group-head" data-g="${g.key}"><h3>${esc(t(g.title))}</h3><span class="count">${items.length}</span><span class="grow"></span>${extra}</div>`;
     if (open) html += items.map(row).join("");
   }
-  $("#list").innerHTML = html ||
-    `<div class="empty">${esc(t("ui.no_match", { query }))} <button class="linkbtn" type="button" data-clear>${esc(t("ui.clear_search"))}</button></div>`;
+  $("#list").innerHTML = html || (!MODS.length
+    ? `<div class="empty">${esc(t("ui.list_empty"))} <button class="linkbtn" type="button" data-go-settings>${esc(t("ui.open_settings"))}</button></div>`
+    : `<div class="empty">${esc(t("ui.no_match", { query }))} <button class="linkbtn" type="button" data-clear>${esc(t("ui.clear_search"))}</button></div>`);
 
   const master = $("[data-all]");
   if (master) {
@@ -345,6 +347,14 @@ function summary() {
   const ups = MODS.filter(m => m.s === "up"), deps = MODS.filter(m => m.s === "dep");
   const okN = MODS.filter(m => m.s === "ok").length, attN = MODS.filter(isAttention).length;
 
+  if (!MODS.length) {  // carpeta sin mods
+    $("#headline").textContent = t("ui.head_empty");
+    $("#deck").textContent = t("ui.deck_empty");
+    $("#go").hidden = true;
+    $("#btn-recheck").hidden = false;
+    $("#summary").innerHTML = `<span class="count">${esc(t("ui.head_empty"))}</span>`;
+    return;
+  }
   let head;
   if (!ups.length && !deps.length) head = t("ui.head_all_ok");
   else if (ups.length && deps.length) head = t("ui.head_both", { updates: t("ui.head_updates", { count: ups.length }), deps: t("ui.head_deps", { count: deps.length }) });
@@ -464,6 +474,7 @@ function formatDate(iso) {
 
 window.onBackend = (event, payload) => {
   if (event === "apply_progress") onApplyProgress(payload);
+  else if (event === "apply_wait") $("#apply-label").textContent = payload.label;
   else if (event === "apply_done") showDone(payload);
   else if (event === "progress") onProgress(payload);
   else if (event === "results") { setProgress(100); showResults(payload); }
@@ -558,8 +569,8 @@ function wire() {
     const fresh = await api().forget_key();
     state = { ...state, has_key: fresh.has_key, key_hint: fresh.key_hint, key_source: fresh.key_source };
     keyStatus();
-    $("#key-help").className = "help";
-    $("#key-help").textContent = t("ui.key_forgotten");
+    $("#key-help").className = fresh.error ? "help bad" : "help";
+    $("#key-help").textContent = fresh.error || t("ui.key_forgotten");
   });
   $("#go").addEventListener("click", startApply);
   $("#btn-open-folder").addEventListener("click", () => api().open_mods_folder());

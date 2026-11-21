@@ -5,7 +5,8 @@ Garantías:
 - El nuevo se descarga primero a un `.part` (fuera de la carpeta de mods) y
   solo se coloca si su hash coincide.
 - Si algo falla, el jar viejo sigue (o vuelve) a su sitio.
-- `cambios.txt` en la carpeta de backup describe lo hecho, para revertir a mano.
+- `cambios.json` se escribe desde el principio y tras cada mod (Deshacer funciona
+  aunque el proceso se interrumpa); `cambios.txt` lo describe para revertir a mano.
 """
 
 from __future__ import annotations
@@ -79,14 +80,14 @@ def _get_following_redirects(url: str, session_for: SessionFor) -> requests.Resp
     las cabeceras) en cada salto: la key de CurseForge solo va a sus dominios."""
     for _ in range(MAX_REDIRECTS + 1):
         if urlparse(url).scheme != "https":
-            raise ApiError(t("dl.insecure_url", url=url))
+            raise DownloadError(t("dl.insecure_url", url=url))
         resp = request_with_retry(session_for(url), "GET", url, stream=True, timeout=60, allow_redirects=False)
         if resp.is_redirect:
             url = urljoin(url, resp.headers["Location"])
             resp.close()
             continue
         return resp
-    raise ApiError(t("dl.too_many_redirects"))
+    raise DownloadError(t("dl.too_many_redirects"))
 
 
 def download_verified(res: Resolution, dest: Path, session_for: SessionFor) -> None:
@@ -94,30 +95,51 @@ def download_verified(res: Resolution, dest: Path, session_for: SessionFor) -> N
     (y en ese caso no deja `dest`)."""
     expected = _expected_hash(res)
     if expected is None:
-        raise ApiError(t("dl.no_hash"))
+        raise DownloadError(t("dl.no_hash"))
     algo, want = expected
     h = hashlib.new(algo)
     try:
         resp = _get_following_redirects(res.download_url, session_for)
         if not resp.ok:
-            raise ApiError(t("dl.http_error", status=resp.status_code))
+            raise DownloadError(t("dl.http_error", status=resp.status_code))
         with resp, dest.open("wb") as f:
             for chunk in resp.iter_content(CHUNK):
                 f.write(chunk)
                 h.update(chunk)
         if h.hexdigest() != want:
-            raise ApiError(t("dl.hash_mismatch", algo=algo))
+            raise DownloadError(t("dl.hash_mismatch", algo=algo))
     except BaseException:
         dest.unlink(missing_ok=True)
         raise
 
 
+class DownloadError(ApiError):
+    """Error de descarga con mensaje ya traducido para el usuario."""
+
+
+def friendly_error(exc: BaseException) -> str:
+    """Mensaje claro, traducido y sin rutas técnicas para un error de archivo o de red."""
+    if isinstance(exc, DownloadError):
+        return str(exc)
+    if isinstance(exc, (requests.RequestException, ApiError)):
+        return t("err.network")
+    if isinstance(exc, OSError):
+        if exc.errno == 28 or getattr(exc, "winerror", None) in (39, 112):
+            return t("err.disk_full")
+        if isinstance(exc, PermissionError) or getattr(exc, "winerror", None) in (5, 32, 33):
+            return t("err.in_use")
+        return t("err.file", detail=exc.strerror or type(exc).__name__)
+    return t("err.unexpected", error=type(exc).__name__)
+
+
 def apply_one(
-    res: Resolution, mods_dir: Path, backup_dir: Path, session_for: SessionFor, on_state=None
+    res: Resolution, mods_dir: Path, backup_dir: Path, session_for: SessionFor, on_state=None, before_change=None
 ) -> Outcome:
     """Actualiza (si hay jar viejo) o instala (si `res.mod` es None) un mod.
 
     `on_state`, si se pasa, recibe "downloading" y "verified" según avanza.
+    `before_change(info)`, si se pasa, se llama justo antes de tocar la carpeta de mods
+    (para dejarlo anotado en `cambios.json` por si el proceso se interrumpe).
     """
     state = on_state or (lambda name: None)
     old = res.mod.path if res.mod is not None else None
@@ -138,29 +160,32 @@ def apply_one(
     try:
         download_verified(res, part, session_for)
     except (ApiError, OSError, requests.RequestException) as exc:
-        return Outcome(res, False, t("dl.failed", error=exc))
+        return Outcome(res, False, t("dl.failed", error=friendly_error(exc)))
     state("verified")
+
+    backup = backup_dir / old.name if old is not None else None
+    if before_change:
+        before_change({"new_file": new_name, "backup_file": backup.name if backup else None})
 
     if old is None:  # instalación nueva: no hay nada que mover al backup
         try:
             os.replace(part, final)
         except OSError as exc:
             part.unlink(missing_ok=True)
-            return Outcome(res, False, t("dl.place_failed", error=exc))
+            return Outcome(res, False, t("dl.place_failed", error=friendly_error(exc)))
         return Outcome(res, True, t("dl.installed"), new_path=final)
 
-    backup = backup_dir / old.name
     try:
-        os.replace(old, backup)  # 1. viejo → backup
+        os.replace(old, backup)  # 1. viejo -> backup
     except OSError as exc:
         part.unlink(missing_ok=True)
-        return Outcome(res, False, t("dl.move_old_failed", error=exc))
+        return Outcome(res, False, t("dl.move_old_failed", error=friendly_error(exc)))
     try:
-        os.replace(part, final)  # 2. nuevo → mods
+        os.replace(part, final)  # 2. nuevo -> mods
     except OSError as exc:
         os.replace(backup, old)  # deshacer: el viejo vuelve a su sitio
         part.unlink(missing_ok=True)
-        return Outcome(res, False, t("dl.restored", error=exc))
+        return Outcome(res, False, t("dl.restored", error=friendly_error(exc)))
     return Outcome(res, True, t("dl.updated"), new_path=final, backup_path=backup)
 
 
@@ -174,33 +199,73 @@ def updatable(results: list[Resolution]) -> tuple[list[Resolution], list[Resolut
     return ok, skipped
 
 
-def write_changelog(backup_dir: Path, mods_dir: Path, outcomes: list[Outcome]) -> Path:
-    """Escribe `cambios.json` (para Deshacer) y `cambios.txt` (para leerlo a mano)."""
-    entries = []
-    for o in outcomes:
-        r = o.resolution
-        entries.append({
-            "ok": o.ok,
-            "action": "install" if r.mod is None else "update",
-            "name": r.name,
-            "source": r.source,
-            "project_id": r.project_id,
-            "old_file": r.mod.file_name if r.mod else None,
-            "new_file": o.new_path.name if o.new_path else None,
-            "backup_file": o.backup_path.name if o.backup_path else None,
-            "old_version": r.current_version,
-            "new_version": r.new_version,
-            "required_by": r.required_by,
-            "message": o.message,
-        })
-    data = {
-        "version": 1,
-        "date": datetime.now().isoformat(timespec="seconds"),
-        "mods_dir": str(mods_dir),
-        "changes": entries,
-    }
-    (backup_dir / "cambios.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+class Changelog:
+    """`cambios.json` escrito desde el principio y actualizado tras cada mod.
 
+    Cada cambio se anota como "pending" justo antes de tocar la carpeta de mods y
+    pasa a "ok" o "failed" al terminar. Si el proceso se interrumpe (se cierra la
+    ventana, se va la luz), Deshacer sabe qué estaba a medias.
+    """
+
+    def __init__(self, backup_dir: Path, mods_dir: Path):
+        self.backup_dir, self.mods_dir = backup_dir, mods_dir
+        self.data = {
+            "version": 2,
+            "date": datetime.now().isoformat(timespec="seconds"),
+            "mods_dir": str(mods_dir),
+            "complete": False,
+            "changes": [],
+        }
+        self.save()
+
+    def save(self) -> None:
+        _write_json(self.backup_dir / "cambios.json", self.data)
+
+    def _entry(self, r: Resolution) -> dict:
+        return {
+            "state": "pending", "ok": False,
+            "action": "install" if r.mod is None else "update",
+            "name": r.name, "source": r.source, "project_id": r.project_id,
+            "old_file": r.mod.file_name if r.mod else None,
+            "new_file": r.new_file_name, "backup_file": None,
+            "old_version": r.current_version, "new_version": r.new_version,
+            "required_by": list(r.required_by), "message": "",
+        }
+
+    def begin(self, r: Resolution, info: dict) -> dict:
+        entry = self._entry(r) | info
+        self.data["changes"].append(entry)
+        self.save()
+        return entry
+
+    def finish(self, outcome: Outcome, entry: dict | None) -> None:
+        if entry is None:  # falló antes de tocar la carpeta: solo se anota
+            entry = self._entry(outcome.resolution)
+            self.data["changes"].append(entry)
+        entry.update({
+            "state": "ok" if outcome.ok else "failed",
+            "ok": outcome.ok,
+            "message": outcome.message,
+            "new_file": outcome.new_path.name if outcome.new_path else None,
+            "backup_file": outcome.backup_path.name if outcome.backup_path else None,
+        })
+        self.save()
+
+    def close(self) -> Path:
+        self.data["complete"] = True
+        self.save()
+        return write_changelog_txt(self.backup_dir, self.mods_dir, self.data["changes"])
+
+
+def _write_json(path: Path, data: dict) -> None:
+    """Escritura atómica: o el archivo viejo o el nuevo, nunca uno a medias."""
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def write_changelog_txt(backup_dir: Path, mods_dir: Path, entries: list[dict]) -> Path:
+    """`cambios.txt`: el mismo registro, para leerlo a mano."""
     lines = [
         t("log.title", date=f"{datetime.now():%Y-%m-%d %H:%M}"),
         t("log.folder", path=mods_dir),
@@ -278,16 +343,20 @@ def apply_updates(
             return curseforge_session
         return modrinth_session
 
+    log = Changelog(backup_dir, mods_dir)
     outcomes: list[Outcome] = []
     for res in results:
         if progress:
             progress(res)
         notify = (lambda name, r=res: on_state(r, name)) if on_state else None
-        outcome = apply_one(res, mods_dir, backup_dir, session_for, notify)
+        pending: dict = {}
+        outcome = apply_one(res, mods_dir, backup_dir, session_for, notify,
+                            before_change=lambda info, r=res: pending.setdefault("e", log.begin(r, info)))
+        log.finish(outcome, pending.get("e"))
         outcomes.append(outcome)
         if on_state:
             on_state(res, outcome)
-    write_changelog(backup_dir, mods_dir, outcomes)
+    log.close()
     return backup_dir, outcomes
 
 
@@ -313,14 +382,29 @@ def read_changelog(backup_dir: Path) -> dict | None:
 def backup_info(backup_dir: Path) -> dict:
     """Resumen de un backup para la interfaz: fecha, cambios aplicados y si se puede deshacer."""
     data = read_changelog(backup_dir) or {}
-    ok = [c for c in data.get("changes", []) if c.get("ok")]
+    done = _undoable_changes(data)
     return {
         "path": str(backup_dir),
         "date": data.get("date"),
-        "changes": len(ok),
+        "changes": len(done),
+        "complete": data.get("complete", True),  # False: la actualización se interrumpió
         "undone": bool(data.get("undone")),
-        "undoable": bool(ok) and not data.get("undone"),
+        "undoable": bool(done) and not data.get("undone"),
     }
+
+
+def _undoable_changes(data: dict) -> list[dict]:
+    """Cambios hechos (ok) o que se quedaron a medias (pending) al interrumpirse."""
+    return [c for c in data.get("changes", []) if c.get("ok") or c.get("state") == "pending"]
+
+
+def last_undoable(mods_dir: Path) -> Path | None:
+    """La actualización más reciente que se puede deshacer (no solo la última copia:
+    un intento fallido posterior no debe impedir deshacer la anterior)."""
+    for backup in reversed(list_backups(mods_dir)):
+        if backup_info(backup)["undoable"]:
+            return backup
+    return None
 
 
 def undo_backup(backup_dir: Path) -> UndoResult:
@@ -343,7 +427,7 @@ def undo_backup(backup_dir: Path) -> UndoResult:
 
     result = UndoResult()
     undo_dir = backup_dir / UNDO_DIR
-    for change in reversed([c for c in data.get("changes", []) if c.get("ok")]):
+    for change in reversed(_undoable_changes(data)):
         name = change.get("name", "?")
         new_file, old_file, backup_file = change.get("new_file"), change.get("old_file"), change.get("backup_file")
         try:
@@ -361,10 +445,10 @@ def undo_backup(backup_dir: Path) -> UndoResult:
                     os.replace(source, target)
                     result.restored += 1
         except OSError as exc:
-            result.errors.append(t("undo.failed", name=name, error=exc))
+            result.errors.append(t("undo.failed", name=name, error=friendly_error(exc)))
 
     data["undone"] = datetime.now().isoformat(timespec="seconds")
-    (backup_dir / "cambios.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    _write_json(backup_dir / "cambios.json", data)
     with (backup_dir / "cambios.txt").open("a", encoding="utf-8") as f:
         f.write("\n" + t("log.undone", date=f"{datetime.now():%Y-%m-%d %H:%M}") + "\n")
     return result

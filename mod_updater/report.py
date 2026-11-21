@@ -88,5 +88,7 @@ def print_report(
             console.print(f"[yellow]{escape(t('cli.blocked', name=r.name, note=r.note))}[/]")
         for b in plan.broken:
             console.print(f"[red]{escape(t('cli.broken', name=b.res.name, reason=b.reason))}[/]")
+        for msg in plan.conflicts:
+            console.print(f"[yellow]{escape(t('cli.notice', message=msg))}[/]")
         for msg in plan.ignored:
             console.print(f"[dim]{escape(t('cli.notice', message=msg))}[/]")

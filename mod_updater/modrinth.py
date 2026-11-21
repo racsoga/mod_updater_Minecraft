@@ -51,6 +51,11 @@ class MrVersion:
             if d.get("dependency_type") == "required"
         ]
 
+    @property
+    def incompatible_ids(self) -> list[str]:
+        """project_id de los proyectos declarados incompatibles."""
+        return [d.get("project_id") for d in self.dependencies if d.get("dependency_type") == "incompatible" and d.get("project_id")]
+
     @classmethod
     def from_api(cls, d: dict) -> "MrVersion":
         files = [
@@ -88,7 +93,8 @@ class ModrinthClient:
         if resp.status_code == 404:
             return None
         if not resp.ok:
-            raise ApiError(f"Modrinth {method} {path}: HTTP {resp.status_code} {resp.text[:200]}")
+            kind = "busy" if resp.status_code == 429 else "http"
+            raise ApiError(f"Modrinth {method} {path}: HTTP {resp.status_code} {resp.text[:200]}", kind=kind, status=resp.status_code)
         return resp.json()
 
     # ------------------------------------------------------------------ versiones por hash

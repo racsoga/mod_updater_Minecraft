@@ -1,2 +1,9 @@
-pillow>=10.0      # solo para tools/logo.py
-pyinstaller>=6.0  # solo para generar el .exe
+# Solo para generar el logo y el ejecutable (versiones exactas).
+# PyInstaller se instala SIN rueda precompilada para compilar su cargador (bootloader)
+# desde el código fuente: ver packaging/build.ps1 y .github/workflows/release.yml.
+pillow==13.0.0
+pyinstaller==6.22.3
+pyinstaller-hooks-contrib==2026.10
+altgraph==0.17.5
+pefile==2024.8.26
+setuptools==84.2.1
