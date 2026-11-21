@@ -19,7 +19,7 @@
     has_key: !!keySource, key_hint: keySource === "keyring" ? "••••3f9a" : keySource === "env" ? "••••c0de" : null, key_source: keySource,
     loaders, languages, lang: resolve(settings.language), strings: await strings(settings.language) });
 
-  const up = (name, from, to, icon, betaNote = null) => ({ s: "up", name, from, to, icon: icon && CDN + icon, beta: !!betaNote, betaNote, src: "CurseForge", sub: "", neededBy: [], checked: true });
+  const up = (name, from, to, icon, betaNote = null) => ({ s: "up", name, from, to, icon: icon && CDN + icon, beta: !!betaNote, betaNote, src: "CurseForge", sub: "", neededBy: [], checked: true, cl: true });
   const ok = (name, from) => ({ s: "ok", name, from, to: null, beta: false, betaNote: null, src: "CurseForge", sub: "", neededBy: [], checked: false });
   const rows = [
     { s: "dep", name: "MezzConfig", from: null, to: "0.7.1", icon: CDN + "2038/374/256/256/639246433191280078.png", beta: true,
@@ -92,6 +92,19 @@
           backup: { path: "C:\\Users\\Ana\\AppData\\Roaming\\.minecraft\\mods_backup\\2026-11-20_1930", date: "2026-11-20T19:30:00", changes: okRows.length, undone: false, undoable: okRows.length > 0 }, pruned: 1 });
       }, step * chosen.length + 400);
       return { ok: true, total: chosen.length };
+    },
+    // Changelog de ejemplo (?clfail: error de red). El HTML real llega ya limpio desde Python.
+    changelog: async id => {
+      await new Promise(r => setTimeout(r, params.has("slow") ? 1500 : 300));
+      if (params.has("clfail")) return { ok: false, message: t("cl.err_network") };
+      const r = rows.find(x => x.id === id) || rows[0];
+      return { ok: true, name: r.name, from: r.from, to: r.to, url: "https://example.org", more: 2, versions: [
+        { version: r.to, date: "2026-11-10T10:00:00Z", channel: "release",
+          html: '<h3>Nuevo</h3><ul><li>Soporte para la <a href="https://example.org" data-external rel="noopener">API nueva</a></li><li><mark class="cl-flag">Breaking</mark>: cambia el formato de configuración</li></ul>' },
+        { version: "anterior-beta", date: "2026-10-28T10:00:00Z", channel: "beta", html: "" },
+        { version: "anterior", date: "2026-10-02T10:00:00Z", channel: "release",
+          html: '<p>Corregido un fallo al cargar el <mark class="cl-flag">world</mark> con muchos chunks.</p><pre><code>config.toml: maxChunks = 64</code></pre>' },
+      ] };
     },
     // Análisis de ejemplo (?noanalysis: sin revisión todavía).
     analysis: async libs => {

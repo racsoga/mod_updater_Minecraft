@@ -445,5 +445,20 @@
   "an.no_version_other": "No new version for {version} ({count})",
   "an.no_version_hint": "Still releasing versions, but not for {version}. The date is their latest version for {version}.",
   "an.orphan_optional": "Only used, optionally, by: {names}",
-  "an.orphan_chain": "Only needed by {names}, which nothing uses either"
+  "an.orphan_chain": "Only needed by {names}, which nothing uses either",
+
+  "cl.open": "See changes",
+  "cl.title": "Changes in {name}",
+  "cl.close": "Close",
+  "cl.loading": "Loading the notes for each version…",
+  "cl.none": "There are no versions between yours and the new one.",
+  "cl.empty": "The author hasn't published notes for this version.",
+  "cl.page": "Open the mod's page",
+  "cl.more_one": "And 1 older version.",
+  "cl.more_other": "And {count} older versions.",
+  "cl.flag_word": "word",
+  "cl.flag_legend": "We highlight breaking, incompatible, requires and world: they often announce changes that may affect your world.",
+  "cl.not_found": "That mod is no longer in the list. Check again.",
+  "cl.err_network": "Couldn't download the notes. Try again in a moment.",
+  "cl.err_unknown": "Couldn't show the notes ({error})."
 }

@@ -31,6 +31,8 @@ Mod Updater checks your Minecraft `mods` folder, recognises each mod by its fing
 - **There's always a way back**: a copy of your mods is saved before anything changes. When it finishes you can **Undo**.
 - **Never touches anything while Minecraft is open.**
 - In **English and Spanish** (it follows your Windows language).
+- *(next version)* **Collection analysis**: mods by category, what takes the most space, mods not updated or possibly abandoned, and libraries no mod uses.
+- *(next version)* **See the changes before updating**: the notes of every version between yours and the new one, highlighting possible world-breaking changes.
 
 <p align="center">
   <img src="docs/images/flujo.gif" width="720" alt="Animation (in Spanish): Update is pressed, each mod goes through downloading, verified and updated, and the final screen appears">

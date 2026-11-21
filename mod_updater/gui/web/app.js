@@ -275,7 +275,8 @@ function betaTag(m) {
 function versions(m) {
   if (!m.to) return `<div class="ver"><span class="new" title="${esc(m.from)}">${esc(m.from || "?")}</span>${betaTag(m)}</div>`;
   const from = m.from ? `<span class="old" title="${esc(m.from)}">${esc(m.from)}</span>` : `<span class="old">${esc(t("ui.not_installed"))}</span>`;
-  return `<div class="ver">${from}${arrow}<span class="sr-only">${esc(t("ui.to"))}</span><span class="new" title="${esc(m.to)}">${esc(m.to)}</span>${betaTag(m)}</div>`;
+  const cl = m.cl ? `<button class="linkbtn cl-btn" type="button" data-cl="${m.id}" aria-haspopup="dialog">${esc(t("cl.open"))}</button>` : "";
+  return `<div class="ver">${from}${arrow}<span class="sr-only">${esc(t("ui.to"))}</span><span class="new" title="${esc(m.to)}">${esc(m.to)}</span>${betaTag(m)}${cl}</div>`;
 }
 
 function sub(m) {
@@ -501,7 +502,69 @@ document.addEventListener("click", async e => {
   if (el.closest("[data-ok]")) { okOpen = !okOpen; render(); return; }
   if (el.closest("[data-clear]")) { $("#q").value = ""; query = ""; render(); $("#q").focus(); return; }
   if (el.closest("[data-go-settings]")) { openSetup("settings"); return; }
+  const cl = el.closest("[data-cl]");
+  if (cl) { openChangelog(Number(cl.dataset.cl), cl); return; }
 });
+
+/* ================================================================ changelog */
+
+let clReturn = null;   // botón al que vuelve el foco al cerrar
+
+async function openChangelog(id, trigger) {
+  const m = MODS[id];
+  clReturn = trigger;
+  $("#cl-title").textContent = t("cl.title", { name: m.name });
+  $("#cl-range").textContent = `${m.from || ""} → ${m.to || ""}`;
+  $("#cl-body").innerHTML = `<p class="cl-loading">${esc(t("cl.loading"))}</p>`;
+  $("#cl-backdrop").hidden = $("#cl-drawer").hidden = false;
+  document.body.classList.add("drawer-open");
+  $("#cl-close").focus();
+  const res = await api().changelog(id);
+  if ($("#cl-drawer").hidden) return;  // se cerró mientras cargaba
+  renderChangelog(res);
+}
+
+function renderChangelog(res) {
+  const body = $("#cl-body");
+  if (!res.ok) { body.innerHTML = `<p class="cl-error">${esc(res.message)}</p>`; return; }
+  const link = res.url ? `<a href="${esc(res.url)}" data-external>${esc(t("cl.page"))}</a>` : "";
+  if (!res.versions.length) { body.innerHTML = `<p class="cl-empty">${esc(t("cl.none"))} ${link}</p>`; return; }
+  // El HTML de cada versión ya viene limpio desde Python (changelog.sanitize_html).
+  const entries = res.versions.map(v => `<section class="cl-entry">
+      <h3><span>${esc(v.version)}</span>${v.channel !== "release" ? `<span class="beta">${esc(v.channel)}</span>` : ""}
+        <time datetime="${esc(v.date)}">${esc(formatDay(v.date))}</time></h3>
+      ${v.html ? `<div class="cl-html">${v.html}</div>` : `<p class="cl-empty">${esc(t("cl.empty"))} ${link}</p>`}
+    </section>`).join("");
+  const flagged = res.versions.some(v => v.html.includes('class="cl-flag"'));
+  body.innerHTML = (flagged ? `<p class="cl-legend"><mark class="cl-flag">${esc(t("cl.flag_word"))}</mark> ${esc(t("cl.flag_legend"))}</p>` : "")
+    + entries + (res.more ? `<p class="cl-more">${esc(t("cl.more", { count: res.more }))} ${link}</p>` : "");
+}
+
+function formatDay(iso) {
+  try { return new Date(iso).toLocaleDateString(LANG, { year: "numeric", month: "short", day: "numeric" }); } catch { return iso; }
+}
+
+function closeChangelog() {
+  if ($("#cl-drawer").hidden) return;
+  $("#cl-backdrop").hidden = $("#cl-drawer").hidden = true;
+  document.body.classList.remove("drawer-open");
+  if (clReturn && document.contains(clReturn)) clReturn.focus();
+}
+
+function wireChangelog() {
+  $("#cl-close").addEventListener("click", closeChangelog);
+  $("#cl-backdrop").addEventListener("click", closeChangelog);
+  $("#cl-drawer").addEventListener("keydown", e => {
+    if (e.key === "Escape") { e.preventDefault(); closeChangelog(); return; }
+    if (e.key !== "Tab") return;
+    // Foco atrapado dentro del panel mientras está abierto.
+    const items = [...$("#cl-drawer").querySelectorAll("button, a[href], [tabindex]:not([tabindex='-1'])")];
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+}
 
 document.addEventListener("change", e => {
   const el = e.target;
@@ -692,6 +755,7 @@ function wireTabs() {
 
 function wire() {
   wireTabs();
+  wireChangelog();
   wireAnalysis();
   $("#q").addEventListener("input", e => { query = e.target.value.trim().toLowerCase(); render(); });
   $("#btn-rescan").addEventListener("click", startScan);

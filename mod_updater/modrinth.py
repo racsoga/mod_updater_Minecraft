@@ -35,6 +35,7 @@ class MrVersion:
     dependencies: list[dict] = field(default_factory=list)
     loaders: list[str] = field(default_factory=list)
     game_versions: list[str] = field(default_factory=list)
+    changelog: str = ""  # Markdown
 
     @property
     def primary_file(self) -> MrFile | None:
@@ -80,6 +81,7 @@ class MrVersion:
             dependencies=d.get("dependencies") or [],
             loaders=d.get("loaders") or [],
             game_versions=d.get("game_versions") or [],
+            changelog=d.get("changelog") or "",
         )
 
 

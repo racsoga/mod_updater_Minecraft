@@ -445,5 +445,20 @@
   "an.no_version_other": "Sin versión nueva para {version} ({count})",
   "an.no_version_hint": "Siguen publicando versiones, pero no para {version}. La fecha es la de su última versión para {version}.",
   "an.orphan_optional": "Solo la usa, de forma opcional: {names}",
-  "an.orphan_chain": "Solo la pide {names}, que tampoco usa nadie"
+  "an.orphan_chain": "Solo la pide {names}, que tampoco usa nadie",
+
+  "cl.open": "Ver cambios",
+  "cl.title": "Cambios de {name}",
+  "cl.close": "Cerrar",
+  "cl.loading": "Cargando las notas de cada versión…",
+  "cl.none": "No hay versiones entre la que tienes y la nueva.",
+  "cl.empty": "El autor no ha publicado notas para esta versión.",
+  "cl.page": "Ver la página del mod",
+  "cl.more_one": "Y 1 versión más antigua.",
+  "cl.more_other": "Y {count} versiones más antiguas.",
+  "cl.flag_word": "palabra",
+  "cl.flag_legend": "Marcamos breaking, incompatible, requires y world: suelen anunciar cambios que pueden afectar a tu partida.",
+  "cl.not_found": "Ese mod ya no está en la lista. Vuelve a revisar.",
+  "cl.err_network": "No se han podido descargar las notas. Inténtalo de nuevo en un momento.",
+  "cl.err_unknown": "No se han podido mostrar las notas ({error})."
 }
