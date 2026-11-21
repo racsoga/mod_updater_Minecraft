@@ -31,16 +31,30 @@ Mod Updater checks your Minecraft `mods` folder, recognises each mod by its fing
 - **There's always a way back**: a copy of your mods is saved before anything changes. When it finishes you can **Undo**.
 - **Never touches anything while Minecraft is open.**
 - In **English and Spanish** (it follows your Windows language).
-- *(next version)* **Collection analysis**: mods by category, what takes the most space, mods not updated or possibly abandoned, and libraries no mod uses.
-- *(next version)* **Explore and install new mods**: search CurseForge and Modrinth at once, only what exists for your version, and install them with their dependencies.
-- *(next version)* **Profiles**: several folders or instances (official launcher, CurseForge, Prism, MultiMC, Modrinth App), each with its own version and loader.
-- *(next version)* **Share your mod list**: export and import the list (or a `.mrpack`) so someone else gets exactly the same mods.
-- *(next version)* **Suggestions for your game**: what to remove, review, keep and add based on how you play, always with the reason.
-- *(next version)* **See the changes before updating**: the notes of every version between yours and the new one, highlighting possible world-breaking changes.
+- **Collection analysis**: mods by category, what takes the most space, mods not updated or possibly abandoned, and libraries no mod uses.
+- **Explore and install new mods**: search CurseForge and Modrinth at once, only what exists for your version, and install them with their dependencies.
+- **Profiles**: several folders or instances (official launcher, CurseForge, Prism, MultiMC, Modrinth App), each with its own version and loader.
+- **Share your mod list**: export and import the list (or a `.mrpack`) so someone else gets exactly the same mods.
+- **Suggestions for your game**: what to remove, review, keep and add based on how you play, always with the reason.
+- **See the changes before updating**: the notes of every version between yours and the new one, highlighting possible world-breaking changes.
 
 <p align="center">
   <img src="docs/images/flujo.gif" width="720" alt="Animation (in Spanish): Update is pressed, each mod goes through downloading, verified and updated, and the final screen appears">
 </p>
+
+### Analysis, Explore and Suggestions
+
+<p align="center">
+  <img src="docs/images/novedades.gif" width="720" alt="Animation (in Spanish): a tour of the Analysis tab (mods by category chart), Explore (a mod is added to the basket and its page opened) and Suggestions (Remove, Review, Keep and Add columns)">
+</p>
+
+<table>
+  <tr>
+    <td><img src="docs/images/analysis.png" alt="Analysis: total files, size, status and a chart of mods by category"></td>
+    <td><img src="docs/images/explore.png" alt="Explore: search with category and sort filters, and mod cards with an Add button"></td>
+    <td><img src="docs/images/suggestions.png" alt="Suggestions: Remove, Review, Keep and Add columns, each mod with its reason"></td>
+  </tr>
+</table>
 
 ## Download
 
@@ -133,11 +147,41 @@ If the newer version is a **beta** and you have the stable one, the app doesn't 
 It's designed for NeoForge, Forge, Fabric and Quilt, and for any Minecraft version that has mods on CurseForge or Modrinth: choose the version and loader in *Settings*. But **it has only been tested with NeoForge 1.21.1**. Other combinations should work, but there may be bugs; if you find one, [let us know](https://github.com/racsoga/mod_updater_Minecraft/issues/new/choose).
 </details>
 
+<details>
+<summary><b>Can I use it with several instances or launchers?</b></summary>
+
+Yes, with **profiles**. Each profile is a `mods` folder with its own Minecraft version and loader. In *Settings → Profiles* you can look for instances of the official launcher, CurseForge, Prism, MultiMC and Modrinth App, or add a folder by hand. Switch profiles with the selector at the top. Each profile keeps its own settings and its *Suggestions* answers.
+</details>
+
+<details>
+<summary><b>How do I give my mod list to a friend?</b></summary>
+
+In *Settings → Share the mod list*:
+
+- **Export list…** saves a `.modlist.json` file with the mods and the exact version of each one. It contains no paths, no key and no personal data.
+- Your friend presses **Import list…**: they see what will be added, what changes version and what isn't available before anything is installed. Optionally they can remove the mods that aren't in the list (they're moved to the backup, not deleted).
+- **Export .mrpack…** creates a Modrinth pack that opens in Prism or Modrinth App (only with the mods that are on Modrinth).
+- **Copy list** copies names and versions as text, to paste in a chat.
+</details>
+
+<details>
+<summary><b>How do Suggestions work? Will it delete my mods?</b></summary>
+
+Nothing changes until you tick it and confirm. You answer a few questions (what you feel like playing, difficulty, whether you play alone or with others, how your PC runs and how many mods you want at most) and the app sorts your mods into **Remove**, **Review**, **Keep** and **Add**, always with the reason:
+
+- **Remove:** duplicated mods (for example, two minimaps), known incompatibilities or mods that don't fit how you play. It never suggests removing a library or a mod another one needs.
+- **Review:** notices for you to decide (mods with no new versions for a long time, libraries no mod asks for, mods that change difficulty a lot).
+- **Add:** popular mods that exist for your version and don't clash with the ones you have.
+
+These are automatic rules based on CurseForge and Modrinth data, not expert advice: review them. Removing a mod moves it to the backup and can be **undone**.
+</details>
+
 ## Privacy
 
 - **No telemetry or analytics.** The app doesn't send usage data to anyone.
 - To identify your mods it sends CurseForge and Modrinth the **fingerprint** (hash) of each `.jar` file, not the file or your data.
 - It only connects to `api.curseforge.com`, `api.modrinth.com` and their download and image servers (`forgecdn.net`, `modrinth.com`).
+- Also, at most once a day it checks `api.github.com` for a new version of Mod Updater (nothing of yours is sent). Turn it off in *Settings → Tell me when there's a new version of Mod Updater*.
 - What it stores stays on your PC: settings in `%APPDATA%\mod_updater`, the key in Credential Manager and backups in `.minecraft\mods_backup`.
 
 ## Disclaimer
