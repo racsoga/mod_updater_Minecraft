@@ -38,9 +38,8 @@ Mod Updater checks your Minecraft `mods` folder, recognises each mod by its fing
 
 ## Download
 
-**Coming soon.** The first downloadable version (`ModUpdater.exe`) will be published under *Releases* once testing is finished. Meanwhile you can run it from source with Python (`pip install -r requirements.txt` and `python ModUpdater.pyw`).
-
-Once it's out: download `ModUpdater.exe` and open it. Nothing to install.
+1. Download [**ModUpdater.exe**](https://github.com/racsoga/mod_updater_Minecraft/releases/latest/download/ModUpdater.exe) (latest version; also under [*Releases*](https://github.com/racsoga/mod_updater_Minecraft/releases/latest), with the notes and the SHA-256).
+2. Open it. Nothing to install.
 
 > **Make a copy of your `mods` folder the first time.** The app keeps backups and lets you undo, but your own copy never hurts.
 
@@ -73,7 +72,7 @@ It appears because the executable isn't signed with a paid certificate, not beca
 <details>
 <summary><b>My antivirus says the <code>.exe</code> is suspicious</b></summary>
 
-A minor antivirus may give a **false positive**. It happens to many programs built with PyInstaller, because from the outside they resemble others that really are malicious. For example, version 0.2.0 is clean on Microsoft Defender, Kaspersky, ESET, Bitdefender and SentinelOne, and only 2 of VirusTotal's 71 engines flag it (Bkav Pro and SecureAge).
+A minor antivirus may give a **false positive**. It happens to many programs built with PyInstaller, because from the outside they resemble others that really are malicious. For example, version 0.2.0 is clean on Microsoft Defender, Kaspersky, ESET, Bitdefender, Avast and Google, and only 2 of VirusTotal's 71 engines flag it: Bkav Pro and SecureAge ([see report](https://www.virustotal.com/gui/file/38d4924c8ecba8ba1712a1582d5410ea4360926e2d53d0fb40b096c0fcbfd9e4)).
 
 - Each Release's notes link to the **VirusTotal scan** of the exact file, so you can see for yourself.
 - Check your file is the original (see the next question).

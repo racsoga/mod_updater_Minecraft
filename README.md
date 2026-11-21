@@ -38,9 +38,8 @@ Mod Updater revisa la carpeta `mods` de tu Minecraft, reconoce cada mod por su h
 
 ## Descarga
 
-**Próximamente.** La primera versión descargable (`ModUpdater.exe`) se publicará en *Releases* en cuanto termine de probarse. Mientras tanto puedes ejecutarla desde el código fuente con Python (`pip install -r requirements.txt` y `python ModUpdater.pyw`).
-
-Cuando esté publicada: descarga `ModUpdater.exe` y ábrelo. No hace falta instalar nada.
+1. Descarga [**ModUpdater.exe**](https://github.com/racsoga/mod_updater_Minecraft/releases/latest/download/ModUpdater.exe) (última versión; también en [*Releases*](https://github.com/racsoga/mod_updater_Minecraft/releases/latest), con las notas y el SHA-256).
+2. Ábrelo. No hace falta instalar nada.
 
 > **Haz una copia de tu carpeta `mods` la primera vez.** La app guarda copias de seguridad y permite deshacer, pero una copia tuya nunca está de más.
 
@@ -73,7 +72,7 @@ Sale porque el ejecutable no está firmado con un certificado de pago, no porque
 <details>
 <summary><b>Mi antivirus dice que el <code>.exe</code> es sospechoso</b></summary>
 
-Algún antivirus menor puede dar un **falso positivo**. Les pasa a muchos programas hechos con PyInstaller, porque se parecen por fuera a otros que sí son maliciosos. Por ejemplo, la versión 0.2.0 sale limpia en Microsoft Defender, Kaspersky, ESET, Bitdefender y SentinelOne, y solo la marcan 2 de 71 antivirus de VirusTotal (Bkav Pro y SecureAge).
+Algún antivirus menor puede dar un **falso positivo**. Les pasa a muchos programas hechos con PyInstaller, porque se parecen por fuera a otros que sí son maliciosos. Por ejemplo, la versión 0.2.0 sale limpia en Microsoft Defender, Kaspersky, ESET, Bitdefender, Avast y Google, y solo la marcan 2 de 71 antivirus de VirusTotal: Bkav Pro y SecureAge ([ver informe](https://www.virustotal.com/gui/file/38d4924c8ecba8ba1712a1582d5410ea4360926e2d53d0fb40b096c0fcbfd9e4)).
 
 - Las notas de cada Release enlazan al **análisis de VirusTotal** del archivo exacto, para que lo veas tú.
 - Comprueba que tu archivo es el original (ver la siguiente pregunta).
