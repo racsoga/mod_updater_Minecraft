@@ -157,6 +157,7 @@
   "ui.show_n": "Show {count}",
   "ui.no_match": "No mod matches “{query}”.",
   "ui.clear_search": "Clear search",
+  "ui.alpha": "alpha",
   "ui.beta": "beta",
   "ui.not_installed": "Not installed",
   "ui.to": "to",

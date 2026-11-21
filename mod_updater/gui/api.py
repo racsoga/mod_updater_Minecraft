@@ -136,6 +136,20 @@ def serialize(results: list[Resolution], plan: DepPlan, *, allow_beta: bool = Fa
     return {"rows": rows, "details": list(plan.ignored), "warnings": list(plan.conflicts)}
 
 
+def _never_hang(method):
+    """Las llamadas desde la ventana siempre responden: un error inesperado se devuelve como
+    mensaje en vez de dejar la interfaz esperando (botones desactivados, "Cargando…")."""
+    import functools
+
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        try:
+            return method(self, *args, **kwargs)
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "message": t("scan.err_unknown", error=type(exc).__name__)}
+    return wrapper
+
+
 class Api:
     def __init__(
         self,
@@ -269,6 +283,7 @@ class Api:
             return []
         return [i for i in found if os.path.normcase(os.path.normpath(i["mods_dir"])) not in known]
 
+    @_never_hang
     def profile_add(self, data: dict) -> dict:
         data = data or {}
         mods_dir = Path(str(data.get("mods_dir") or "")).expanduser()
@@ -296,13 +311,18 @@ class Api:
 
     def profile_remove(self, profile_id: str) -> dict:
         """Quita el perfil de la lista; su carpeta y sus mods no se tocan."""
-        s = self._settings()
-        was_active = s.active_profile == profile_id
+        if not self._busy.acquire(blocking=False):  # no cambiar de carpeta a mitad de una revisión
+            return {"ok": False, "message": t("apply.busy")}
         try:
-            profiles.remove(s, str(profile_id))
-        except ValueError:
-            return {"ok": False, "message": t("profile.last")}
-        save_settings(s, self._settings_file)
+            s = self._settings()
+            was_active = s.active_profile == profile_id
+            try:
+                profiles.remove(s, str(profile_id))
+            except ValueError:
+                return {"ok": False, "message": t("profile.last")}
+            save_settings(s, self._settings_file)
+        finally:
+            self._busy.release()
         if was_active:
             self._reset_session()
         return {"ok": True, "switched": was_active, "state": self.get_state()}
@@ -322,6 +342,8 @@ class Api:
 
     def save_setup(self, data: dict) -> dict:
         """Guarda la pantalla de bienvenida / ajustes. Devuelve {ok, message?, state?}."""
+        if self._busy.locked():  # a mitad de una revisión o actualización: la carpeta no puede cambiar
+            return {"ok": False, "message": t("apply.busy")}
         s = self._settings()
         if data.get("language") in ("auto", *i18n.SUPPORTED):
             s.language = data["language"]
@@ -514,6 +536,7 @@ class Api:
             ok = [o for o in outcomes if o.ok]
             pruned = prune_backups(s.mods_path, s.backups_to_keep) if ok else []
             self._plan = None  # la revisión ya no refleja la carpeta: hay que volver a revisar
+            self._results = []
             self._emit("apply_done", {
                 "updated": sum(1 for o in ok if o.resolution.kind not in (INSTALL, REMOVE)),
                 "removed": sum(1 for o in ok if o.resolution.kind == REMOVE),
@@ -541,6 +564,7 @@ class Api:
         key = self._get_key()[0] if s.use_curseforge else None
         return (self._cf_factory(key) if key else None), self._mr_factory(DEFAULT_USER_AGENT)
 
+    @_never_hang
     def explore_search(self, opts: dict) -> dict:
         """Busca mods para la versión y el cargador de los ajustes. opts: query, category, sort,
         page, hide_installed. Devuelve tarjetas sin duplicados entre fuentes."""
@@ -565,6 +589,7 @@ class Api:
                 "env": {"minecraft_version": s.minecraft_version, "loader": LOADER_LABEL.get(s.loader, s.loader)},
                 "scanned": bool(self._results)}
 
+    @_never_hang
     def explore_detail(self, source: str, project_id: str) -> dict:
         """Descripción, capturas, enlaces y versión que se instalaría (con sus dependencias)."""
         s = self._settings()
@@ -583,6 +608,7 @@ class Api:
                        "deps": [{"name": finder.describe(d), "installed": d.key in ids} for d in res.new_deps]}
         return {"ok": True, **info, "install": install}
 
+    @_never_hang
     def install_plan(self, items: list) -> dict:
         """Prepara la instalación de la cesta: versión de cada mod y dependencias que faltan."""
         if not self._results:
@@ -648,6 +674,7 @@ class Api:
     def suggest_answers(self) -> dict:
         return self._settings().answers or {}
 
+    @_never_hang
     def suggest_run(self, answers: dict) -> dict:
         """Guarda las respuestas en el perfil y calcula Quitar · Mantener · Añadir."""
         if not self._results:
@@ -669,6 +696,7 @@ class Api:
             return {"ok": False, "message": t("scan.err_offline") if exc.kind == "offline" else t("ex.err_network")}
         return {"ok": True, "answers": clean, "total": len([r for r in self._results if r.mod is not None]), **res}
 
+    @_never_hang
     def suggest_plan(self, selection: dict) -> dict:
         """Prepara lo marcado: añadir (con dependencias, como la cesta) y quitar (a la copia)."""
         sel = selection or {}
@@ -724,6 +752,7 @@ class Api:
     def _active_name(self, s: Settings) -> str:
         return (profiles.get(s, s.active_profile) or {}).get("name") or t("profile.default_name")
 
+    @_never_hang
     def modlist_export(self, kind: str = "modlist") -> dict:
         """Guarda la lista del perfil activo (.modlist.json propio o .mrpack de Modrinth)."""
         if not self._results:
@@ -753,6 +782,7 @@ class Api:
         Path(path).write_text(modlist_mod.dumps(data), encoding="utf-8")
         return {"ok": True, "file": Path(path).name, "excluded": [], "count": len(data["mods"])}
 
+    @_never_hang
     def modlist_import(self) -> dict:
         """Abre una lista y la compara con el perfil activo (no instala nada todavía)."""
         if not self._results:
@@ -774,6 +804,7 @@ class Api:
                 "same": len(c["same"]), "unavailable": [row(m) for m in c["unavailable"]],
                 "remove": [{"name": r.name, "version": r.current_version} for r in c["remove"]]}
 
+    @_never_hang
     def modlist_import_start(self, remove: bool = False) -> dict:
         """Instala las versiones exactas de la lista importada (y quita lo que sobra si se pide)."""
         if not self._import:
@@ -786,8 +817,8 @@ class Api:
             chosen, manual = modlist_mod.resolve_exact(self._import, self._results, curseforge=cf, modrinth=mr)
         except ApiError as exc:
             return {"ok": False, "message": t("scan.err_offline") if exc.kind == "offline" else t("ex.err_network")}
-        if remove:
-            chosen += [replace(r, kind=REMOVE) for r in self._import["remove"]]
+        if remove:  # primero se quitan (así un jar con el mismo nombre que uno nuevo no choca)
+            chosen = [replace(r, kind=REMOVE) for r in self._import["remove"]] + chosen
         if not chosen:
             return {"ok": False, "message": t("apply.nothing"), "manual": manual}
         if not self._busy.acquire(blocking=False):
@@ -801,6 +832,7 @@ class Api:
         self._run_async(lambda: self._apply(chosen, s, index))
         return {"ok": True, "rows": rows, "manual": manual}
 
+    @_never_hang
     def compare_profiles(self, other_id: str) -> dict:
         """Compara (sin red) la carpeta del perfil activo con la de otro perfil."""
         s = self._settings()
@@ -896,6 +928,7 @@ class Api:
         finally:
             self._busy.release()
         self._plan = None
+        self._results = []  # la carpeta ha cambiado: lo revisado ya no vale
         return {"ok": not r.errors, "restored": r.restored, "removed": r.removed, "errors": r.errors,
                 "message": t("undo.done", count=r.restored, removed=r.removed) if r.restored
                 else t("undo.done_removed", count=r.removed)}

@@ -56,6 +56,8 @@ def load_settings(path: Path | None = None) -> Settings:
             setattr(s, k, v)
     if not isinstance(s.profiles, list):
         s.profiles = []
+    # Perfiles mal formados (editados a mano): se descartan en vez de impedir que la app arranque.
+    s.profiles = [p for p in s.profiles if isinstance(p, dict) and isinstance(p.get("id"), str) and p["id"]]
     from . import profiles  # aquí para no crear un import circular
     profiles.ensure(s)
     profiles.apply_active(s)

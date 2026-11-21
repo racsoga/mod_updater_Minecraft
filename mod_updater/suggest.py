@@ -66,6 +66,7 @@ def suggest(answers: dict, installed: list[Resolution], finder, *, knowledge: di
 
     # --- Quitar: problemas claros
     groups_of: dict[int, str] = {}
+    members_of: dict[str, list[Resolution]] = {}
     covered_groups: set[str] = set()
     for g in knowledge["solapamientos"]:
         present: list[Resolution] = []
@@ -73,6 +74,7 @@ def suggest(answers: dict, installed: list[Resolution], finder, *, knowledge: di
             present += [r for r in find_installed(m) if r not in present]
         for r in present:
             groups_of[id(r)] = g["grupo"]
+        members_of[g["grupo"]] = present
         if present:
             covered_groups.add(g["grupo"])
         if len(present) > 1:
@@ -96,8 +98,10 @@ def suggest(answers: dict, installed: list[Resolution], finder, *, knowledge: di
         if r is None:
             continue
         year = (s["date"] or "")[:4]
-        if id(r) in groups_of:  # hay una alternativa mejor (otro mod que hace lo mismo)
-            mark(r, "remove", t("sug.reason.abandoned_alt", year=year, group=t(f"sug.group.{groups_of[id(r)]}")))
+        group = groups_of.get(id(r))
+        alternative = group and any(o is not r and decided.get(id(o), ("",))[0] != "remove" for o in members_of[group])
+        if alternative:  # hay otro mod instalado que hace lo mismo y que se queda
+            mark(r, "remove", t("sug.reason.abandoned_alt", year=year, group=t(f"sug.group.{group}")))
         else:
             mark(r, "review", t("sug.reason.abandoned", year=year))
     for o in data["orphans"]:

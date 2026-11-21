@@ -33,6 +33,8 @@ FLAG_WORDS = re.compile(r"\b(breaking|incompatible|requires|world)\b", re.IGNORE
 def _safe_url(url: str | None, *, image: bool = False) -> str | None:
     if not url:
         return None
+    if any(c in url for c in ("\\", "@")) or any(c.isspace() for c in url.strip()):
+        return None  # los navegadores tratan \ como / y "@" separa usuario y host: no fiarse
     parts = urlparse(url.strip())
     if image:
         return url.strip() if parts.scheme == "https" and (parts.hostname or "") in IMG_HOSTS else None

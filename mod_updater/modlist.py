@@ -64,9 +64,18 @@ def parse(text: str) -> dict:
     for m in data["mods"]:
         if not isinstance(m, dict) or not isinstance(m.get("nombre"), str):
             raise ModlistError("format")
-        if m.get("fuente") not in (None, CF, MR) or (m.get("fuente") and m.get("archivo") in (None, "")):
+        src = m.get("fuente")
+        if src not in (None, CF, MR):
+            raise ModlistError("format")
+        if src == CF and not (_is_int(m.get("proyecto")) and _is_int(m.get("archivo"))):
+            raise ModlistError("format")
+        if src == MR and not (isinstance(m.get("proyecto"), str) and m["proyecto"] and isinstance(m.get("archivo"), str) and m["archivo"]):
             raise ModlistError("format")
     return data
+
+
+def _is_int(value) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) or (isinstance(value, str) and value.isdigit())
 
 
 def compare(data: dict, installed: list[Resolution], *, minecraft: str, loader: str) -> dict:
@@ -167,13 +176,13 @@ def resolve_exact(changes: dict, installed: list[Resolution], *, curseforge, mod
             f = cf_files.get(str(m["archivo"]))
             info = cf_info.get(int(m["proyecto"])) or {}
             page = (info.get("links") or {}).get("websiteUrl")
-            if f is not None:
+            if f is not None and int(f.mod_id) == int(m["proyecto"]):  # el archivo debe ser de ese proyecto
                 url, version, file_name, sha1, size = f.download_url, f.display_name, f.file_name, f.sha1, f.size
         else:
             v = modrinth.version(str(m["archivo"])) if modrinth is not None else None
             f = v.primary_file if v else None
             page = f"https://modrinth.com/mod/{m['proyecto']}"
-            if f is not None:
+            if f is not None and v.project_id == str(m["proyecto"]):
                 url, version, file_name, sha1, sha512, size = f.url, v.version_number, f.filename, f.sha1, f.sha512, f.size
         if not url or not file_name:
             manual.append({"name": m["nombre"], "url": page})
@@ -181,7 +190,7 @@ def resolve_exact(changes: dict, installed: list[Resolution], *, curseforge, mod
         out.append(Resolution(
             mod=have.mod if have else None, kind=UPDATE if have else INSTALL, status=ACTUALIZABLE, source=m["fuente"],
             project_id=str(m["proyecto"]), project_name=m["nombre"], project_url=page,
-            current_version=have.current_version if have else None, new_version=m.get("version") or version,
+            current_version=have.current_version if have else None, new_version=version,  # la del archivo, no la de la lista
             new_file_name=file_name, download_url=url, new_sha1=sha1, new_sha512=sha512, new_size=size,
             known_ids={(m["fuente"], str(m["proyecto"]))}))
     return out, manual

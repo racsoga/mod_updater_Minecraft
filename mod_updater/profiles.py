@@ -36,14 +36,16 @@ def get(s, pid: str) -> dict | None:
 
 
 def apply_active(s) -> None:
-    """Copia los campos del perfil activo a los campos de siempre de Settings."""
+    """Copia los campos del perfil activo a los campos de siempre de Settings (los que falten,
+    con su valor por defecto: un perfil nunca hereda nada de otro)."""
     p = get(s, s.active_profile) or (s.profiles[0] if s.profiles else None)
     if p is None:
         return
+    from .settings import Settings  # aquí para no crear un import circular
+    defaults = Settings()
     s.active_profile = p["id"]
     for f in PROFILE_FIELDS:
-        if f in p:
-            setattr(s, f, p[f])
+        setattr(s, f, p[f] if f in p else getattr(defaults, f))
 
 
 def sync_active(s) -> None:
@@ -72,7 +74,7 @@ def add(s, *, name: str, mods_dir: str, minecraft_version: str, loader: str) -> 
     pid = _new_id(name, {p["id"] for p in s.profiles})
     s.profiles.append({"id": pid, "name": (name or "").strip() or t("profile.default_name"), "mods_dir": mods_dir,
                        "minecraft_version": minecraft_version, "loader": loader, "allow_beta": False,
-                       "backups_to_keep": s.backups_to_keep})
+                       "backups_to_keep": s.backups_to_keep, "answers": {}})
     return pid
 
 
