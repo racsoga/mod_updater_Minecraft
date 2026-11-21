@@ -31,16 +31,30 @@ Mod Updater revisa la carpeta `mods` de tu Minecraft, reconoce cada mod por su h
 - **Siempre hay vuelta atrás**: antes de cambiar nada guarda una copia de tus mods. Al terminar puedes **Deshacer**.
 - **No toca nada con Minecraft abierto.**
 - En **español e inglés** (usa el idioma de Windows).
-- *(próxima versión)* **Análisis de tu colección**: mods por categoría, lo que más ocupa, mods sin actualizar o posiblemente abandonados y librerías que ningún mod usa.
-- *(próxima versión)* **Explorar e instalar mods nuevos**: busca en CurseForge y Modrinth a la vez, solo lo que existe para tu versión, y los instala con sus dependencias.
-- *(próxima versión)* **Perfiles**: varias carpetas o instancias (launcher oficial, CurseForge, Prism, MultiMC, Modrinth App), cada una con su versión y cargador.
-- *(próxima versión)* **Compartir tu lista de mods**: exporta e importa la lista (o un `.mrpack`) para que otra persona tenga exactamente los mismos mods.
-- *(próxima versión)* **Sugerencias para tu partida**: qué quitar, revisar, mantener y añadir según cómo juegas, siempre con el motivo.
-- *(próxima versión)* **Ver los cambios antes de actualizar**: las notas de todas las versiones entre la tuya y la nueva, con avisos de posibles cambios que rompen partidas.
+- **Análisis de tu colección**: mods por categoría, lo que más ocupa, mods sin actualizar o posiblemente abandonados y librerías que ningún mod usa.
+- **Explorar e instalar mods nuevos**: busca en CurseForge y Modrinth a la vez, solo lo que existe para tu versión, y los instala con sus dependencias.
+- **Perfiles**: varias carpetas o instancias (launcher oficial, CurseForge, Prism, MultiMC, Modrinth App), cada una con su versión y cargador.
+- **Compartir tu lista de mods**: exporta e importa la lista (o un `.mrpack`) para que otra persona tenga exactamente los mismos mods.
+- **Sugerencias para tu partida**: qué quitar, revisar, mantener y añadir según cómo juegas, siempre con el motivo.
+- **Ver los cambios antes de actualizar**: las notas de todas las versiones entre la tuya y la nueva, con avisos de posibles cambios que rompen partidas.
 
 <p align="center">
   <img src="docs/images/flujo.gif" width="720" alt="Animación: se pulsa Actualizar, cada mod pasa por descargando, verificado y actualizado, y aparece la pantalla final">
 </p>
+
+### Análisis, Explorar y Sugerencias
+
+<p align="center">
+  <img src="docs/images/novedades.gif" width="720" alt="Animación: se recorren las pestañas Análisis (gráfico de mods por categoría), Explorar (se añade un mod a la cesta y se abre su ficha) y Sugerencias (columnas Quitar, Revisar, Mantener y Añadir)">
+</p>
+
+<table>
+  <tr>
+    <td><img src="docs/images/analisis.png" alt="Análisis: total de archivos, tamaño, estado y gráfico de mods por categoría"></td>
+    <td><img src="docs/images/explorar.png" alt="Explorar: buscador con filtros de categoría y orden, y tarjetas de mods con botón Añadir"></td>
+    <td><img src="docs/images/sugerencias.png" alt="Sugerencias: columnas Quitar, Revisar, Mantener y Añadir, cada mod con su motivo"></td>
+  </tr>
+</table>
 
 ## Descarga
 
@@ -133,11 +147,41 @@ Si la versión más nueva es una **beta** y tú tienes la estable, la app no la 
 Está pensada para NeoForge, Forge, Fabric y Quilt, y para cualquier versión de Minecraft que tenga mods en CurseForge o Modrinth: elige la versión y el cargador en *Ajustes*. Pero **solo se ha probado con NeoForge 1.21.1**. Con otras combinaciones debería funcionar, aunque puede haber fallos; si encuentras alguno, [avísanos](https://github.com/racsoga/mod_updater_Minecraft/issues/new/choose).
 </details>
 
+<details>
+<summary><b>¿Puedo usarla con varias instancias o launchers?</b></summary>
+
+Sí, con **perfiles**. Cada perfil es una carpeta `mods` con su versión de Minecraft y su cargador. En *Ajustes → Perfiles* puedes buscar las instancias del launcher oficial, CurseForge, Prism, MultiMC y Modrinth App, o añadir una carpeta a mano. Cambia de perfil con el selector de arriba. Cada perfil guarda sus propios ajustes y sus respuestas de *Sugerencias*.
+</details>
+
+<details>
+<summary><b>¿Cómo paso mi lista de mods a un amigo?</b></summary>
+
+En *Ajustes → Compartir la lista de mods*:
+
+- **Exportar lista…** guarda un archivo `.modlist.json` con los mods y la versión exacta de cada uno. No lleva rutas, tu key ni datos personales.
+- Tu amigo pulsa **Importar lista…**: verá qué se añade, qué cambia de versión y qué no está disponible antes de instalar nada. Opcionalmente puede quitar los mods que no estén en la lista (se mueven a la copia de seguridad, no se borran).
+- **Exportar .mrpack…** crea un paquete de Modrinth que se puede abrir en Prism o Modrinth App (solo con los mods que están en Modrinth).
+- **Copiar lista** copia los nombres y versiones en texto, para pegarlos en un chat.
+</details>
+
+<details>
+<summary><b>¿Cómo funcionan las Sugerencias? ¿Me van a borrar mods?</b></summary>
+
+No se cambia nada hasta que tú lo marques y lo confirmes. Respondes unas preguntas (qué te apetece, dificultad, si juegas solo o con más gente, cómo va tu PC y cuántos mods quieres como máximo) y la app reparte tus mods en **Quitar**, **Revisar**, **Mantener** y **Añadir**, siempre con el motivo:
+
+- **Quitar:** mods repetidos (por ejemplo, dos minimapas), incompatibles conocidos o que no sirven en tu forma de jugar. Nunca propone quitar una librería ni un mod que otro necesita.
+- **Revisar:** avisos para que decidas tú (mods sin versiones nuevas desde hace tiempo, librerías que ningún mod pide, mods que cambian mucho la dificultad).
+- **Añadir:** mods populares que existen para tu versión y no chocan con los que tienes.
+
+Son reglas automáticas a partir de los datos de CurseForge y Modrinth, no una opinión experta: revísalas. Quitar un mod lo mueve a la copia de seguridad y se puede **Deshacer**.
+</details>
+
 ## Privacidad
 
 - **Sin telemetría ni estadísticas.** La app no envía datos de uso a nadie.
 - Para identificar tus mods envía a CurseForge y Modrinth la **huella** (hash) de cada archivo `.jar`, no el archivo ni tus datos.
 - Solo se conecta a `api.curseforge.com`, `api.modrinth.com` y a sus servidores de descarga e imágenes (`forgecdn.net`, `modrinth.com`).
+- Además, una vez al día como mucho consulta en `api.github.com` si hay una versión nueva de Mod Updater (no envía nada tuyo). Se desactiva en *Ajustes → Avisar cuando haya una versión nueva de Mod Updater*.
 - Lo que guarda queda en tu PC: los ajustes en `%APPDATA%\mod_updater`, la key en el Administrador de credenciales y las copias en `.minecraft\mods_backup`.
 
 ## Aviso

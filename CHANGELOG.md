@@ -4,11 +4,11 @@ Todos los cambios importantes de Mod Updater. Formato basado en [Keep a Changelo
 
 La sección de cada versión es la que se publica como notas de la Release al crear la etiqueta `vX.Y.Z`.
 
-## [0.3.0] - sin publicar
+## [0.3.0] - 2026-11-21
 
 ### Añadido
 - **Categorías** propias para todos los mods (Tecnología, Magia, Aventura y exploración, Mundo y biomas, Mobs y combate, Construcción y decoración, Almacenamiento, Comida y granjas, Mapas e información, Calidad de vida, Rendimiento y Librerías), a partir de las de CurseForge y Modrinth.
-- **Secciones** en pestañas: *Mis mods*, *Análisis* y *Ajustes*, con navegación por teclado (flechas, Inicio y Fin).
+- **Secciones** en pestañas: *Mis mods*, *Análisis*, *Explorar*, *Sugerencias* y *Ajustes*, con navegación por teclado (flechas, Inicio y Fin).
 - **Análisis** de la colección:
   - Gráfico de mods por categoría con bloques isométricos, con opción de incluir las librerías y vista de tabla accesible.
   - Total de archivos (mods + librerías), tamaño, estado y fuente.
@@ -23,6 +23,9 @@ La sección de cada versión es la que se publica como notas de la Release al cr
 - **Sugerencias según el tipo de partida**: cuestionario (solo o con gente, estilos, dificultad, PC y número de mods) y resultado en *Quitar · Revisar · Mantener · Añadir* con el motivo de cada sugerencia, a partir de una base de conocimiento propia (mods que hacen lo mismo, incompatibilidades, recomendados por estilo y mods que suben mucho la dificultad). Por reglas, sin IA externa; nada se aplica sin marcarlo.
 - **Aviso de versiones nuevas** de Mod Updater (como mucho una vez al día, desactivable en Ajustes): enlaza a la página de la Release, sin actualizarse sola.
 - Tabla de correcciones de categoría (`mod_updater/knowledge/categorias.json`); al clasificar gana la categoría más específica, no la principal de CurseForge a ciegas.
+
+### Cambiado
+- **Revisión más rápida**: las consultas a CurseForge y Modrinth van en lotes en paralelo, y Modrinth se consulta a la vez que CurseForge (con unos 140 mods y la caché llena, de unos 4 s a unos 2 s).
 
 ## [0.2.0] - 2026-11-21
 
