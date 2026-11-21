@@ -443,13 +443,14 @@ function showDone(r) {
   const parts = [];
   if (r.updated) parts.push(t("ui.done_updated", { count: r.updated }));
   if (r.added) parts.push(t("ui.done_added", { count: r.added }));  // elegidos en Explorar
+  if (r.removed) parts.push(t("ui.done_removed", { count: r.removed }));  // quitados (están en la copia)
   if (r.installed) parts.push(t("ui.done_installed", { count: r.installed }));  // dependencias
   const title = parts.length ? parts.join(t("ui.and")) : t("ui.done_none");
   $("#done-title").textContent = title.charAt(0).toUpperCase() + title.slice(1) + ".";
   const deck = [];
   if (r.error) deck.push(r.error);
   if (r.backup && r.backup.changes) deck.push(t("ui.done_backup", { path: shortPath(r.backup.path) }));
-  if (r.updated || r.installed || r.added) deck.push(t("ui.done_restart"));
+  if (r.updated || r.installed || r.added || r.removed) deck.push(t("ui.done_restart"));
   $("#done-deck").textContent = deck.join(" ");
   $("#btn-undo").hidden = !(r.backup && r.backup.undoable);
   $("#btn-undo").disabled = false;
@@ -670,6 +671,9 @@ function renderProfiles(help = "") {
         ${list.length > 1 ? `<button class="btn-small" type="button" data-prof-remove>${esc(t("profile.remove"))}</button>` : ""}
       </div>
     </li>`).join("");
+  const others = list.filter(p => !p.active);
+  $("#ml-compare-row").hidden = !others.length;
+  $("#ml-compare-with").innerHTML = others.map(p => `<option value="${esc(p.id)}">${esc(t("ml.compare_option", { name: p.name }))}</option>`).join("");
   const dup = state.same_folder || [];
   $("#prof-warn").hidden = !dup.length;
   $("#prof-warn").textContent = dup.map(names => t("profile.same_folder", { names: joinList(names) })).join(" ");
@@ -741,6 +745,95 @@ function wireProfiles() {
     const res = await api().choose_folder();
     if (res) addProfile({ mods_dir: res.path });
   });
+}
+
+/* ================================================================ lista de mods */
+
+function mlHelp(text, bad = false) {
+  $("#ml-help").className = `help${bad ? " bad" : ""}`;
+  $("#ml-help").textContent = text;
+}
+
+function startApplyRows(rows) {
+  APPLY = rows.map(r => ({ ...r, state: "queued", message: "" }));
+  $("#apply-label").textContent = t("ui.apply_count", { done: 0, count: APPLY.length });
+  $("#apply-bar > span").style.width = "0%";
+  renderApply();
+  show("apply");
+}
+
+async function exportList(kind) {
+  mlHelp(t("ex.loading"));
+  const res = await api().modlist_export(kind);
+  if (res.cancelled) { mlHelp(""); return; }
+  if (!res.ok) { mlHelp(res.message, true); return; }
+  const parts = [t("ml.saved", { file: res.file })];
+  if (res.excluded.length) parts.push(t("ml.excluded", { count: res.excluded.length, names: joinList(res.excluded) }));
+  if (res.no_loader_version) parts.push(t("ml.no_loader_version"));
+  mlHelp(parts.join(" "));
+}
+
+async function importList() {
+  mlHelp(t("ex.loading"));
+  const res = await api().modlist_import();
+  if (res.cancelled) { mlHelp(""); return; }
+  if (!res.ok) { mlHelp(res.message, true); return; }
+  mlHelp("");
+  openExDrawer(t("ml.import_title"), res.file);
+  const li = (name, extra = "") => `<li><span class="an-name">${esc(name)}${extra ? `<span class="an-note">${esc(extra)}</span>` : ""}</span></li>`;
+  const list = (title, items) => items.length ? `<h3 class="ex-h">${esc(title)}</h3><ul class="an-list">${items.join("")}</ul>` : "";
+  const warn = res.mismatch ? `<p class="ex-note warn">${esc(t("ml.mismatch", { file_mc: res.mismatch.minecraft, file_loader: res.mismatch.loader,
+    mc: res.profile.minecraft, loader: res.profile.loader }))}</p>` : "";
+  $("#ex-d-body").innerHTML = warn
+    + list(t("ml.will_add", { count: res.add.length }), res.add.map(m => li(m.name, m.version || "")))
+    + list(t("ml.will_change", { count: res.update.length }), res.update.map(m => li(m.name, `${m.have || "?"} → ${m.version || "?"}`)))
+    + list(t("ml.unavailable", { count: res.unavailable.length }), res.unavailable.map(m => li(m.name, t("ml.unavailable_hint"))))
+    + (res.remove.length ? `<h3 class="ex-h">${esc(t("ml.extra", { count: res.remove.length }))}</h3>
+        <label class="toggle"><input type="checkbox" id="ml-remove"> <span>${esc(t("ml.remove_too"))}</span></label>
+        <ul class="an-list">${res.remove.map(r => li(r.name, r.version || "")).join("")}</ul>` : "")
+    + `<p class="an-hint">${esc(t("ml.same", { count: res.same }))} ${esc(t("ex.safe"))}</p>`;
+  const actionable = res.add.length + res.update.length + res.remove.length;
+  $("#ex-d-foot").innerHTML = actionable ? `<button class="btn-secondary" type="button" id="ml-cancel">${esc(t("ui.cancel"))}</button>
+      <button class="btn-primary" type="button" id="ml-apply">${esc(t("ml.apply"))}</button>` : "";
+  if (!actionable) return;
+  $("#ml-cancel").addEventListener("click", closeExDrawer);
+  $("#ml-apply").addEventListener("click", async () => {
+    const remove = !!($("#ml-remove") && $("#ml-remove").checked);
+    const go = await api().modlist_import_start(remove);
+    if (!go.ok) { $("#ex-d-body").insertAdjacentHTML("afterbegin", `<p class="cl-error">${esc(go.message)}</p>`); return; }
+    closeExDrawer();
+    if (go.manual.length) mlHelp(t("ml.manual", { names: joinList(go.manual.map(m => m.name)) }));
+    startApplyRows(go.rows);
+  });
+}
+
+async function compareProfiles() {
+  const res = await api().compare_profiles($("#ml-compare-with").value);
+  if (!res.ok) { mlHelp(res.message, true); return; }
+  openExDrawer(t("ml.compare_title", { a: res.a, b: res.b }), t("ml.same", { count: res.same }));
+  const list = (title, items) => `<h3 class="ex-h">${esc(title)}</h3>` + (items.length
+    ? `<ul class="an-list">${items.map(n => `<li><span class="an-name">${esc(n)}</span></li>`).join("")}</ul>`
+    : `<p class="an-hint">${esc(t("ml.none"))}</p>`);
+  $("#ex-d-body").innerHTML = list(t("ml.only_in", { name: res.a, count: res.only_a.length }), res.only_a)
+    + list(t("ml.only_in", { name: res.b, count: res.only_b.length }), res.only_b)
+    + list(t("ml.different", { count: res.different.length }), res.different);
+}
+
+async function copyList() {
+  const res = await api().copy_list();
+  if (res.ok) { mlHelp(t("ml.copied", { count: res.count })); return; }
+  if (res.text && navigator.clipboard) {
+    try { await navigator.clipboard.writeText(res.text); mlHelp(t("ml.copied", { count: res.text.split("\n").length })); return; } catch {}
+  }
+  mlHelp(res.message, true);
+}
+
+function wireModlist() {
+  $("#ml-export").addEventListener("click", () => exportList("modlist"));
+  $("#ml-mrpack").addEventListener("click", () => exportList("mrpack"));
+  $("#ml-import").addEventListener("click", importList);
+  $("#ml-copy").addEventListener("click", copyList);
+  $("#ml-compare").addEventListener("click", compareProfiles);
 }
 
 /* ================================================================ explorar */
@@ -1075,6 +1168,7 @@ function wireTabs() {
 
 function wire() {
   wireTabs();
+  wireModlist();
   wireProfiles();
   wireExplore();
   wireChangelog();

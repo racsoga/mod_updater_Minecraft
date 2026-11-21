@@ -54,6 +54,22 @@
         <ul class="prof-list prof-found" id="prof-found"></ul>
         <p class="help" id="prof-help" aria-live="polite"></p>
       </div>
+      <div class="field">
+        <h3 class="label" data-i18n="ml.title"></h3>
+        <p class="help" data-i18n="ml.help"></p>
+        <div class="row-inline prof-add">
+          <button class="btn-small" type="button" id="ml-export" data-i18n="ml.export"></button>
+          <button class="btn-small" type="button" id="ml-mrpack" data-i18n="ml.export_mrpack"></button>
+          <button class="btn-small" type="button" id="ml-import" data-i18n="ml.import"></button>
+          <button class="btn-small" type="button" id="ml-copy" data-i18n="ml.copy"></button>
+        </div>
+        <div class="row-inline prof-add" id="ml-compare-row">
+          <label class="sr-only" for="ml-compare-with" data-i18n="ml.compare_with"></label>
+          <select class="select" id="ml-compare-with"></select>
+          <button class="btn-small" type="button" id="ml-compare" data-i18n="ml.compare"></button>
+        </div>
+        <p class="help" id="ml-help" aria-live="polite"></p>
+      </div>
     </section>
 
     <form class="panel" id="setup-form" novalidate>

@@ -28,6 +28,7 @@ NO_ENCONTRADO = "no_encontrado"
 # Tipo de entrada del plan
 UPDATE = "update"  # un jar instalado (se actualice o no)
 INSTALL = "install"  # una dependencia nueva que no está en la carpeta
+REMOVE = "remove"  # quitar un jar instalado (se mueve a la copia de seguridad)
 
 CF = "curseforge"
 MR = "modrinth"
@@ -71,6 +72,7 @@ class Resolution:
     current_version: str | None = None
     current_channel: str | None = None
     current_date: str | None = None
+    current_file_id: str | None = None  # id del archivo instalado (CurseForge) o de la versión (Modrinth)
     new_version: str | None = None
     new_date: str | None = None  # fecha de publicación de la versión nueva (ISO)
     new_size: int = 0  # bytes del archivo nuevo (0 si la fuente no lo dice)
@@ -248,6 +250,7 @@ def resolve_with_modrinth(
             current_version=cur.version_number or mod.version,
             current_channel=cur.version_type,
             current_date=cur.date_published,
+            current_file_id=cur.id,
             current_deps=mr_deps(cur),
             current_incompat=mr_incompat(cur),
             known_ids={(MR, cur.project_id)},
@@ -349,6 +352,7 @@ def resolve_with_curseforge(
             current_version=mod.version or cur.display_name,
             current_channel=cur.version_type,
             current_date=cur.date_published,
+            current_file_id=cur.id,
             current_deps=cf_deps(cur),
             current_incompat=cf_incompat(cur),
             known_ids={(CF, str(match.mod_id))},

@@ -113,6 +113,22 @@
       }, step * chosen.length + 400);
       return { ok: true, total: chosen.length };
     },
+    // Lista de mods (sin archivos reales).
+    modlist_export: async kind => ({ ok: true, file: kind === "mrpack" ? "Principal.mrpack" : "Principal.modlist.json",
+      excluded: kind === "mrpack" ? ["Mod de ejemplo"] : [], no_loader_version: false }),
+    modlist_import: async () => ({ ok: true, file: "Servidor.modlist.json", mismatch: null,
+      profile: { minecraft: "1.21.1", loader: "NeoForge" }, same: 118,
+      add: [{ name: "Waystones", version: "21.1.47" }], update: [{ name: "Create", version: "6.0.8", have: "6.0.6" }],
+      unavailable: [{ name: "Mod privado", version: "1.0" }], remove: [{ name: "Mod de ejemplo", version: "1.4.0" }] }),
+    modlist_import_start: async remove => {
+      setTimeout(() => emit("apply_done", { updated: 1, installed: 0, added: 1, removed: remove ? 1 : 0, failed: [], pruned: 0,
+        backup: { path: "C:\\…\\mods_backup\\2026-11-21_1700", date: "2026-11-21T17:00:00", changes: 3, undone: false, undoable: true } }), 800);
+      return { ok: true, manual: [], rows: [{ id: 200000, s: "dep", name: "Waystones", from: null, to: "21.1.47", neededBy: [] },
+        { id: 200001, s: "up", name: "Create", from: "6.0.6", to: "6.0.8", neededBy: [] }] };
+    },
+    compare_profiles: async () => ({ ok: true, a: "Principal", b: "Servidor con Ana", only_a: ["Mod de ejemplo"],
+      only_b: ["Waystones"], different: ["Create"], same: 118 }),
+    copy_list: async () => ({ ok: true, count: 120 }),
     // Explorar de ejemplo (sin red). Los nombres son inventados salvo los de la colección de prueba.
     explore_search: async opts => {
       await new Promise(r => setTimeout(r, 250));

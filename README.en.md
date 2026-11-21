@@ -34,6 +34,7 @@ Mod Updater checks your Minecraft `mods` folder, recognises each mod by its fing
 - *(next version)* **Collection analysis**: mods by category, what takes the most space, mods not updated or possibly abandoned, and libraries no mod uses.
 - *(next version)* **Explore and install new mods**: search CurseForge and Modrinth at once, only what exists for your version, and install them with their dependencies.
 - *(next version)* **Profiles**: several folders or instances (official launcher, CurseForge, Prism, MultiMC, Modrinth App), each with its own version and loader.
+- *(next version)* **Share your mod list**: export and import the list (or a `.mrpack`) so someone else gets exactly the same mods.
 - *(next version)* **See the changes before updating**: the notes of every version between yours and the new one, highlighting possible world-breaking changes.
 
 <p align="center">
