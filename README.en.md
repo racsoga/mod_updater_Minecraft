@@ -38,8 +38,9 @@ Mod Updater checks your Minecraft `mods` folder, recognises each mod by its fing
 
 ## Download
 
-1. Go to [**Releases**](https://github.com/racsoga/mod_updater_Minecraft/releases/latest) and download `ModUpdater.exe`.
-2. Open it. Nothing to install.
+**Coming soon.** The first downloadable version (`ModUpdater.exe`) will be published under *Releases* once testing is finished. Meanwhile you can run it from source with Python (`pip install -r requirements.txt` and `python ModUpdater.pyw`).
+
+Once it's out: download `ModUpdater.exe` and open it. Nothing to install.
 
 > **Make a copy of your `mods` folder the first time.** The app keeps backups and lets you undo, but your own copy never hurts.
 

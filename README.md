@@ -38,8 +38,9 @@ Mod Updater revisa la carpeta `mods` de tu Minecraft, reconoce cada mod por su h
 
 ## Descarga
 
-1. Ve a [**Releases**](https://github.com/racsoga/mod_updater_Minecraft/releases/latest) y descarga `ModUpdater.exe`.
-2. Ábrelo. No hace falta instalar nada.
+**Próximamente.** La primera versión descargable (`ModUpdater.exe`) se publicará en *Releases* en cuanto termine de probarse. Mientras tanto puedes ejecutarla desde el código fuente con Python (`pip install -r requirements.txt` y `python ModUpdater.pyw`).
+
+Cuando esté publicada: descarga `ModUpdater.exe` y ábrelo. No hace falta instalar nada.
 
 > **Haz una copia de tu carpeta `mods` la primera vez.** La app guarda copias de seguridad y permite deshacer, pero una copia tuya nunca está de más.
 

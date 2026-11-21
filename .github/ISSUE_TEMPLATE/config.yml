@@ -3,3 +3,6 @@ contact_links:
   - name: Preguntas frecuentes
     url: https://github.com/racsoga/mod_updater_Minecraft#preguntas-frecuentes
     about: SmartScreen, seguridad de la key, deshacer una actualización y más.
+  - name: Problema de seguridad (en privado)
+    url: https://github.com/racsoga/mod_updater_Minecraft/security/advisories/new
+    about: No abras un issue público. Infórmalo en privado (ver SECURITY.md).
