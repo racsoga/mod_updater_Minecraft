@@ -1598,7 +1598,8 @@ let DG = { reports: [], current: null, seq: 0 };
 
 // Aviso de crash report nuevo: punto en la pestaña y aviso en Mis mods (con enlace a Diagnóstico).
 async function checkDiagNew() {
-  const res = await api().diag_new();
+  let res;
+  try { res = await api().diag_new(); } catch { return; }  // el aviso nunca debe romper Mis mods
   $("#tab-diag-dot").hidden = !res.new;
   $("#dg-new-notice")?.remove();
   if (!res.new || !$("#notices")) return;
@@ -1643,6 +1644,8 @@ async function runDiag(id) {
   const seq = ++DG.seq;
   const r = DG.reports.find(x => x.id === id);
   $("#dg-meta").textContent = r ? r.name : "";
+  $("#dg-title").textContent = t("dg.loading");
+  $("#dg-deck").textContent = "";
   $("#dg-list").innerHTML = `<p class="cl-loading">${esc(t("dg.loading"))}</p>`;
   const res = await api().diag_run(id);
   if (seq !== DG.seq) return;  // se eligió otro informe mientras se leía

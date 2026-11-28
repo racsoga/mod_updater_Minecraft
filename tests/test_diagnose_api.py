@@ -137,3 +137,66 @@ def test_update_and_versions_actions(tmp_path, monkeypatch):
     versions = card["actions"][0]
     assert versions["label"] == "Volver a una versión anterior de Create"
     assert a.diag_do(versions["id"]) == {"ok": True, "open_versions": 0}
+
+
+# ---------------------------------------------------------------- revisión final
+
+def test_update_action_takes_its_new_dependencies(tmp_path, monkeypatch):
+    from mod_updater.deps import DepPlan
+    a, d = make_api(tmp_path, monkeypatch, reports=("inventado_sospechoso.txt",),
+                    mods=[("storagedrawers-13.jar", "storagedrawers", "Storage Drawers", "sd")])
+    r = a._results[0]
+    r.status, r.new_version, r.new_file_name, r.download_url = ACTUALIZABLE, "14.0", "storagedrawers-14.jar", "https://cdn.modrinth.com/s.jar"
+    lib = candidate("Nueva Lib", "lib")
+    lib.required_by = ["Storage Drawers"]
+    a._plan = DepPlan(items=[r, lib])
+    a._rows, a._row_s = [lib, r], ["dep", "up"]
+    started = []
+    a._apply = lambda chosen, s, index=None, after=None: started.append(sorted(x.name for x in chosen))
+    out = a.diag_run(a.diag_reports()["reports"][0]["id"])
+    up = next(x for x in out["cards"][0]["actions"] if x["type"] == "update")
+    assert a.diag_do(up["id"])["ok"] and started == [["Nueva Lib", "Storage Drawers"]]
+
+
+def test_disable_recomputes_dependents_at_click_time(tmp_path, monkeypatch):
+    from mod_updater.resolver import Dep
+    a, d = make_api(tmp_path, monkeypatch, mods=SODIUM_MODS)
+    out = a.diag_run(a.diag_reports()["reports"][0]["id"])
+    act = next(x for x in out["cards"][0]["actions"] if x["label"] == "Desactivar Iris")
+    later = a._results[3]  # Embeddium pasa a depender de Iris después del diagnóstico
+    later.current_deps = [Dep(MR, "p3")]
+    assert a.diag_do(act["id"])["ok"]
+    assert {"iris-1.8.14.jar.disabled", "embeddium-1.0.15.jar.disabled"} <= set(files(d))
+
+
+def test_action_on_a_file_that_no_longer_exists_is_an_error(tmp_path, monkeypatch):
+    a, d = make_api(tmp_path, monkeypatch, mods=SODIUM_MODS)
+    out = a.diag_run(a.diag_reports()["reports"][0]["id"])
+    act = next(x for x in out["cards"][0]["actions"] if x["label"] == "Desactivar Iris")
+    (d / "iris-1.8.14.jar").unlink()
+    a._results = [r for r in a._results if r.mod.file_name != "iris-1.8.14.jar"]
+    a._rows = list(a._results)
+    res = a.diag_do(act["id"])
+    assert res["ok"] is False and res["message"]
+
+
+def test_swap_does_not_disable_if_the_install_cannot_be_prepared(tmp_path, monkeypatch):
+    from mod_updater.net import ApiError
+    a, d = make_api(tmp_path, monkeypatch, mods=SODIUM_MODS)
+    out = a.diag_run(a.diag_reports()["reports"][0]["id"])
+
+    def offline(items):
+        raise ApiError("x", kind="offline")
+
+    monkeypatch.setattr(a, "install_plan", lambda items: {"ok": False, "message": "sin red"})
+    res = a.diag_do(out["cards"][0]["actions"][0]["id"])
+    assert res["ok"] is False and "embeddium-1.0.15.jar" in files(d)
+
+
+def test_toggle_failure_has_a_message(tmp_path, monkeypatch):
+    a, d = make_api(tmp_path, monkeypatch, mods=SODIUM_MODS)
+    out = a.diag_run(a.diag_reports()["reports"][0]["id"])
+    act = next(x for x in out["cards"][0]["actions"] if x["label"] == "Desactivar Iris")
+    make_jar(d / "iris-1.8.14.jar.disabled", "iris")  # el destino ya existe: el renombrado falla
+    res = a.diag_do(act["id"])
+    assert res["ok"] is False and "Iris" in res["message"]

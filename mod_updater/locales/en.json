@@ -30,6 +30,7 @@
   "dg.anon_user": "<user>",
   "dg.anon_player": "<player>",
   "dg.anon_hidden": "<hidden>",
+  "dg.note_pinned": "{name} is pinned: it isn't updated.",
   "dg.range_min": "{version} or later",
   "dg.range_max": "{version} or earlier",
   "ui.tab_diag": "Diagnosis",

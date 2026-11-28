@@ -30,6 +30,7 @@
   "dg.anon_user": "<usuario>",
   "dg.anon_player": "<jugador>",
   "dg.anon_hidden": "<oculto>",
+  "dg.note_pinned": "{name} está fijado: no se actualiza.",
   "dg.range_min": "{version} o superior",
   "dg.range_max": "{version} o anterior",
   "ui.tab_diag": "Diagnóstico",

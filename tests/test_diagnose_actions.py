@@ -127,3 +127,60 @@ def test_version_ranges_are_translated():
     assert readable_range("1.20.1") == "1.20.1"
     cards = cards_for("fml_sodium.txt", SODIUM_CASE, lookup=lambda m: candidate("Sodium", SODIUM_MR) if m == "sodium" else None)
     assert "Sodium 0.6.9 o superior" in cards[0].why and "or above" not in cards[0].why
+
+
+# ---------------------------------------------------------------- revisión final
+
+def test_huge_debug_log_is_fast():
+    import time
+    line = "[28nov2026 12:30:35.896] [main/DEBUG] [mixin/]: Mixing client.Foo from sodium.mixins.json into net.minecraft.Bar\n"
+    text = line * (1024 * 1024 // len(line))
+    t0 = time.time()
+    analyze(text, log=True)
+    assert time.time() - t0 < 2
+
+
+def test_enabling_a_disabled_dependency_that_clashes_is_not_offered():
+    text = "Mod irisflw requires sodium 0.6.9 or above\n\tCurrently, sodium is not installed\n"
+    sodium = inst("Sodium", "sodium", pid=SODIUM_MR, disabled=True, incompatible=["embeddium"])
+    cards = plan_cards(analyze(text), [inst("Iris Flywheel Compat", "irisflw"), sodium,
+                                       inst("Embeddium", "embeddium", pid=EMBEDDIUM_MR)],
+                       lookup=lambda m: None, knowledge=load_knowledge())
+    assert not any(a.type == "enable" for a in cards[0].actions)
+    assert "Embeddium" in cards[0].note
+
+
+def test_duplicate_keeps_the_newest_version_not_the_last_name():
+    a, b = inst("Sodium", "sodium"), inst("Sodium", "sodium")
+    a.mod.file_name, a.mod.version = "sodium-0.6.10.jar", "0.6.10"
+    b.mod.file_name, b.mod.version = "sodium-0.6.9.jar", "0.6.9"
+    text = "\tMod ID: 'sodium' from mod files: sodium-0.6.10.jar, sodium-0.6.9.jar\n"
+    dup = plan_cards(analyze(text), [a, b], lookup=lambda m: None, knowledge=load_knowledge())[0]
+    assert [x.files for x in dup.actions] == [["sodium-0.6.9.jar"]]
+
+
+def test_merged_cards_keep_their_notes():
+    text = ("Mod a requires dep1 1.0 or above\n\tCurrently, dep1 is not installed\n"
+            "Mod a requires dep2 1.0 or above\n\tCurrently, dep2 is not installed\n")
+    cards = plan_cards(analyze(text), [inst("A", "a")], lookup=lambda m: None, knowledge=load_knowledge())
+    note = " ".join(c.note for c in cards)
+    assert "dep1" in note and "dep2" in note
+
+
+def test_pinned_suspect_says_it_is_pinned():
+    r = inst("Storage Drawers", "storagedrawers", status=ACTUALIZABLE, new_version="2.0")
+    r.pinned = True
+    c = cards_for("inventado_sospechoso.txt", [r])[0]
+    assert c.note == "Storage Drawers está fijado: no se actualiza." and c.actions[0].type == "disable"
+
+
+def test_anonymize_user_with_spaces_and_encoded_paths():
+    from mod_updater.diagnose import anonymize
+    out = anonymize(r"C:\Users\John Doe\AppData y /C:/Users/John%20Doe/x y C:%5CUsers%5CJohn%20Doe%5Cx", windows_user="John Doe")
+    assert "John" not in out and "Doe" not in out
+
+
+def test_players_from_the_whole_report():
+    from mod_updater.diagnose import anonymize, players_in
+    full = "Setting user: Ana_Juega\n...\nEl jugador Ana_Juega se desconectó\n"
+    assert "Ana_Juega" not in anonymize("El jugador Ana_Juega se desconectó", players=players_in(full))

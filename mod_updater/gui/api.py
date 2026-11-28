@@ -1053,9 +1053,14 @@ class Api:
             crashes = []
         newest = max((r["mtime"] for r in crashes), default=0)
         fresh = newest > time.time() - DIAG_NEW_DAYS * 86400
-        return {"new": bool(newest > (s.diag_seen or 0) and fresh),
+        try:
+            seen = float(s.diag_seen or 0)
+        except (TypeError, ValueError):  # ajuste editado a mano
+            seen = 0.0
+        return {"new": bool(newest > seen and fresh),
                 "date": datetime.fromtimestamp(newest).isoformat(timespec="minutes") if newest else None}
 
+    @_never_hang
     def diag_reports(self) -> dict:
         """Informes de la partida del perfil activo (y los marca como vistos)."""
         s = self._settings()
@@ -1099,7 +1104,9 @@ class Api:
             return {"ok": False, "message": t("dg.err_report")}
         findings = diag.analyze(text, log=rep_["kind"] == "log")
         cards = diag.plan_cards(findings, self._results, lookup=self._diag_lookup(s), knowledge=load_knowledge())
-        self._diag_cards[int(report_id)] = (rep_, cards)
+        players = diag.players_in(text)  # para quitarlos también de los extractos y del resumen
+        self._diag_cards[int(report_id)] = (rep_, cards, players)
+        self._diag_actions = {}  # las acciones de un diagnóstico anterior ya no valen
         out_cards = []
         for c in cards:
             acts = []
@@ -1108,7 +1115,7 @@ class Api:
                 self._diag_actions[aid] = a
                 acts.append({"id": aid, "label": a.label, "primary": a.primary, "type": a.type})
             out_cards.append({"kind": c.kind, "kicker": c.kicker, "title": c.title, "why": c.why, "note": c.note,
-                              "evidence": [diag.anonymize(e) for e in c.evidence], "actions": acts})
+                              "evidence": [diag.anonymize(e, players=players) for e in c.evidence], "actions": acts})
         load = {"missing", "version", "platform", "incompatible", "duplicate", "wrong_loader"}
         if not cards:
             head, deck = t("dg.h_none_found"), t("dg.d_none_found")
@@ -1126,7 +1133,7 @@ class Api:
         found = self._diag_cards.get(int(report_id)) if str(report_id).lstrip("-").isdigit() else None
         if found is None:
             return {"ok": False, "message": t("dg.err_report")}
-        rep_, cards = found
+        rep_, cards, players = found
         s = self._settings()
         lines = [t("dg.sum_title", file=rep_["name"]),
                  t("dg.sum_env", minecraft=s.minecraft_version, loader=LOADER_LABEL.get(s.loader, s.loader)), ""]
@@ -1136,7 +1143,7 @@ class Api:
         if not cards:
             lines.append(t("dg.h_none_found"))
         try:
-            self._clipboard(diag.anonymize("\n".join(lines) + "\n"))
+            self._clipboard(diag.anonymize("\n".join(lines) + "\n", players=players))
         except (OSError, subprocess.SubprocessError):
             return {"ok": False, "message": t("ml.err_clipboard")}
         return {"ok": True}
@@ -1150,28 +1157,50 @@ class Api:
             return {"ok": False, "message": t("dg.err_action")}
         index = {id(r): i for i, r in enumerate(self._rows)}
         if a.type in ("disable", "enable", "swap"):
-            ids = [i for i, r in enumerate(self._rows) if r.mod is not None and r.mod.file_name in a.files]
-            res = self.mods_set_enabled(ids, a.type == "enable", "only")
-            if not res.get("ok") or a.type != "swap":
-                return res
-        if a.type in ("install", "swap"):
+            # Por nombre activo (x.jar): vale aunque el archivo se haya activado o desactivado después.
+            wanted = {f[: -len(".disabled")] if f.lower().endswith(".disabled") else f for f in a.files}
+            ids = [i for i, r in enumerate(self._rows) if r.mod is not None and r.mod.enabled_name in wanted]
+            if not ids:
+                return {"ok": False, "message": t("dg.err_action")}
+        plan = None
+        if a.type in ("install", "swap"):  # primero se prepara la instalación: si falla, no se toca nada
             cand = a.install
             plan = self.install_plan([{"source": cand.source, "id": cand.project_id, "name": cand.name}])
             if not plan.get("ok") or not plan.get("rows"):
                 return plan if not plan.get("ok") else {"ok": False, "message": t("dg.err_action")}
+        if a.type in ("disable", "enable", "swap"):
+            # "with": quien dependa ahora de lo que se desactiva también se desactiva (se recalcula al pulsar).
+            res = self.mods_set_enabled(ids, a.type == "enable", "with")
+            if not res.get("ok"):
+                if res.get("failed") and not res.get("message"):
+                    res["message"] = " ".join(t("toggle.failed", name=f["name"], message=f["message"]) for f in res["failed"])
+                self._install = []
+                return res
+            if a.type != "swap":
+                return res
+        if plan is not None:
             go = self.install_start()
+            if not go.get("ok") and a.type == "swap":  # no se pudo empezar: se deshace la desactivación
+                self.mods_set_enabled(ids, True, "only")
             return {**go, "rows": plan["rows"]} if go.get("ok") else go
         if a.type == "update":
             i = index.get(id(a.row))
             if i is None:
-                return {"ok": False, "message": t("apply.no_scan")}
-            go = self.apply([i])
+                return {"ok": False, "message": t("dg.err_action")}
             r = a.row
-            return {**go, "rows": [{"id": i, "s": "up", "name": r.name, "icon": r.icon_url, "from": r.current_version,
-                                    "to": r.new_version, "beta": False, "neededBy": []}]} if go.get("ok") else go
+            if self._plan is not None and r in self._plan.blocked:
+                return {"ok": False, "message": r.note or t("dg.err_action")}
+            # Con sus dependencias nuevas, igual que al marcarlo en Mis mods.
+            deps = [j for j, x in enumerate(self._rows) if x.kind == INSTALL and r.name in x.required_by]
+            go = self.apply([i, *deps])
+            rows = [{"id": j, "s": "dep" if self._rows[j].kind == INSTALL else "up", "name": self._rows[j].name,
+                     "icon": self._rows[j].icon_url, "from": None if self._rows[j].kind == INSTALL else self._rows[j].current_version,
+                     "to": self._rows[j].new_version, "beta": False, "neededBy": list(self._rows[j].required_by)}
+                    for j in [i, *deps]]
+            return {**go, "rows": rows} if go.get("ok") else go
         if a.type == "versions":
             i = index.get(id(a.row))
-            return {"ok": True, "open_versions": i} if i is not None else {"ok": False, "message": t("apply.no_scan")}
+            return {"ok": True, "open_versions": i} if i is not None else {"ok": False, "message": t("dg.err_action")}
         return {"ok": False, "message": t("dg.err_action")}
 
     # ------------------------------------------------------------------ análisis

@@ -53,8 +53,12 @@ def list_reports(game_dir: Path) -> list[dict]:
         files = [p for p in crash.iterdir() if p.is_file() and p.suffix.lower() == ".txt"] if crash.is_dir() else []
     except OSError:
         files = []
-    for p in sorted(files, key=lambda p: p.stat().st_mtime, reverse=True):
-        out.append({"path": p, "name": p.name, "kind": _kind(p.name), "mtime": p.stat().st_mtime})
+    for p in files:
+        try:
+            out.append({"path": p, "name": p.name, "kind": _kind(p.name), "mtime": p.stat().st_mtime})
+        except OSError:  # se borró mientras se listaba
+            continue
+    out.sort(key=lambda r: r["mtime"], reverse=True)
     for name in ("latest.log", "debug.log"):
         p = Path(game_dir) / "logs" / name
         if p.is_file():
@@ -76,22 +80,30 @@ def read_text(path: Path) -> str:
     return text.replace("\x00", "")
 
 
-def anonymize(text: str, windows_user: str | None = None) -> str:
-    """Quita el usuario de Windows (rutas y nombre), el jugador de Minecraft, UUID y tokens."""
+def players_in(text: str) -> set[str]:
+    """Nombres de jugador que aparecen en un informe (para quitarlos también de sus extractos)."""
+    found = set(re.findall(r"Setting user: ([^\s,\]]+)", text))
+    found |= set(re.findall(r"--username[ ,=]+([^\s,\]]+)", text))
+    return {p for p in found if len(p) >= 3}
+
+
+def anonymize(text: str, windows_user: str | None = None, players: set[str] | None = None) -> str:
+    """Quita el usuario de Windows (rutas y nombre, también con espacios o codificado), el jugador
+    de Minecraft (de `players` y de lo que haya en el propio texto), UUID y tokens."""
     user_tag, player_tag, hidden = t("dg.anon_user"), t("dg.anon_player"), t("dg.anon_hidden")
-    players = set(re.findall(r"Setting user: ([^\s,\]]+)", text))
-    players |= set(re.findall(r"--username[ ,=]+([^\s,\]]+)", text))
+    players = set(players or ()) | players_in(text)
     text = re.sub(r"(--(?:accessToken|uuid|xuid|clientId)[ ,=]+)([^\s,\]]+)", lambda m: m.group(1) + hidden, text)
-    text = re.sub(r"(?i)([\\/]Users[\\/])([^\\/\s]+)", lambda m: m.group(1) + user_tag, text)
-    for name in sorted(players, key=len, reverse=True):
-        if len(name) >= 3:
-            text = re.sub(rf"(?<![\w]){re.escape(name)}(?![\w])", player_tag, text)
     try:
         windows_user = windows_user or getpass.getuser()
     except Exception:  # noqa: BLE001 - sin usuario no hay nada que quitar
         windows_user = None
     if windows_user and len(windows_user) >= 3:
-        text = re.sub(rf"(?i)(?<![\w]){re.escape(windows_user)}(?![\w])", user_tag, text)
+        for form in {windows_user, windows_user.replace(" ", "%20"), windows_user.replace(" ", "+")}:
+            text = re.sub(rf"(?i)(?<![\w]){re.escape(form)}(?![\w])", user_tag, text)
+    # Otros usuarios en rutas (C:\Users\x, /C:/Users/x, C:%5CUsers%5Cx).
+    text = re.sub(r"(?i)((?:[\\/]|%5C|%2F)Users(?:[\\/]|%5C|%2F))((?:(?!%5C|%2F)[^\\/\s])+)", lambda m: m.group(1) + user_tag, text)
+    for name in sorted(players, key=len, reverse=True):
+        text = re.sub(rf"(?<![\w]){re.escape(name)}(?![\w])", player_tag, text)
     return text
 
 
@@ -102,7 +114,7 @@ _VERSION = re.compile(r"Mod (\S+) requires (\S+) ([^\r\n]+?)\s*[\r\n]+\s*Current
 _INCOMPAT = re.compile(r"Mod (\S+) is incompatible with (\S+) ([^\r\n]+?)\s*[\r\n]+\s*Currently, \2 is (\S+)"
                        r"(?:\s*[\r\n]+\s*The reason is: ([^\r\n]+))?")
 _FRAME = re.compile(r"^\s*at TRANSFORMER/([a-z0-9_.\-]+)@", re.MULTILINE)
-_MIXIN_MOD = re.compile(r"[^\r\n]*[Mm]ixin[^\r\n]*?\bfrom mod ([a-z0-9_.\-]+)")
+_FROM_MOD = re.compile(r"\bfrom mod ([a-z0-9_.\-]+)")
 _NO_CLASS = re.compile(r"(?:ClassNotFoundException|NoClassDefFoundError):\s*([\w.$/]+)")
 _SUSPECTED = re.compile(r"Suspected Mods?:\s*[\r\n]+((?:[ \t]+[^\r\n]+[\r\n]*)+)")
 
@@ -157,9 +169,14 @@ def analyze(text: str, *, log: bool = False) -> list[Finding]:
         ev = [f"Mod {mod} is incompatible with {other} {rng.strip()}"] + ([f"The reason is: {reason.strip()}"] if reason else [])
         out.append(Finding("incompatible", [mod], other, {"have": have, "reason": (reason or "").strip()}, ev))
 
-    mixin = next((m for m in _MIXIN_MOD.finditer(text) if _not_frame(text, m) and _is_error_line(m.group(0))), None)
+    mixin = None
+    for m in _FROM_MOD.finditer(text):  # rápido incluso con logs de 8 MB llenos de líneas de mixins
+        line = _line(text, m.start(1))
+        if "ixin" in line and not line.startswith("at ") and _is_error_line(line):
+            mixin = (m.group(1), line)
+            break
     if mixin is not None:
-        f = Finding("mixin", [mixin.group(1)], evidence=[mixin.group(0).strip()[:300]])
+        f = Finding("mixin", [mixin[0]], evidence=[mixin[1][:300]])
         cls = next((c for c in _NO_CLASS.finditer(text) if _not_frame(text, c)), None)
         if cls is not None:
             f.target = cls.group(1).replace("/", ".")
@@ -229,6 +246,11 @@ class Card:
     note: str = ""
     subject: str = ""  # nombre del mod principal (para el título de la pantalla)
     targets: set = field(default_factory=set)  # modIds que esta tarjeta desactiva o sustituye
+
+
+def _version_key(text: str) -> tuple:
+    """"0.6.10" > "0.6.9" (por números, no por texto)."""
+    return tuple(int(n) for n in re.findall(r"\d+", text or "")[:6])
 
 
 def readable_range(text: str) -> str:
@@ -316,7 +338,12 @@ def plan_cards(findings: list[Finding], results: list, *, lookup, knowledge: dic
             if installed:
                 have = by_id.get(f.target, [])
                 if have and all(r.mod.disabled for r in have):
-                    c.actions.append(Action("enable", t("dg.act_enable", name=have[0].name), files=[have[0].mod.file_name]))
+                    clash = [y for y in active if f.target in y.mod.incompatible
+                             or set(have[0].mod.incompatible) & {y.mod.mod_id, *y.mod.extra_mod_ids}]
+                    if clash:
+                        c.note = t("dg.note_conflict", name=have[0].name, names=_join([y.name for y in clash]))
+                    else:
+                        c.actions.append(Action("enable", t("dg.act_enable", name=have[0].name), files=[have[0].mod.file_name]))
                 elif not have:
                     cand = lookup(f.target)
                     if cand is None:
@@ -392,7 +419,7 @@ def plan_cards(findings: list[Finding], results: list, *, lookup, knowledge: dic
                 if up:
                     c.actions.append(up)
                 else:
-                    c.note = t("dg.no_newer", name=mod)
+                    c.note = t("dg.note_pinned", name=mod) if r.pinned else t("dg.no_newer", name=mod)
                 if owner is not None:
                     c.actions.append(Action("versions", t("dg.act_versions", name=owner.name), row=owner))
                 a = disable([r])
@@ -403,11 +430,12 @@ def plan_cards(findings: list[Finding], results: list, *, lookup, knowledge: dic
             files = f.detail.get("files", [])
             mod = name(f.mods[0])
             c = Card("duplicate", t("dg.k_duplicate"), t("dg.t_duplicate", name=mod), t("dg.w_duplicate", name=mod), ev, subject=mod)
-            keep = sorted(files)[-1:] if files else []
-            for fn in sorted(files):
-                r = next((x for x in installed if x.mod.file_name == fn), None)
-                if fn not in keep and r is not None and not r.mod.disabled:
-                    c.actions.append(Action("disable", t("dg.act_disable", names=fn), files=[fn]))
+            copies = [x for x in installed if x.mod.file_name in files and not x.mod.disabled]
+            if len(copies) >= 2:
+                newest = max(copies, key=lambda x: _version_key(x.mod.version or x.mod.file_name))
+                for x in sorted(copies, key=lambda x: x.mod.file_name):
+                    if x is not newest:
+                        c.actions.append(Action("disable", t("dg.act_disable", names=x.mod.file_name), files=[x.mod.file_name]))
             cards.append(c)
         elif f.kind == "wrong_loader":
             fn = f.detail.get("file") or "?"
@@ -441,6 +469,8 @@ def _merge(cards: list[Card]) -> list[Card]:
             out.append(c)
             continue
         host.why = f"{host.why} {c.why}"
+        host.note = " ".join(n for n in (host.note, c.note) if n)
+        host.targets |= c.targets
         host.evidence += [e for e in c.evidence if e not in host.evidence]
         keys = {a.key() for a in host.actions}
         swapped = {fn for a in host.actions if a.type == "swap" for fn in a.files}
