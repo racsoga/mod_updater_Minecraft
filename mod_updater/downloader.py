@@ -233,7 +233,7 @@ def toggle_one(res: Resolution, before_change=None) -> Outcome:
 def updatable(results: list[Resolution]) -> tuple[list[Resolution], list[Resolution]]:
     """Separa los actualizables aplicables de los que hay que saltar
     (proyectos duplicados en la carpeta: actualizarlos chocaría)."""
-    cands = [r for r in results if r.status == ACTUALIZABLE]
+    cands = [r for r in results if r.status == ACTUALIZABLE and not r.pinned]  # fijado: no se toca
     count = Counter((r.source, r.project_id) for r in cands)
     active = Counter((r.source, r.project_id) for r in cands if not (r.mod and r.mod.disabled))
 
@@ -471,6 +471,10 @@ class UndoResult:
     restored: int = 0     # jars viejos devueltos a la carpeta de mods
     removed: int = 0      # jars nuevos retirados (movidos a <backup>/undo)
     errors: list[str] = field(default_factory=list)
+
+
+def write_changelog_json(backup_dir: Path, data: dict) -> None:
+    _write_json(backup_dir / "cambios.json", data)
 
 
 def read_changelog(backup_dir: Path) -> dict | None:

@@ -42,7 +42,8 @@ from ..explore import PAGE_SIZE, _installed_index, detail as explore_detail_of, 
 from ..config import DEFAULT_USER_AGENT, default_mods_dir
 from ..curseforge import LOADER_TYPES, CurseForgeAuthError, CurseForgeClient
 from ..deps import DependencyFinder, DepPlan, dependents_of, keep_needed, plan_with_dependencies, required_disabled
-from ..resolver import DISABLE, ENABLE, REMOVE, Dep
+from ..resolver import DISABLE, ENABLE, REMOVE, UPDATE, Dep
+from ..pins import apply_pins, find_pins, pin_entry, pin_key
 from .. import net
 from ..downloader import (
     Outcome,
@@ -54,7 +55,9 @@ from ..downloader import (
     clear_backups,
     list_backups,
     prune_backups,
+    read_changelog,
     toggle_one,
+    write_changelog_json,
     undo_backup,
     updatable,
 )
@@ -98,9 +101,14 @@ def serialize(results: list[Resolution], plan: DepPlan, *, allow_beta: bool = Fa
         if r.unreadable:
             s, sub = "unreadable", r.note  # el jar no se pudo leer: requiere atención
         elif id(r) in broken:
-            # Instalado y ya roto: le falta algo que no se puede instalar solo. Requiere atención.
+            # Instalado y ya roto: le falta algo que no se puede instalar solo. Requiere atención
+            # (aunque esté fijado: fijar no arregla que no cargue).
             b = broken[id(r)]
             s, sub, url = "manual", b.reason[:1].upper() + b.reason[1:], b.url or r.project_url
+        elif r.pinned and r.kind != INSTALL:  # fijado por el usuario: no se actualiza
+            s = "pin"
+            sub = r.pin_reason or (t("row.pinned", version=r.current_version or "?", new=r.new_version)
+                                   if r.new_version else t("row.pinned_same", version=r.current_version or "?"))
         elif s == "up" and id(r) not in in_plan:
             s, sub = "manual", t("row.duplicate")  # actualizable pero fuera del plan: duplicados
         elif s == "manual":
@@ -120,7 +128,7 @@ def serialize(results: list[Resolution], plan: DepPlan, *, allow_beta: bool = Fa
             "name": r.name,
             "icon": r.icon_url,
             "from": r.current_version if r.kind != INSTALL else None,
-            "to": r.new_version if s in ("up", "dep") or r.status == DESCARGA_MANUAL else None,
+            "to": r.new_version if s in ("up", "dep", "pin") or r.status == DESCARGA_MANUAL else None,
             "beta": _beta_note(r, s, allow_beta) is not None,
             "betaNote": _beta_note(r, s, allow_beta),
             "src": SOURCE_LABEL.get(r.source or "", ""),
@@ -135,8 +143,14 @@ def serialize(results: list[Resolution], plan: DepPlan, *, allow_beta: bool = Fa
             "file": r.mod.file_name if r.mod is not None else None,
             "cl": r.kind != INSTALL and bool(r.new_version) and r.status in (ACTUALIZABLE, DESCARGA_MANUAL)
                   and r.source in (CF, MR),
+            # Versiones (fijar / volver a una anterior): cualquier mod instalado e identificado.
+            "vers": r.kind != INSTALL and r.mod is not None and not r.unreadable and r.source in (CF, MR),
         })
     return {"rows": rows, "details": list(plan.ignored), "warnings": list(plan.conflicts)}
+
+
+MAX_VERSION_LIST = 40  # versiones que se ofrecen para volver atrás
+ROLLBACK_ROW = 300000  # id de la fila en la pantalla de aplicar
 
 
 def _join(names: list[str]) -> str:
@@ -181,6 +195,7 @@ class Api:
         self._row_s: list[str] = []         # estado de cada fila ("up", "dep", ...)
         self._applying = False              # hay una actualización en curso (aviso al cerrar)
         self._changelogs: dict = {}         # changelogs ya descargados (por mod y rango de versiones)
+        self._version_lists: dict = {}      # versiones publicadas de cada mod (para volver atrás)
         self._explore_cache: dict = {}      # búsquedas recientes (no repetir peticiones al volver atrás)
         self._install: list[Resolution] = []  # plan de la cesta de Explorar, pendiente de confirmar
         self._import: dict | None = None    # lista importada y comparada, pendiente de confirmar
@@ -465,6 +480,7 @@ class Api:
         if MR in failed:
             notices.append(t("notice.mr_down"))
 
+        apply_pins(results, s.pins or {})  # los fijados no se actualizan (pins.py)
         progress("deps", t("scan.checking_deps"))
         current_phase["code"] = "deps"
         selected, _ = updatable(results)
@@ -513,8 +529,9 @@ class Api:
         self._run_async(lambda: self._apply(chosen, s))
         return {"ok": True, "total": len(chosen)}
 
-    def _apply(self, chosen: list[Resolution], s: Settings, index: dict | None = None) -> None:
+    def _apply(self, chosen: list[Resolution], s: Settings, index: dict | None = None, after=None) -> list[Outcome]:
         index = index or {id(r): i for i, r in enumerate(self._rows)}
+        result: list[Outcome] = []
         total, done = len(chosen), 0
         self._applying = True
         net.retry_listener = lambda host, reason, wait: self._emit(
@@ -542,6 +559,9 @@ class Api:
                 on_state=on_state,
             )
             ok = [o for o in outcomes if o.ok]
+            result = outcomes
+            if after is not None:  # p. ej. fijar tras volver a una versión anterior (con el bloqueo puesto)
+                after(outcomes)
             pruned = prune_backups(s.mods_path, s.backups_to_keep) if ok else []
             self._plan = None  # la revisión ya no refleja la carpeta: hay que volver a revisar
             self._results = []
@@ -560,7 +580,9 @@ class Api:
         finally:
             self._applying = False
             net.retry_listener = None
+            self._version_lists.clear()  # lo instalado ha cambiado
             self._busy.release()
+        return result
 
     def _is_applying(self) -> bool:
         """Para el aviso al cerrar la ventana (gui/app.py)."""
@@ -829,6 +851,12 @@ class Api:
             chosen, manual = modlist_mod.resolve_exact(self._import, self._results, curseforge=cf, modrinth=mr)
         except ApiError as exc:
             return {"ok": False, "message": t("scan.err_offline") if exc.kind == "offline" else t("ex.err_network")}
+        pinned = [m for k in ("add", "update", "same") for m in self._import.get(k, []) if m.get("fijado") and m.get("fuente")]
+        if pinned:  # la lista trae mods fijados: también quedan fijados aquí
+            s.pins = {**{f"{m['fuente']}:{m['proyecto']}": {
+                "name": m.get("nombre") or "?", "version": m.get("version") or "", "reason": ""} for m in pinned},
+                **(s.pins or {})}  # una fijación que ya tenías (con su motivo) se respeta
+            save_settings(s, self._settings_file)
         if remove:  # primero se quitan (así un jar con el mismo nombre que uno nuevo no choca)
             chosen = [replace(r, kind=REMOVE) for r in self._import["remove"]] + chosen
         if not chosen:
@@ -893,6 +921,117 @@ class Api:
         return {"ok": True, "name": r.name, "from": r.current_version, "to": r.new_version,
                 "url": r.project_url, **self._changelogs[key]}
 
+    # ------------------------------------------------------------------ fijar y versiones anteriores
+
+    def _pin_row(self, row_id) -> Resolution | None:
+        try:
+            r = self._rows[int(row_id)]
+        except (IndexError, TypeError, ValueError):
+            return None
+        return r if r.mod is not None and pin_key(r) else None
+
+    def _save_pin(self, r: Resolution, *, on: bool, version: str | None = None, reason: str = "") -> dict:
+        """Fija o suelta `r` en el perfil activo. Devuelve las entradas que había antes."""
+        s = self._settings()
+        pins = dict(s.pins or {})
+        previous = {k: pins.pop(k) for k in find_pins(r, pins)}
+        if on:
+            pins[pin_key(r)] = pin_entry(r, version=version, reason=reason)
+        s.pins = pins
+        save_settings(s, self._settings_file)
+        return previous
+
+    def pin_set(self, row_id, pinned: bool, reason: str = "") -> dict:
+        """Fija ("No actualizar este") o suelta un mod del perfil activo, con un motivo opcional."""
+        r = self._pin_row(row_id)
+        if r is None:
+            return {"ok": False, "message": t("cl.not_found")}
+        reason = " ".join(str(reason or "").split())[:200] if pinned else ""
+        self._save_pin(r, on=bool(pinned), version=r.current_version, reason=reason)
+        r.pinned, r.pin_reason = bool(pinned), reason
+        return {"ok": True}
+
+    def _versions(self, r: Resolution, s: Settings) -> list[dict]:
+        """Versiones publicadas para la versión de Minecraft y el cargador del perfil (más nuevas primero)."""
+        key = (r.source, r.project_id, s.minecraft_version, s.loader)
+        if key in self._version_lists:
+            return self._version_lists[key]
+        out = []
+        if r.source == MR:
+            for v in self._mr_factory(DEFAULT_USER_AGENT).project_versions(r.project_id, s.loader, s.minecraft_version):
+                f = v.primary_file
+                out.append({"id": v.id, "version": v.version_number, "date": v.date_published, "channel": v.version_type,
+                            "url": f.url if f else None, "file": f.filename if f else None, "sha1": f.sha1 if f else None,
+                            "sha512": f.sha512 if f else None, "size": f.size if f else 0})
+        elif r.source == CF:
+            api_key = self._get_key()[0] if s.use_curseforge else None
+            if not api_key:
+                return []
+            for f in self._cf_factory(api_key).mod_files(int(r.project_id), s.minecraft_version, s.loader):
+                # Sin hash no se puede verificar la descarga: se ofrece como descarga manual.
+                out.append({"id": f.id, "version": f.display_name, "date": f.date_published, "channel": f.version_type,
+                            "url": f.download_url if f.sha1 else None, "file": f.file_name, "sha1": f.sha1,
+                            "sha512": None, "size": f.size})
+        out.sort(key=lambda v: v["date"] or "", reverse=True)
+        self._version_lists[key] = out[:MAX_VERSION_LIST]
+        return self._version_lists[key]
+
+    @staticmethod
+    def _is_current(r: Resolution, v: dict) -> bool:
+        return v["id"] == r.current_file_id or bool(v["sha1"] and r.mod is not None and v["sha1"] == r.mod.sha1)
+
+    @_never_hang
+    def versions_for(self, row_id) -> dict:
+        """Lista para "Volver a una versión anterior" (en el panel de Ver cambios)."""
+        r = self._pin_row(row_id)
+        if r is None:
+            return {"ok": False, "message": t("cl.not_found")}
+        base = {"pinned": r.pinned, "reason": r.pin_reason, "current": r.current_version}
+        try:
+            versions = self._versions(r, self._settings())
+        except ApiError as exc:  # sin red se puede seguir fijando o soltando
+            return {"ok": False, "message": t("scan.err_offline") if exc.kind == "offline" else t("cl.err_network"), **base}
+        return {"ok": True, **base,
+                "versions": [{"id": v["id"], "version": v["version"], "date": v["date"], "channel": v["channel"],
+                              "current": self._is_current(r, v), "manual": not v["url"]} for v in versions]}
+
+    @_never_hang
+    def rollback(self, row_id, version_id: str) -> dict:
+        """Instala esa versión exacta (con copia y Deshacer) y, si sale bien, la deja fijada."""
+        r = self._pin_row(row_id)
+        if r is None:
+            return {"ok": False, "message": t("cl.not_found")}
+        s = self._settings()
+        if self._running(s.mods_path.parent):
+            return {"ok": False, "reason": "minecraft", "message": t("apply.minecraft_open")}
+        try:
+            v = next((x for x in self._versions(r, s) if x["id"] == str(version_id)), None)
+        except ApiError as exc:
+            return {"ok": False, "message": t("scan.err_offline") if exc.kind == "offline" else t("cl.err_network")}
+        if v is None or self._is_current(r, v) or not v["url"] or not v["file"]:
+            return {"ok": False, "message": t("pin.err_version")}
+        if not self._busy.acquire(blocking=False):
+            return {"ok": False, "message": t("apply.busy")}
+        res = replace(r, kind=UPDATE, status=ACTUALIZABLE, new_version=v["version"], new_channel=v["channel"],
+                      new_file_name=v["file"], download_url=v["url"], new_sha1=v["sha1"], new_sha512=v["sha512"],
+                      new_size=v["size"], new_date=v["date"], required_by=[])
+        reason = r.pin_reason
+
+        def pin_after(outcomes: list[Outcome]) -> None:
+            o = outcomes[0] if outcomes else None
+            if not (o and o.ok):
+                return
+            previous = self._save_pin(r, on=True, version=v["version"], reason=reason)
+            if o.backup_path is not None:  # Deshacer la vuelta atrás también deshace la fijación
+                data = read_changelog(o.backup_path.parent) or {}
+                data["pin"] = {"key": pin_key(r), "previous": previous}
+                write_changelog_json(o.backup_path.parent, data)
+
+        self._run_async(lambda: self._apply([res], s, {id(res): ROLLBACK_ROW}, after=pin_after))
+        return {"ok": True, "rows": [{"id": ROLLBACK_ROW, "s": "up", "name": r.name, "icon": r.icon_url,
+                                      "from": r.current_version, "to": v["version"], "beta": v["channel"] != "release",
+                                      "neededBy": []}]}
+
     # ------------------------------------------------------------------ análisis
 
     def analysis(self, include_libraries: bool = False) -> dict:
@@ -936,7 +1075,10 @@ class Api:
         if not self._busy.acquire(blocking=False):
             return {"ok": False, "message": t("apply.busy")}
         try:
+            pin = (read_changelog(target) or {}).get("pin")
             r = undo_backup(target)
+            if pin and r.restored:  # era una vuelta atrás: la fijación vuelve a como estaba
+                self._restore_pin(pin)
         finally:
             self._busy.release()
         self._plan = None
@@ -995,6 +1137,14 @@ class Api:
         failed = [{"name": o.resolution.name, "message": o.message} for o in outcomes if not o.ok]
         return {"ok": not failed, "rows": [{"id": rows[id(r)], "off": r.mod.disabled} for r in done if id(r) in rows],
                 "also": [r.name for r in also if r in done], "failed": failed}
+
+    def _restore_pin(self, pin: dict) -> None:
+        s = self._settings()
+        pins = dict(s.pins or {})
+        pins.pop(str(pin.get("key")), None)
+        pins.update(pin.get("previous") or {})
+        s.pins = pins
+        save_settings(s, self._settings_file)
 
     def clear_backups(self) -> dict:
         if not self._busy.acquire(blocking=False):

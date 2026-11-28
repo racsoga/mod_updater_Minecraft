@@ -41,9 +41,12 @@
     up("Balm", "21.0.56", "21.0.67", "1107/117/256/256/638657111836546584.png"),
     up("Accessories", "1.1.0-beta.52", "1.1.0-beta.54", "948/913/256/256/638436487112587498.png", "Versión beta: ya usas la beta de este mod"),
     up("Curios API", "9.5.1", "9.6.0", "195/772/256/256/636881112930494939.png"),
-    ok("Just Enough Items (JEI)", "19.71.0.475"), ok("Create", "6.0.10"), ok("Sodium", "0.8.13"),
+    ok("Just Enough Items (JEI)", "19.71.0.475"), ok("Sodium", "0.8.13"),
+    // Fijado de ejemplo: hay versión nueva, pero no entra en "Actualizar todo".
+    { s: "pin", name: "Create", from: "6.0.4", to: "6.0.10", icon: null, beta: false, betaNote: null, src: "CurseForge",
+      sub: "El servidor va en 6.0.4", neededBy: [], checked: false, cl: true },
     { ...ok("JourneyMap", "6.0.0"), off: true },
-  ].map((r, i) => ({ ...r, id: i, file: r.s === "dep" ? null : `${r.name.replace(/\W+/g, "")}.jar${r.off ? ".disabled" : ""}`, off: !!r.off }));
+  ].map((r, i) => ({ ...r, id: i, vers: r.s !== "dep", file: r.s === "dep" ? null : `${r.name.replace(/\W+/g, "")}.jar${r.off ? ".disabled" : ""}`, off: !!r.off }));
 
   const emit = (e, p) => window.onBackend(e, p);
   window.pywebview = { api: {
@@ -191,6 +194,32 @@
       setTimeout(() => emit("apply_done", { updated: 0, installed: 0, added: 1, failed: [], pruned: 0,
         backup: { path: "C:\\…\\mods_backup\\2026-11-21_1600", date: "2026-11-21T16:00:00", changes: 1, undone: false, undoable: true } }), 800);
       return { ok: true, total: 1 };
+    },
+    // Versiones para fijar o volver atrás (?mcopen: Minecraft abierto).
+    versions_for: async id => {
+      await new Promise(r => setTimeout(r, 200));
+      const r = rows.find(x => x.id === id) || rows[0];
+      const cur = r.from || "1.0";
+      return { ok: true, pinned: r.s === "pin", reason: r.s === "pin" ? r.sub : "", current: cur, versions: [
+        { id: "v4", version: r.to || cur, date: "2026-11-10T10:00:00Z", channel: "release", current: !r.to, manual: false },
+        { id: "v3", version: "versión-beta", date: "2026-10-20T10:00:00Z", channel: "beta", current: false, manual: false },
+        { id: "v2", version: r.to ? cur : "versión-anterior", date: "2026-09-02T10:00:00Z", channel: "release", current: !!r.to, manual: false },
+        { id: "v1", version: "anterior", date: "2026-07-15T10:00:00Z", channel: "release", current: false, manual: true },
+      ].filter((v, i, all) => all.findIndex(x => x.version === v.version) === i) };
+    },
+    pin_set: async (id, on, reason) => {
+      const r = rows.find(x => x.id === id);
+      if (r) { r.s = on ? "pin" : (r.to ? "up" : "ok"); r.sub = on ? (reason || `Fijado en ${r.from}`) : ""; r.checked = !on && !!r.to; }
+      return { ok: true };
+    },
+    rollback: async (id, vid) => {
+      if (params.has("mcopen")) return { ok: false, reason: "minecraft", message: "Minecraft está abierto con esta carpeta. Ciérralo y vuelve a pulsar el botón." };
+      const r = rows.find(x => x.id === id) || rows[0];
+      setTimeout(() => emit("apply_progress", { id: 300000, state: "downloading", done: 0, total: 1 }), 100);
+      setTimeout(() => emit("apply_progress", { id: 300000, state: "done", done: 1, total: 1 }), 600);
+      setTimeout(() => emit("apply_done", { updated: 1, installed: 0, added: 0, failed: [], pruned: 0,
+        backup: { path: "C:\\…\\mods_backup\\2026-11-28_1300", date: "2026-11-28T13:00:00", changes: 1, undone: false, undoable: true } }), 900);
+      return { ok: true, rows: [{ id: 300000, s: "up", name: r.name, from: r.from, to: vid, neededBy: [] }] };
     },
     // Changelog de ejemplo (?clfail: error de red). El HTML real llega ya limpio desde Python.
     changelog: async id => {

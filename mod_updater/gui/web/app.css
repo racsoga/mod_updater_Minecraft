@@ -218,6 +218,18 @@ a:hover { text-decoration: underline; }
 .group-head[data-g="attention"] h3::before { background: var(--warn); }
 .group-head[data-g="changes"] h3::before { background: var(--st-change); }
 .group-head[data-g="ok"] h3::before { background: var(--st-ok); }
+.group-head[data-g="pin"] h3::before { background: var(--muted-strong); }
+.badge.pin { color: var(--muted-strong); }
+/* Panel de versiones: fijar y volver a una versión anterior */
+.pin-box { padding: 4px 0 18px; border-bottom: 1px solid var(--rule); margin-bottom: 8px; }
+.pin-box .pin-state { margin: 6px 0 12px; color: var(--muted-strong); }
+.pin-box .pin-state b { color: var(--text); }
+.pin-label { display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin: 12px 0 8px; }
+.pin-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.pin-row .input { flex: 1; min-width: 200px; }
+.vr-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.vr-item .tag { margin-left: 6px; }
+.vr-current { font-size: 13px; color: var(--st-ok); white-space: nowrap; }
 .group-head .count { font-size: 13px; color: var(--muted); }
 .group-head .grow { flex: 1; }
 .master { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted-strong); cursor: pointer; }

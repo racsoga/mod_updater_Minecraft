@@ -354,7 +354,9 @@ def _check_version(dep, have, parent, finder, add_to_plan, edges, block) -> None
     required_date = finder.version_date(dep)
     if not required_date or required_date <= have.current_date:
         return
-    if have.status == ACTUALIZABLE:
+    if have.pinned:  # no se actualiza un mod fijado: se avisa en el que lo necesita
+        block(parent, t("deps.needs_pinned", name=have.name), have.project_url)
+    elif have.status == ACTUALIZABLE:
         add_to_plan(have, parent)
         edges.append((parent, have))
     else:
