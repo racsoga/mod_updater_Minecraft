@@ -20,6 +20,7 @@ from pathlib import Path
 
 from .i18n import t
 from .knowledge import load_knowledge
+from .resolver import ACTUALIZABLE, CF, MR
 
 MAX_BYTES = 8 * 1024 * 1024  # de un log enorme solo interesa el final
 PLATFORM_IDS = {"minecraft", "neoforge", "forge", "fml", "javafml", "mixinextras", "java"}
@@ -199,3 +200,242 @@ def _suspect(text: str) -> Finding | None:
             if f.group(1) not in PLATFORM_IDS:
                 return Finding("suspect", [f.group(1)], evidence=[_line(block, f.start(1))[:300]])
     return None
+
+
+# --------------------------------------------------------------------------- acciones
+
+@dataclass
+class Action:
+    type: str  # install | swap | disable | enable | update | versions
+    label: str
+    primary: bool = False
+    files: list[str] = field(default_factory=list)  # jars que se activan o desactivan
+    install: object | None = None  # Resolution a instalar (install / swap)
+    row: object | None = None  # Resolution del mod (update / versions)
+
+    def key(self) -> tuple:
+        pid = getattr(self.install, "project_id", None)
+        return (self.type, tuple(sorted(self.files)), pid, id(self.row) if self.row is not None else None)
+
+
+@dataclass
+class Card:
+    kind: str
+    kicker: str
+    title: str
+    why: str
+    evidence: list[str]
+    actions: list[Action] = field(default_factory=list)
+    note: str = ""
+    subject: str = ""  # nombre del mod principal (para el título de la pantalla)
+    targets: set = field(default_factory=set)  # modIds que esta tarjeta desactiva o sustituye
+
+
+def _project_ids(entry: dict) -> set:
+    ids = set()
+    if entry.get("curseforge"):
+        ids.add((CF, str(entry["curseforge"])))
+    if entry.get("modrinth"):
+        ids.add((MR, str(entry["modrinth"])))
+    return ids
+
+
+def _join(names: list[str]) -> str:
+    names = [n for n in names if n]
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + t("ui.and") + names[-1] if names else ""
+
+
+def plan_cards(findings: list[Finding], results: list, *, lookup, knowledge: dict) -> list[Card]:
+    """Tarjetas con acciones de un clic. `lookup(modid)` devuelve la Resolution a instalar (o None).
+
+    Ninguna acción crea un problema nuevo: desactivar incluye (y nombra) a los mods que dependen
+    de lo desactivado; instalar algo que choca con lo instalado se convierte en "Cambiar Y por X"
+    solo si nadie necesita Y; si no, no se propone. Las tarjetas que se arreglan con la misma
+    acción se fusionan en una."""
+    from .deps import dependents_of  # aquí para no crear un import circular
+
+    installed = [r for r in results if r.mod is not None]
+    by_id: dict[str, list] = {}
+    for r in installed:
+        for m in [r.mod.mod_id, *r.mod.extra_mod_ids]:
+            if m:
+                by_id.setdefault(m, []).append(r)
+    active = [r for r in installed if not r.mod.disabled]
+
+    def name(modid: str) -> str:
+        rs = by_id.get(modid)
+        return rs[0].name if rs else modid
+
+    def disable(rs: list, primary=False) -> Action | None:
+        rs = [r for r in rs if not r.mod.disabled]
+        if not rs:
+            return None
+        all_rs = rs + dependents_of(results, rs)
+        return Action("disable", t("dg.act_disable", names=_join([r.name for r in all_rs])), primary,
+                      files=[r.mod.file_name for r in all_rs])
+
+    def update(r) -> Action | None:
+        if r is not None and r.status == ACTUALIZABLE and not r.pinned:
+            return Action("update", t("dg.act_update", name=r.name), row=r)
+        return None
+
+    pairs = []
+    for p in knowledge.get("incompatibilidades", []):
+        a, b = _project_ids(p.get("a") or {}), _project_ids(p.get("b") or {})
+        pairs += [(a, b), (b, a)]
+
+    def conflicts(cand, modid: str) -> list:
+        """Mods activos que chocarían con `cand`: por la base de conocimiento, porque el mod
+        instalado lo declara incompatible en su mods.toml, o porque la API lo declara."""
+        api = {d.key for d in getattr(cand, "new_incompat", []) or []}
+        return [y for y in active
+                if any(cand.known_ids & a and y.known_ids & b for a, b in pairs)
+                or modid in y.mod.incompatible or y.known_ids & api]
+
+    cards: list[Card] = []
+    for f in findings:
+        ev = list(f.evidence)
+        if f.kind == "missing":
+            needers = [r for m in f.mods for r in by_id.get(m, [])]
+            dep_name = name(f.target)
+            c = Card("missing", t("dg.k_missing"), t("dg.t_missing", name=dep_name),
+                     t("dg.w_missing", count=len(f.mods), names=_join([name(m) for m in f.mods]), dep=dep_name,
+                       range=f.detail.get("range", "")), ev, subject=dep_name)
+            if installed:
+                have = by_id.get(f.target, [])
+                if have and all(r.mod.disabled for r in have):
+                    c.actions.append(Action("enable", t("dg.act_enable", name=have[0].name), files=[have[0].mod.file_name]))
+                elif not have:
+                    cand = lookup(f.target)
+                    if cand is None:
+                        c.note = t("dg.note_not_found", name=dep_name)
+                    else:
+                        dep_name = cand.name
+                        c.title = t("dg.t_missing", name=dep_name)
+                        c.why = t("dg.w_missing", count=len(f.mods), names=_join([name(m) for m in f.mods]), dep=dep_name,
+                                  range=f.detail.get("range", ""))
+                        clash = conflicts(cand, f.target)
+                        if not clash:
+                            c.actions.append(Action("install", t("dg.act_install", name=cand.name), install=cand))
+                        elif not dependents_of(results, clash):
+                            c.actions.append(Action("swap", t("dg.act_swap", old=_join([y.name for y in clash]), new=cand.name),
+                                                    files=[y.mod.file_name for y in clash], install=cand))
+                            c.targets |= {y.mod.mod_id for y in clash}
+                        else:
+                            c.note = t("dg.note_conflict", name=cand.name, names=_join([y.name for y in clash]))
+                a = disable(needers)
+                if a:
+                    c.actions.append(a)
+            cards.append(c)
+        elif f.kind == "version" and f.target in PLATFORM_IDS:
+            mod = name(f.mods[0])
+            key = "dg.w_wrong_mc" if f.target == "minecraft" else "dg.w_old_loader"
+            c = Card("platform", t("dg.k_platform"), t("dg.t_platform", name=mod),
+                     t(key, name=mod, range=f.detail["range"], have=f.detail["have"]), ev, subject=mod)
+            a = disable(by_id.get(f.mods[0], []))
+            if a:
+                c.actions.append(a)
+            cards.append(c)
+        elif f.kind == "version":
+            mod, dep = name(f.mods[0]), name(f.target)
+            c = Card("version", t("dg.k_version"), t("dg.t_version", name=dep),
+                     t("dg.w_version", name=mod, dep=dep, range=f.detail["range"], have=f.detail["have"]), ev, subject=dep)
+            if installed:
+                target = (by_id.get(f.target) or [None])[0]
+                up = update(target)
+                if up:
+                    c.actions.append(up)
+                elif target is not None:
+                    c.note = t("dg.no_newer", name=dep)
+                a = disable(by_id.get(f.mods[0], []))
+                if a:
+                    c.actions.append(a)
+            cards.append(c)
+        elif f.kind == "incompatible":
+            mod, other = name(f.mods[0]), name(f.target)
+            why = t("dg.w_incompat", name=mod, other=other)
+            c = Card("incompatible", t("dg.k_incompat"), t("dg.t_incompat", name=mod, other=other), why, ev, subject=other)
+            c.targets |= {f.target, f.mods[0]}
+            for rs in (by_id.get(f.target, []), by_id.get(f.mods[0], [])):
+                a = disable(rs)
+                if a:
+                    c.actions.append(a)
+            cards.append(c)
+        elif f.kind in ("mixin", "suspect"):
+            mod = name(f.mods[0])
+            r = (by_id.get(f.mods[0]) or [None])[0]
+            owner = None
+            if f.target:
+                owner = next((o for o in installed if o is not r and any(
+                    f.target == p or f.target.startswith(p + ".") for p in o.mod.packages)), None)
+            if owner is not None:
+                c = Card(f.kind, t("dg.k_likely"), t("dg.t_mixin_other", name=mod, other=owner.name),
+                         t("dg.w_mixin_other", name=mod, other=owner.name, cls=f.target.rsplit(".", 1)[-1]), ev, subject=mod)
+            elif f.kind == "mixin":
+                c = Card(f.kind, t("dg.k_likely"), t("dg.t_suspect", name=mod), t("dg.w_mixin", name=mod), ev, subject=mod)
+            else:
+                c = Card(f.kind, t("dg.k_possible"), t("dg.t_suspect", name=mod), t("dg.w_suspect", name=mod), ev, subject=mod)
+            if r is not None:
+                up = update(r)
+                if up:
+                    c.actions.append(up)
+                else:
+                    c.note = t("dg.no_newer", name=mod)
+                if owner is not None:
+                    c.actions.append(Action("versions", t("dg.act_versions", name=owner.name), row=owner))
+                a = disable([r])
+                if a:
+                    c.actions.append(a)
+            cards.append(c)
+        elif f.kind == "duplicate":
+            files = f.detail.get("files", [])
+            mod = name(f.mods[0])
+            c = Card("duplicate", t("dg.k_duplicate"), t("dg.t_duplicate", name=mod), t("dg.w_duplicate", name=mod), ev, subject=mod)
+            keep = sorted(files)[-1:] if files else []
+            for fn in sorted(files):
+                r = next((x for x in installed if x.mod.file_name == fn), None)
+                if fn not in keep and r is not None and not r.mod.disabled:
+                    c.actions.append(Action("disable", t("dg.act_disable", names=fn), files=[fn]))
+            cards.append(c)
+        elif f.kind == "wrong_loader":
+            fn = f.detail.get("file") or "?"
+            c = Card("wrong_loader", t("dg.k_wrong_loader"), t("dg.t_wrong_loader", file=fn),
+                     t("dg.w_wrong_loader", file=fn, loader=f.detail.get("loader") or "?"), ev, subject=fn)
+            r = next((x for x in installed if x.mod.file_name == fn and not x.mod.disabled), None)
+            if r is not None:
+                c.actions.append(Action("disable", t("dg.act_disable", names=fn), files=[fn]))
+            cards.append(c)
+        elif f.kind in ("java", "oom"):
+            cards.append(Card(f.kind, t(f"dg.k_{f.kind}"), t(f"dg.t_{f.kind}"), t(f"dg.w_{f.kind}"), ev))
+    return _merge(cards)
+
+
+def _merge(cards: list[Card]) -> list[Card]:
+    """Una tarjeta por acción: si un cambio (p. ej. "Cambiar Embeddium por Sodium") arregla también
+    otra tarjeta (la incompatibilidad con Embeddium), o dos tarjetas tienen la misma acción
+    principal, se juntan. Después se marca como principal la primera acción de cada tarjeta."""
+    out: list[Card] = []
+    for c in cards:
+        host = None
+        for o in out:
+            swap = next((a for a in o.actions if a.type == "swap"), None)
+            if c.kind == "incompatible" and swap is not None and o.targets & c.targets:
+                host = o
+            elif c.actions and o.actions and c.actions[0].key() == o.actions[0].key():
+                host = o
+            if host is not None:
+                break
+        if host is None:
+            out.append(c)
+            continue
+        host.why = f"{host.why} {c.why}"
+        host.evidence += [e for e in c.evidence if e not in host.evidence]
+        keys = {a.key() for a in host.actions}
+        swapped = {fn for a in host.actions if a.type == "swap" for fn in a.files}
+        for a in c.actions:
+            if a.key() not in keys and not (a.type == "disable" and set(a.files) <= swapped):
+                host.actions.append(a)
+    for c in out:
+        for i, a in enumerate(c.actions):
+            a.primary = i == 0
+    return out
