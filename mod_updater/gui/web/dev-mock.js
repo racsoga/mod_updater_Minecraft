@@ -129,7 +129,9 @@
         { name: "Terralith", reason: "Da mucho juego para explorar: estructuras, biomas y viajes.", note: "Solo afecta a mundos nuevos o zonas sin explorar.", source: "curseforge", id: "513688" }] }),
     suggest_plan: async sel => ({ ok: true, size: 9000000, overlaps: [], manual: [], unavailable: [], already: [], blocked: [],
       rows: [...sel.add.map((a, i) => ({ id: 100000 + i, s: "dep", name: a.name, to: "10.7", size: 9000000, neededBy: [] })),
-        ...sel.remove.map((f, i) => ({ id: 100100 + i, s: "rm", name: f, from: "1.0", neededBy: [] }))] }),
+        ...sel.remove.slice(sel.add.length ? 1 : 0).map((f, i) => ({ id: 100100 + i, s: "rm", name: f, from: "1.0", neededBy: [] }))],
+      // Simula S3: con algo para añadir, el primero que se quita lo necesita lo nuevo y no se quita.
+      kept: sel.add.length && sel.remove.length ? [`No se quita ${sel.remove[0]}: lo necesita ${sel.add[0].name}, que vas a añadir.`] : [] }),
     // Lista de mods (sin archivos reales).
     modlist_export: async kind => ({ ok: true, file: kind === "mrpack" ? "Principal.mrpack" : "Principal.modlist.json",
       excluded: kind === "mrpack" ? ["Mod de ejemplo"] : [], no_loader_version: false }),

@@ -218,6 +218,53 @@ def plan_with_dependencies(results: list[Resolution], selected: list[Resolution]
     return out
 
 
+def _mod_ids(res: Resolution) -> set[str]:
+    return ({res.mod.mod_id, *res.mod.extra_mod_ids} - {None}) if res.mod else set()
+
+
+def keep_needed(results: list[Resolution], removals: list[Resolution],
+                plan: list[Resolution] = ()) -> tuple[list[Resolution], list[str]]:
+    """Quita de `removals` lo que necesita algo que se queda o se añade (issue #12, S3).
+
+    El estado final es lo instalado − lo que se quita + lo que se instala (`plan`). Para
+    cada mod que queda se usan las dependencias de la versión que tendrá: las nuevas si
+    se actualiza o se instala, las actuales si no (y los `requires` del `mods.toml`). Se
+    repite hasta estabilizarse, así que una dependencia indirecta (A → B → C) también se
+    queda. Devuelve (lo que sí se quita, avisos de una frase)."""
+    planned = {id(r): r for r in plan}
+    remove_ids = {id(r.mod) for r in removals if r.mod is not None}
+    pending = [r for r in removals if r.mod is not None]
+    staying = [planned.get(id(r), r) for r in results if r.mod is not None and id(r.mod) not in remove_ids]
+    staying += [r for r in plan if r.kind == INSTALL]
+    added = {id(r) for r in plan if r.kind == INSTALL}
+    kept: dict[int, list[Resolution]] = {}  # id del mod que se queda -> quién lo necesita
+
+    def deps_of(r: Resolution) -> tuple[set, set]:
+        updating = r.kind == INSTALL or id(r) in planned
+        keys = {d.key for d in (r.new_deps if updating else r.current_deps)}
+        return keys, set(r.mod.requires) if r.mod is not None else set()
+
+    check = list(staying)
+    while check:
+        r = check.pop(0)
+        keys, requires = deps_of(r)
+        for x in [x for x in pending if (x.known_ids & keys) or (_mod_ids(x) & requires)]:
+            pending.remove(x)  # se queda: ahora también cuentan sus propias dependencias
+            kept[id(x)] = [r]
+            check.append(x)
+        for x in removals:  # más mods que necesitan uno que ya se queda (solo para el aviso)
+            if id(x) in kept and r not in kept[id(x)] and ((x.known_ids & keys) or (_mod_ids(x) & requires)):
+                kept[id(x)].append(r)
+    notes = []
+    by_id = {id(x): x for x in removals}
+    for xid, needers in kept.items():
+        x = by_id[xid]
+        names = ", ".join(n.name for n in needers)
+        key = "deps.kept_for_added" if all(id(n) in added for n in needers) else "deps.kept"
+        notes.append(t(key, count=len(needers), name=x.name, names=names))
+    return pending, notes
+
+
 def _conflicts(results: list[Resolution], final: list[Resolution], installed: dict) -> list[str]:
     """Avisos de incompatibilidades que declaran los mods (CurseForge relación 5, Modrinth
     "incompatible") entre lo que quedará en la carpeta tras aplicar el plan."""

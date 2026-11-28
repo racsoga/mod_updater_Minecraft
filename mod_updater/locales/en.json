@@ -24,6 +24,11 @@
   "deps.ignored": "{parent} lists {dep} as required, but there is no version of {dep} for your Minecraft and mod loader. It's usually the version for another loader: you don't need to do anything.",
   "deps.missing_manual": "is missing {name}, which can't be downloaded automatically",
   "deps.needs_newer": "needs a newer version of {name}",
+  "deps.kept_one": "{name} isn't removed: {names} needs it.",
+  "deps.kept_other": "{name} isn't removed: {names} need it.",
+  "deps.kept_for_added_one": "{name} isn't removed: {names} needs it, and you're adding it.",
+  "deps.kept_for_added_other": "{name} isn't removed: {names} need it, and you're adding them.",
+  "deps.kept_title": "Not removed",
 
   "beta.only_published": "Only published version; required by {names}",
   "beta.allowed_dep": "Beta version (you have betas enabled); required by {names}",

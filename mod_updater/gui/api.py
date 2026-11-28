@@ -41,7 +41,7 @@ from ..changelog import changelog_for
 from ..explore import PAGE_SIZE, _installed_index, detail as explore_detail_of, search as explore_search_in
 from ..config import DEFAULT_USER_AGENT, default_mods_dir
 from ..curseforge import LOADER_TYPES, CurseForgeAuthError, CurseForgeClient
-from ..deps import DependencyFinder, DepPlan, plan_with_dependencies
+from ..deps import DependencyFinder, DepPlan, keep_needed, plan_with_dependencies
 from ..resolver import REMOVE, Dep
 from .. import net
 from ..downloader import (
@@ -708,7 +708,9 @@ class Api:
         if not res.get("ok"):
             return res
         files = set(sel.get("remove") or [])
-        removals = [replace(r, kind=REMOVE) for r in self._results if r.mod is not None and r.mod.file_name in files]
+        wanted = [r for r in self._results if r.mod is not None and r.mod.file_name in files]
+        wanted, res["kept"] = keep_needed(self._results, wanted, self._install)  # issue #12
+        removals = [replace(r, kind=REMOVE) for r in wanted]
         start = len(self._install)
         self._install += removals
         res["rows"] += [{"id": 100000 + start + i, "s": "rm", "name": r.name, "icon": r.icon_url, "from": r.current_version,
@@ -796,13 +798,14 @@ class Api:
             return {"ok": False, "message": t("ml.err_file")}
         s = self._settings()
         c = modlist_mod.compare(data, self._results, minecraft=s.minecraft_version, loader=s.loader)
+        c["remove"], kept = keep_needed(self._results, c["remove"])  # lo que sobra pero necesita un mod que se queda
         self._import = c
         row = lambda m: {"name": m["nombre"], "version": m.get("version"), "have": m.get("tienes")}  # noqa: E731
         return {"ok": True, "file": Path(path).name, "mismatch": c["mismatch"],
                 "profile": {"minecraft": s.minecraft_version, "loader": LOADER_LABEL.get(s.loader, s.loader)},
                 "add": [row(m) for m in c["add"]], "update": [row(m) for m in c["update"]],
                 "same": len(c["same"]), "unavailable": [row(m) for m in c["unavailable"]],
-                "remove": [{"name": r.name, "version": r.current_version} for r in c["remove"]]}
+                "remove": [{"name": r.name, "version": r.current_version} for r in c["remove"]], "kept": kept}
 
     @_never_hang
     def modlist_import_start(self, remove: bool = False) -> dict:
