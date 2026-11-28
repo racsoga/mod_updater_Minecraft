@@ -49,6 +49,7 @@
   ].map((r, i) => ({ ...r, id: i, vers: r.s !== "dep", file: r.s === "dep" ? null : `${r.name.replace(/\W+/g, "")}.jar${r.off ? ".disabled" : ""}`, off: !!r.off }));
 
   const emit = (e, p) => window.onBackend(e, p);
+  let diagSeen = false;
   window.pywebview = { api: {
     get_state: state,
     profile_switch: async id => { profs.forEach(p => p.active = p.id === id); return { ok: true, state: await state() }; },
@@ -194,6 +195,52 @@
       setTimeout(() => emit("apply_done", { updated: 0, installed: 0, added: 1, failed: [], pruned: 0,
         backup: { path: "C:\\…\\mods_backup\\2026-11-21_1600", date: "2026-11-21T16:00:00", changes: 1, undone: false, undoable: true } }), 800);
       return { ok: true, total: 1 };
+    },
+    // Diagnóstico de ejemplo (?nodiag: sin informes). Casos de dos crash reports reales (anonimizados).
+    diag_new: async () => ({ new: !params.has("nodiag") && !diagSeen, date: "2026-11-24T12:08" }),
+    diag_reports: async () => {
+      diagSeen = true;
+      return { ok: true, scanned: true, reports: params.has("nodiag") ? [] : [
+        { id: 0, name: "crash-2026-11-24_12.08.00-client.txt", kind: "client", date: "2026-11-24T12:08" },
+        { id: 1, name: "crash-2026-11-22_18.08.26-fml.txt", kind: "fml", date: "2026-11-22T18:08" },
+        { id: 2, name: "latest.log", kind: "log", date: "2026-11-28T12:44" }] };
+    },
+    diag_run: async id => {
+      await new Promise(r => setTimeout(r, 200));
+      const S = await strings(settings.language);
+      const fill = (key, p = {}) => S[key].replace(/\{(\w+)\}/g, (m, k) => p[k] ?? m);
+      const one = (key, p) => fill(`${key}_${p.count === 1 ? "one" : "other"}`, p);
+      if (id === 2) return { ok: true, head: fill("dg.h_none_found"), deck: fill("dg.d_none_found"), cards: [], scanned: true };
+      if (id === 1) return { ok: true, head: one("dg.h_load", { count: 1 }), deck: fill("dg.d_load"), scanned: true, cards: [{
+        kind: "missing", kicker: fill("dg.k_missing"), title: fill("dg.t_missing", { name: "Sodium" }),
+        why: one("dg.w_missing", { count: 2, names: "Iris Flywheel Compat y Create Better FPS", dep: "Sodium", range: fill("dg.range_min", { version: "0.6.9" }) })
+          + " " + fill("dg.w_incompat", { name: "Iris", other: "Embeddium" }),
+        note: "", evidence: ["Mod irisflw requires sodium 0.6.9 or above", "Mod createbetterfps requires sodium 0.6.9 or above",
+          "Currently, sodium is not installed", "Mod iris is incompatible with embeddium 0.0.1 or above",
+          "The reason is: Iris and Embeddium cannot be used together. Please use Sodium 0.8 instead."],
+        actions: [{ id: "a1", primary: true, type: "swap", label: fill("dg.act_swap", { old: "Embeddium", new: "Sodium" }) },
+          { id: "a2", primary: false, type: "disable", label: fill("dg.act_disable", { names: "Iris Flywheel Compat y Create Better FPS" }) },
+          { id: "a3", primary: false, type: "disable", label: fill("dg.act_disable", { names: "Iris" }) }] }] };
+      return { ok: true, head: fill("dg.t_suspect", { name: "Iris Flywheel Compat" }), deck: fill("dg.d_game"), scanned: true, cards: [{
+        kind: "mixin", kicker: fill("dg.k_likely"), title: fill("dg.t_mixin_other", { name: "Iris Flywheel Compat", other: "Create" }),
+        why: fill("dg.w_mixin_other", { name: "Iris Flywheel Compat", other: "Create", cls: "AllSpecialTextures" }),
+        note: fill("dg.no_newer", { name: "Iris Flywheel Compat" }),
+        evidence: ["Caused by: org.spongepowered.asm.mixin.transformer.throwables.MixinPreProcessorException: Attach error for irisflw.mixins.create.json:MixinOutlineParams from mod irisflw",
+          "Caused by: java.lang.ClassNotFoundException: com.simibubi.create.AllSpecialTextures"],
+        actions: [{ id: "a4", primary: true, type: "versions", label: fill("dg.act_versions", { name: "Create" }) },
+          { id: "a5", primary: false, type: "disable", label: fill("dg.act_disable", { names: "Iris Flywheel Compat" }) }] }] };
+    },
+    diag_copy: async () => ({ ok: true }),
+    diag_open_folder: async () => true,
+    diag_do: async aid => {
+      if (aid === "a4") return { ok: true, open_versions: rows.find(r => r.name === "Create").id };
+      if (aid === "a1") {
+        setTimeout(() => emit("apply_progress", { id: 100000, state: "done", done: 1, total: 1 }), 400);
+        setTimeout(() => emit("apply_done", { updated: 0, installed: 0, added: 1, failed: [], pruned: 0,
+          backup: { path: "C:\\…\\mods_backup\\2026-11-28_1400", date: "2026-11-28T14:00:00", changes: 1, undone: false, undoable: true } }), 700);
+        return { ok: true, total: 1, rows: [{ id: 100000, s: "dep", name: "Sodium", from: null, to: "0.8.13", neededBy: [] }] };
+      }
+      return { ok: true, rows: [], also: [], failed: [] };
     },
     // Versiones para fijar o volver atrás (?mcopen: Minecraft abierto).
     versions_for: async id => {

@@ -220,6 +220,27 @@ a:hover { text-decoration: underline; }
 .group-head[data-g="ok"] h3::before { background: var(--st-ok); }
 .group-head[data-g="pin"] h3::before { background: var(--muted-strong); }
 .badge.pin { color: var(--muted-strong); }
+/* Diagnóstico (hito 4) */
+.tab { position: relative; }
+.tab-dot { position: absolute; top: 8px; right: 2px; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
+.dg-source { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 20px; }
+.dg-source .select { min-width: min(320px, 100%); }
+.dg-meta { color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
+.dg-list { display: grid; gap: 14px; }
+.dg-card { background: var(--panel); border: 1px solid var(--frame); border-radius: 24px; padding: 22px 26px 20px; }
+.dg-kicker { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--warn); margin-bottom: 8px; }
+.dg-kicker::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.dg-kicker.likely { color: var(--st-change); }
+.dg-card h3 { margin: 0 0 6px; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+.dg-why { margin: 0 0 14px; font-size: 16px; line-height: 1.45; color: var(--muted-strong); max-width: 70ch; }
+.dg-evidence { margin: 0 0 16px; padding: 12px 14px; border-radius: 12px; background: var(--charcoal); border: 1px solid var(--rule);
+  font: 13px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
+.dg-note { margin: 0 0 14px; font-size: 14px; color: var(--muted-strong); }
+.dg-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.dg-card .cl-error { margin: 12px 0 0; }
+.dg-foot { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin: 22px 0 120px; }
+.dg-foot .an-hint { margin: 0; flex: 1; min-width: 260px; }
+
 /* Panel de versiones: fijar y volver a una versión anterior */
 .pin-box { padding: 4px 0 18px; border-bottom: 1px solid var(--rule); margin-bottom: 8px; }
 .pin-box .pin-state { margin: 6px 0 12px; color: var(--muted-strong); }

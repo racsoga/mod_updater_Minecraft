@@ -1,0 +1,14 @@
+---- Minecraft Crash Report ----
+// Ejemplo inventado
+
+Time: 2026-11-28 10:30:00
+Description: Exception in server tick loop
+
+java.lang.OutOfMemoryError: Java heap space
+	at java.base/java.util.Arrays.copyOf(Arrays.java:3541)
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.world.level.chunk.ChunkAccess.<init>(ChunkAccess.java:90)
+
+-- System Details --
+Details:
+	Minecraft Version: 1.21.1
+	Memory: 12345 bytes (0 MiB) / 4294967296 bytes (4096 MiB) up to 4294967296 bytes (4096 MiB)

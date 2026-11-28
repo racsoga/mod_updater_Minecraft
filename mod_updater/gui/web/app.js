@@ -47,13 +47,13 @@ const MODS_SCREENS = ["scan", "recover", "results", "apply", "done"];
 let modsScreen = null;
 
 function show(screen) {
-  for (const s of ["setup", "analysis", "explore", "suggest", ...MODS_SCREENS]) $(`#screen-${s}`).hidden = s !== screen;
+  for (const s of ["setup", "diag", "analysis", "explore", "suggest", ...MODS_SCREENS]) $(`#screen-${s}`).hidden = s !== screen;
   $("#ex-basket").hidden = screen !== "explore" || !BASKET.size;
   if (MODS_SCREENS.includes(screen)) modsScreen = screen;
   // Pestañas: ocultas en la bienvenida (primera vez) y mientras se actualiza (no se puede salir).
   $("#tabs").hidden = (screen === "setup" && setupMode === "setup") || screen === "apply";
   renderProfileSelect(screen);
-  selectTab({ setup: "settings", analysis: "analysis", explore: "explore", suggest: "suggest" }[screen] || "mods");
+  selectTab({ setup: "settings", diag: "diag", analysis: "analysis", explore: "explore", suggest: "suggest" }[screen] || "mods");
   $("#btn-rescan").hidden = screen !== "results";
   $("#actionbar").hidden = screen !== "results" || picking;
   $("#pickbar").hidden = screen !== "results" || !picking;
@@ -246,6 +246,7 @@ let filter = "all", query = "", okOpen = false;
 function showResults(data) {
   picking = false; PICK.clear();  // las filas cambian: lo marcado antes apuntaría a otros mods
   DATA = data;
+  checkDiagNew();
   MODS = data.rows;
   byName = Object.fromEntries(MODS.filter(m => m.s !== "dep").map(m => [m.name, m]));
   filter = "all"; query = ""; okOpen = false;
@@ -779,6 +780,7 @@ async function openTab(name) {
   if (name === current) return;
   if (current === "settings") await revertLanguagePreview();
   if (name === "settings") openSetup("settings");
+  else if (name === "diag") openDiag();
   else if (name === "analysis") openAnalysis();
   else if (name === "explore") openExplore();
   else if (name === "suggest") openSuggest();
@@ -1454,6 +1456,7 @@ function wireTabs() {
 }
 
 function wirePick() {
+  wireDiag();
   $("#btn-pick").addEventListener("click", () => (picking ? endPicking() : startPicking()));
   $("#pick-cancel").addEventListener("click", endPicking);
   $("#pick-enable").addEventListener("click", () => pickApply(true));
@@ -1587,6 +1590,106 @@ function wireRecover() {
     } else btn.disabled = false;
   });
   $("#btn-recover-skip").addEventListener("click", startScan);
+}
+
+/* ================================================================ diagnóstico */
+
+let DG = { reports: [], current: null, seq: 0 };
+
+// Aviso de crash report nuevo: punto en la pestaña y aviso en Mis mods (con enlace a Diagnóstico).
+async function checkDiagNew() {
+  let res;
+  try { res = await api().diag_new(); } catch { return; }  // el aviso nunca debe romper Mis mods
+  $("#tab-diag-dot").hidden = !res.new;
+  $("#dg-new-notice")?.remove();
+  if (!res.new || !$("#notices")) return;
+  $("#notices").insertAdjacentHTML("afterbegin", `<li class="bad" id="dg-new-notice">${esc(t("dg.new_notice", { date: formatDateTime(res.date) }))}
+    <button class="linkbtn" type="button" id="dg-new-go">${esc(t("dg.go"))}</button></li>`);
+  $("#dg-new-go").addEventListener("click", () => openTab("diag"));
+}
+
+function formatDateTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return d.toLocaleString(document.documentElement.lang || undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+async function openDiag() {
+  show("diag");
+  $("#tab-diag-dot").hidden = true;
+  $("#dg-new-notice")?.remove();
+  const res = await api().diag_reports();
+  DG.reports = res.reports || [];
+  const empty = !DG.reports.length;
+  $("#dg-source").hidden = empty;
+  $("#dg-foot").hidden = empty;
+  $("#dg-need-scan").hidden = empty || res.scanned;
+  if (empty) {
+    $("#dg-title").textContent = t("dg.empty_title");
+    $("#dg-deck").textContent = t("dg.empty_deck");
+    $("#dg-list").innerHTML = "";
+    return;
+  }
+  $("#dg-report").innerHTML = DG.reports.map((r, i) => `<option value="${r.id}">${esc(reportLabel(r, i === 0))}</option>`).join("");
+  runDiag(DG.reports[0].id);
+}
+
+function reportLabel(r, latest) {
+  const when = r.kind === "log" ? r.name : formatDateTime(r.date);
+  return `${when} · ${t(`dg.kind_${r.kind}`)}${latest ? ` ${t("dg.latest")}` : ""}`;
+}
+
+async function runDiag(id) {
+  DG.current = id;
+  const seq = ++DG.seq;
+  const r = DG.reports.find(x => x.id === id);
+  $("#dg-meta").textContent = r ? r.name : "";
+  $("#dg-title").textContent = t("dg.loading");
+  $("#dg-deck").textContent = "";
+  $("#dg-list").innerHTML = `<p class="cl-loading">${esc(t("dg.loading"))}</p>`;
+  const res = await api().diag_run(id);
+  if (seq !== DG.seq) return;  // se eligió otro informe mientras se leía
+  if (!res.ok) { $("#dg-list").innerHTML = `<p class="cl-error">${esc(res.message)}</p>`; return; }
+  $("#dg-title").textContent = res.head;
+  $("#dg-deck").textContent = res.deck;
+  $("#dg-need-scan").hidden = res.scanned;
+  $("#dg-list").innerHTML = res.cards.map(c => `<article class="dg-card">
+      <span class="dg-kicker${c.kind === "mixin" || c.kind === "suspect" ? " likely" : ""}">${esc(c.kicker)}</span>
+      <h3>${esc(c.title)}</h3>
+      <p class="dg-why">${esc(c.why)}</p>
+      ${c.evidence.length ? `<div class="dg-evidence" role="group" aria-label="${esc(t("dg.evidence_label"))}">${c.evidence.map(l => `<div>${esc(l)}</div>`).join("")}</div>` : ""}
+      ${c.note ? `<p class="dg-note">${esc(c.note)}</p>` : ""}
+      ${c.actions.length ? `<div class="dg-actions">${c.actions.map(a => `<button class="${a.primary ? "btn-primary" : "btn-secondary"}" type="button" data-dg="${esc(a.id)}">${esc(a.label)}</button>`).join("")}</div>` : ""}
+    </article>`).join("");
+}
+
+async function diagAction(btn) {
+  btn.disabled = true;
+  const res = await api().diag_do(btn.dataset.dg);
+  btn.disabled = false;
+  if (res.reason === "dependents" || !res.ok) {
+    btn.closest(".dg-card").querySelector(".cl-error")?.remove();
+    btn.closest(".dg-card").insertAdjacentHTML("beforeend", `<p class="cl-error">${esc(res.message || "")}</p>`);
+    return;
+  }
+  if (res.open_versions !== undefined) {  // "Volver a una versión anterior": el panel de Versiones de Mis mods
+    if (MODS[res.open_versions]) openChangelog(res.open_versions, btn);
+    return;
+  }
+  if (res.rows && res.rows.length && res.total !== undefined) { startApplyRows(res.rows); return; }
+  // Activar/desactivar: hecho al momento. Se vuelve a revisar para que Mis mods lo refleje.
+  startScan();
+}
+
+function wireDiag() {
+  $("#dg-report").addEventListener("change", e => runDiag(Number(e.target.value)));
+  $("#dg-list").addEventListener("click", e => { const b = e.target.closest("[data-dg]"); if (b) diagAction(b); });
+  $("#dg-open-folder").addEventListener("click", () => api().diag_open_folder());
+  $("#dg-scan").addEventListener("click", startScan);
+  $("#dg-copy").addEventListener("click", async () => {
+    const res = await api().diag_copy(DG.current);
+    $("#dg-hint").textContent = res.ok ? t("dg.copied") : res.message;
+  });
 }
 
 /* ================================================================ nuevas versiones de la app */

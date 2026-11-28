@@ -31,6 +31,7 @@
   <!-- Secciones de la app. Análisis, Explorar y Sugerencias se añaden en sus hitos. -->
   <div class="tabs" id="tabs" role="tablist" data-i18n-aria-label="ui.tabs_label" hidden>
     <button class="tab" type="button" role="tab" id="tab-mods" data-tab="mods" aria-selected="true" data-i18n="ui.tab_mods"></button>
+    <button class="tab" type="button" role="tab" id="tab-diag" data-tab="diag" aria-selected="false" tabindex="-1"><span data-i18n="ui.tab_diag"></span><span class="tab-dot" id="tab-diag-dot" hidden><span class="sr-only" data-i18n="dg.new_badge"></span></span></button>
     <button class="tab" type="button" role="tab" id="tab-analysis" data-tab="analysis" aria-selected="false" tabindex="-1" data-i18n="ui.tab_analysis"></button>
     <button class="tab" type="button" role="tab" id="tab-explore" data-tab="explore" aria-selected="false" tabindex="-1" data-i18n="ui.tab_explore"></button>
     <button class="tab" type="button" role="tab" id="tab-suggest" data-tab="suggest" aria-selected="false" tabindex="-1" data-i18n="ui.tab_suggest"></button>
@@ -195,6 +196,26 @@
       <summary id="details-summary"></summary>
       <ul id="details-list"></ul>
     </details>
+  </section>
+
+  <!-- ============================================ Diagnóstico -->
+  <section class="screen" id="screen-diag" hidden>
+    <div class="lede" aria-live="polite">
+      <h2 id="dg-title"></h2>
+      <p id="dg-deck"></p>
+    </div>
+    <div class="dg-source" id="dg-source" hidden>
+      <label class="sr-only" for="dg-report" data-i18n="dg.report_label"></label>
+      <select class="select" id="dg-report"></select>
+      <span class="dg-meta" id="dg-meta"></span>
+      <button class="btn-small" type="button" id="dg-open-folder" data-i18n="dg.open_folder"></button>
+    </div>
+    <p class="ex-note" id="dg-need-scan" hidden><span data-i18n="dg.need_scan"></span> <button class="linkbtn" type="button" id="dg-scan" data-i18n="ui.check_again"></button></p>
+    <div class="dg-list" id="dg-list"></div>
+    <div class="dg-foot" id="dg-foot" hidden>
+      <button class="btn-small" type="button" id="dg-copy" data-i18n="dg.copy"></button>
+      <p class="an-hint" id="dg-hint" data-i18n="dg.honest"></p>
+    </div>
   </section>
 
   <!-- ============================================ Análisis -->

@@ -1,0 +1,29 @@
+{
+  "nota": "Patrones para el diagnóstico de crasheos (diagnose.py). Las reglas de dependencias, incompatibilidades, mixins y trazas están en el código; aquí van los casos que se pueden añadir sin tocarlo. Cada patrón es una expresión regular de Python con grupos con nombre. Las incompatibilidades conocidas están en incompatibilidades.json (por IDs de proyecto).",
+  "patrones": [
+    {
+      "id": "duplicados",
+      "tipo": "duplicate",
+      "regex": "Mod ID: '(?P<mod>[^']+)' from mod files: (?P<files>[^\\r\\n]+)",
+      "fuente": "FML de NeoForge 21.1 (fml.modloading.dupedmod: \"Found duplicate mods\")"
+    },
+    {
+      "id": "mod_de_otro_cargador",
+      "tipo": "wrong_loader",
+      "regex": "File (?P<file>[^\\s\\\\/]+\\.jar) is an? (?P<loader>Fabric|Quilt|Forge|Minecraft Forge) mod and cannot be loaded",
+      "fuente": "FML de NeoForge 21.1 (fml.modloading.brokenfile.fabric / .minecraft_forge)"
+    },
+    {
+      "id": "java_demasiado_viejo",
+      "tipo": "java",
+      "regex": "(?:compiled by a more recent version of the Java Runtime|Unsupported class file major version \\d+)",
+      "fuente": "Mensaje estándar de la JVM (UnsupportedClassVersionError)"
+    },
+    {
+      "id": "sin_memoria",
+      "tipo": "oom",
+      "regex": "java\\.lang\\.OutOfMemoryError",
+      "fuente": "Mensaje estándar de la JVM"
+    }
+  ]
+}

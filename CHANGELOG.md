@@ -18,6 +18,10 @@ La sección de cada versión es la que se publica como notas de la Release al cr
   - **Volver a una versión anterior**: el mismo panel lista las versiones publicadas para tu Minecraft y cargador; elegir una la instala (con copia de seguridad y Deshacer) y la deja fijada.
   - Exportar e importar listas respeta las fijaciones (`"fijado": true` en `.modlist.json`).
 
+- **Diagnóstico** (pestaña nueva): lee los crash reports y los logs de la partida del perfil, en tu PC y sin IA, y dice qué mod sospechar con la línea del informe que lo demuestra. Reconoce dependencias que faltan o son viejas, mods para otra versión, incompatibilidades, mixins que fallan (y con qué otro mod chocan), mods repetidos o de otro cargador, Java y falta de memoria; los patrones están en `knowledge/crasheos.json`.
+  - Acciones de un clic que no crean problemas nuevos: instalar lo que falta, cambiar un mod por otro cuando chocan ("Cambiar Embeddium por Sodium" arregla a la vez la dependencia y la incompatibilidad), activar, desactivar (nombrando también a los que dependen), actualizar o volver a una versión anterior. "Actualizar" solo se propone si hay versión más nueva.
+  - Aviso en la pestaña y en *Mis mods* cuando hay un crash report nuevo. *Copiar resumen* para pegarlo en el issue del mod, sin tu usuario de Windows ni de Minecraft.
+
 ### Cambiado
 - Las notas de cada Release enlazan la **política de firma de código** (*Code signing policy*, SignPath Foundation).
 
