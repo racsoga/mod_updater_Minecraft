@@ -27,7 +27,8 @@ import requests
 
 from .i18n import t
 from .net import ApiError, request_with_retry
-from .resolver import ACTUALIZABLE, REMOVE, Resolution
+from .resolver import ACTUALIZABLE, DISABLE, ENABLE, REMOVE, Resolution
+from .scanner import DISABLED_SUFFIX
 
 CHUNK = 1 << 16
 CF_HOSTS = ("forgecdn.net", "curseforge.com")
@@ -144,6 +145,8 @@ def apply_one(
     state = on_state or (lambda name: None)
     if res.kind == REMOVE:
         return _remove_one(res, backup_dir, before_change)
+    if res.kind in (ENABLE, DISABLE):
+        return _toggle_one(res, mods_dir, before_change)
     old = res.mod.path if res.mod is not None else None
     new_name = res.new_file_name or ""
     if not res.download_url or not new_name:
@@ -153,6 +156,8 @@ def apply_one(
     if old is not None and not old.exists():
         return Outcome(res, False, t("dl.old_missing"))
 
+    if res.mod is not None and res.mod.disabled:  # un mod desactivado sigue desactivado al actualizarlo
+        new_name += DISABLED_SUFFIX
     final = mods_dir / new_name
     if final.exists() and (old is None or final.resolve() != old.resolve()):
         return Outcome(res, False, t("dl.exists", name=new_name))
@@ -206,6 +211,24 @@ def _remove_one(res: Resolution, backup_dir: Path, before_change=None) -> Outcom
     return Outcome(res, True, t("dl.removed"), backup_path=backup)
 
 
+def _toggle_one(res: Resolution, mods_dir: Path, before_change=None) -> Outcome:
+    """Activa o desactiva renombrando (`x.jar` <-> `x.jar.disabled`). Nunca sobrescribe."""
+    old = res.mod.path if res.mod is not None else None
+    if old is None or not old.exists():
+        return Outcome(res, False, t("dl.old_missing"))
+    name = res.mod.enabled_name if res.kind == ENABLE else res.mod.enabled_name + DISABLED_SUFFIX
+    target = mods_dir / name
+    if target.exists():
+        return Outcome(res, False, t("dl.exists", name=name))
+    if before_change:
+        before_change({"new_file": name, "backup_file": None})
+    try:
+        os.replace(old, target)
+    except OSError as exc:
+        return Outcome(res, False, t("dl.rename_failed", error=friendly_error(exc)))
+    return Outcome(res, True, t("dl.enabled" if res.kind == ENABLE else "dl.disabled"), new_path=target)
+
+
 def updatable(results: list[Resolution]) -> tuple[list[Resolution], list[Resolution]]:
     """Separa los actualizables aplicables de los que hay que saltar
     (proyectos duplicados en la carpeta: actualizarlos chocaría)."""
@@ -241,7 +264,7 @@ class Changelog:
     def _entry(self, r: Resolution) -> dict:
         return {
             "state": "pending", "ok": False,
-            "action": "install" if r.mod is None else ("remove" if r.kind == REMOVE else "update"),
+            "action": "install" if r.mod is None else (r.kind if r.kind in (REMOVE, ENABLE, DISABLE) else "update"),
             "name": r.name, "source": r.source, "project_id": r.project_id,
             "old_file": r.mod.file_name if r.mod else None,
             "new_file": r.new_file_name, "backup_file": None,
@@ -293,6 +316,8 @@ def write_changelog_txt(backup_dir: Path, mods_dir: Path, entries: list[dict]) -
     for e in entries:
         if not e["ok"]:
             lines.append(t("log.failed", name=e["name"], message=e["message"]))
+        elif e["action"] in (ENABLE, DISABLE):
+            lines.append(t(f"log.{e['action']}d", name=e["name"], file=e["new_file"]))
         elif e["action"] == "remove":
             lines.append(t("log.removed", name=e["name"], file=e["old_file"], version=e["old_version"]))
         elif e["action"] == "install":
@@ -503,6 +528,16 @@ def undo_backup(backup_dir: Path) -> UndoResult:
             # que deshacer. (Si el nuevo se llama igual, lo que hay en mods ES el viejo.)
             continue
         try:
+            if change.get("action") in (ENABLE, DISABLE):  # solo se renombró: se vuelve a renombrar
+                source, target = mods_dir / (new_file or ""), mods_dir / (old_file or "")
+                if not new_file or not source.exists():
+                    result.errors.append(t("undo.old_missing", name=name))
+                elif target.exists():
+                    result.errors.append(t("undo.conflict", name=name, file=old_file))
+                else:
+                    os.replace(source, target)
+                    result.restored += 1
+                continue
             if new_file and (mods_dir / new_file).exists():
                 undo_dir.mkdir(exist_ok=True)
                 os.replace(mods_dir / new_file, undo_dir / new_file)

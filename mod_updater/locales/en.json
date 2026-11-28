@@ -64,6 +64,11 @@
   "log.required_by": ", required by {names}",
   "log.installed": "[NEW]   {name}: {file}  ({version}, {source}{why})",
   "log.removed": "[REMOVED] {name}: {file}  ({version}), it's in this backup folder",
+  "dl.enabled": "enabled",
+  "dl.disabled": "disabled (the file stays in the folder as .jar.disabled)",
+  "dl.rename_failed": "couldn't rename it: {error}",
+  "log.enabled": "[ENABLED] {name}: now {file}",
+  "log.disabled": "[DISABLED] {name}: now {file} (Minecraft doesn't load it)",
   "log.updated": "[OK]    {name}: {old} -> {new}  ({old_version} -> {new_version}, {source})",
 
   "scan.no_folder": "The mods folder doesn't exist: {path}",

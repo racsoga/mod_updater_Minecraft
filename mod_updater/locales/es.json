@@ -64,6 +64,11 @@
   "log.required_by": ", requerida por {names}",
   "log.installed": "[NUEVO] {name}: {file}  ({version}, {source}{why})",
   "log.removed": "[QUITADO] {name}: {file}  ({version}), está en esta carpeta de backup",
+  "dl.enabled": "activado",
+  "dl.disabled": "desactivado (el archivo sigue en la carpeta como .jar.disabled)",
+  "dl.rename_failed": "no se pudo renombrar: {error}",
+  "log.enabled": "[ACTIVADO] {name}: ahora es {file}",
+  "log.disabled": "[DESACTIVADO] {name}: ahora es {file} (Minecraft no lo carga)",
   "log.updated": "[OK]    {name}: {old} -> {new}  ({old_version} -> {new_version}, {source})",
 
   "scan.no_folder": "No existe la carpeta de mods: {path}",

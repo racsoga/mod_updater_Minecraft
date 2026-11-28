@@ -60,3 +60,80 @@ def test_cache_is_reused_after_renaming(tmp_path, monkeypatch):
     os.replace(jar, mods / "m.jar.disabled")  # os.replace conserva la fecha de modificación
     monkeypatch.setattr(scanner, "scan_file", lambda p: pytest.fail("no debería volver a calcular hashes"))
     assert scan_folder(mods, cache_path=cache)[0].disabled
+
+
+# ---------------------------------------------------------------- renombrado, registro y Deshacer
+
+from mod_updater.downloader import apply_updates, last_undoable, read_changelog, undo_backup  # noqa: E402
+from mod_updater.resolver import ACTUALIZABLE, AL_DIA, CF, DISABLE, ENABLE, Resolution  # noqa: E402
+
+
+def res_for(path: Path, kind: str | None = None, **kw) -> Resolution:
+    mod = scan_folder(path.parent)
+    mod = next(m for m in mod if m.path == path)
+    r = Resolution(mod=mod, status=kw.pop("status", AL_DIA), source=CF, project_id="1", project_name=path.stem, **kw)
+    if kind:
+        r.kind = kind
+    return r
+
+
+def mods_dir(tmp_path) -> Path:
+    d = tmp_path / ".minecraft" / "mods"
+    d.mkdir(parents=True)
+    return d
+
+
+def run(results, d):
+    return apply_updates(results, d, modrinth_session=None, curseforge_session=None)
+
+
+def test_disable_and_enable_round_trip(tmp_path):
+    d = mods_dir(tmp_path)
+    make_jar(d / "Balm.jar", "balm")
+    backup, out = run([res_for(d / "Balm.jar", DISABLE)], d)
+    assert out[0].ok and sorted(p.name for p in d.iterdir()) == ["Balm.jar.disabled"]
+    change = read_changelog(backup)["changes"][0]
+    assert (change["action"], change["old_file"], change["new_file"]) == ("disable", "Balm.jar", "Balm.jar.disabled")
+    assert "[DESACTIVADO]" in (backup / "cambios.txt").read_text(encoding="utf-8")
+    _, out = run([res_for(d / "Balm.jar.disabled", ENABLE)], d)
+    assert out[0].ok and sorted(p.name for p in d.iterdir()) == ["Balm.jar"]
+
+
+def test_toggle_never_overwrites(tmp_path):
+    d = mods_dir(tmp_path)
+    make_jar(d / "a.jar", "a")
+    make_jar(d / "a.jar.disabled", "a_old")
+    _, out = run([res_for(d / "a.jar.disabled", ENABLE)], d)
+    assert not out[0].ok and "a.jar" in out[0].message
+    assert sorted(p.name for p in d.iterdir()) == ["a.jar", "a.jar.disabled"]
+
+
+def test_undo_reverts_a_toggle(tmp_path):
+    d = mods_dir(tmp_path)
+    make_jar(d / "x.jar", "x")
+    run([res_for(d / "x.jar", DISABLE)], d)
+    r = undo_backup(last_undoable(d))
+    assert not r.errors and r.restored == 1 and sorted(p.name for p in d.iterdir()) == ["x.jar"]
+
+
+def test_undo_toggle_with_file_moved_by_hand(tmp_path):
+    d = mods_dir(tmp_path)
+    make_jar(d / "x.jar", "x")
+    run([res_for(d / "x.jar", DISABLE)], d)
+    (d / "x.jar.disabled").unlink()
+    r = undo_backup(last_undoable(d))
+    assert r.errors and r.restored == 0
+
+
+def test_updating_a_disabled_mod_keeps_it_disabled(tmp_path, monkeypatch):
+    from mod_updater import downloader
+    d = mods_dir(tmp_path)
+    make_jar(d / "m-1.0.jar.disabled", "m")
+    r = res_for(d / "m-1.0.jar.disabled", status=ACTUALIZABLE, new_file_name="m-2.0.jar",
+                download_url="https://cdn.modrinth.com/m-2.0.jar", new_version="2.0")
+    monkeypatch.setattr(downloader, "download_verified", lambda res, dest, sf: make_jar(dest, "m"))
+    backup, out = run([r], d)
+    assert out[0].ok and sorted(p.name for p in d.iterdir()) == ["m-2.0.jar.disabled"]
+    assert read_changelog(backup)["changes"][0]["new_file"] == "m-2.0.jar.disabled"
+    undo_backup(backup)
+    assert sorted(p.name for p in d.iterdir()) == ["m-1.0.jar.disabled"]
