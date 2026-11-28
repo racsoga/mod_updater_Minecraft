@@ -545,14 +545,15 @@ function showDone(r) {
   if (r.error) deck.push(r.error);
   if (r.backup && r.backup.changes) deck.push(t("ui.done_backup", { path: shortPath(r.backup.path) }));
   if (r.updated || r.installed || r.added || r.removed) deck.push(t("ui.done_restart"));
+  if (r.created) deck.unshift(t("mg.created", { name: r.created.name, folder: shortPath(r.created.folder) }));
   $("#done-deck").textContent = deck.join(" ");
-  $("#btn-undo").hidden = !(r.backup && r.backup.undoable);
+  $("#btn-undo").hidden = !(r.backup && r.backup.undoable) || !!r.no_undo;  // perfil nuevo: Deshacer sería del actual
   $("#btn-undo").disabled = false;
   $("#undo-help").textContent = "";
   $("#done-failed").hidden = !r.failed.length;
   $("#done-failed-title").textContent = t("ui.done_failed", { count: r.failed.length });
   $("#done-failed-list").innerHTML = r.failed.map(f => `<li><b>${esc(f.name)}</b>: ${esc(f.message)}</li>`).join("");
-  DATA = null;  // la revisión anterior ya no vale
+  if (!r.created) DATA = null;  // la revisión anterior ya no vale (salvo si se llenó otro perfil)
   show("done");
 }
 
@@ -1358,17 +1359,26 @@ async function openAnalysis() {
 
 /* ---------------------------------------------------------------- pasar a otra versión */
 
+let mgFor = null;  // versión y perfil para los que se rellenó el desplegable
+
 async function fillMigrateTargets() {
   const current = state && state.settings ? state.settings.minecraft_version : "";
+  const key = `${state && state.settings ? state.settings.active_profile : ""}|${current}`;
   const sel = $("#mg-target");
-  if (sel.options.length) return;
+  if (mgFor === key && sel.options.length) return;
+  if (mgFor !== key) $("#mg-result").innerHTML = "";  // otro perfil u otra versión: el resultado anterior no vale
+  mgFor = key;
+  const previous = sel.value;
   const versions = (await api().mc_versions([])).filter(v => v !== current);
   sel.innerHTML = versions.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
+  if (versions.includes(previous)) sel.value = previous;
+  $("#mg-check").disabled = !versions.length;
 }
 
 async function migrateCheck() {
   const target = $("#mg-target").value;
   const box = $("#mg-result");
+  if (!target) return;
   $("#mg-check").disabled = true;
   box.innerHTML = `<p class="cl-loading">${esc(t("mg.checking", { version: target }))}</p>`;
   const res = await api().migrate_check(target);
@@ -1377,26 +1387,45 @@ async function migrateCheck() {
   const li = (name, note = "") => `<li><span class="an-name">${esc(name)}${note ? `<span class="an-note">${esc(note)}</span>` : ""}</span></li>`;
   const col = (title, items, empty) => `<div class="mg-col"><h4>${esc(title)}</h4>${items.length
     ? `<ul class="an-list">${items.join("")}</ul>` : `<p class="an-hint">${esc(empty)}</p>`}</div>`;
-  const libsOk = res.libs.filter(l => l.ok).length;
+  const beta = m => (m.beta ? t("mg.beta_only") : "");
+  const missingNote = m => [m.why, m.date ? t("mg.last_version", { date: fmtMonth(m.date) }) : ""].filter(Boolean).join(" · ");
+  // Otro mod que hace lo mismo: opcional, sin marcar. El mismo mod en la otra web: entra solo.
+  const altItem = m => m.instead
+    ? `<li><label class="toggle"><input type="checkbox" data-mg-opt="${esc(m.optional)}"><span class="an-name">${esc(m.name)}<span class="an-note">${esc(t("mg.instead", { name: m.instead }))}</span></span></label></li>`
+    : li(m.name, [t("mg.via", { site: m.via }), beta(m)].filter(Boolean).join(" · "));
   box.innerHTML = `<p class="mg-head">${esc(t("mg.head", { ready: res.ready_count, total: res.total, version: res.target, loader: res.loader }))}</p>`
     + (res.delta !== null ? `<p class="an-hint">${esc(t("mg.delta", { count: res.delta, date: formatDateTime(res.last_date) }))}</p>` : "")
     + (res.no_curseforge ? `<p class="ex-note warn">${esc(t("mg.no_curseforge"))}</p>` : "")
     + `<div class="mg-cols">`
-    + col(t("mg.col_ready", { count: res.ready.length }), res.ready.map(m => li(m.name)), t("mg.none"))
-    + col(t("mg.col_missing", { count: res.missing.length }), res.missing.map(m => li(m.name, m.date ? t("mg.last_version", { date: fmtMonth(m.date) }) : "")), t("mg.none"))
-    + col(t("mg.col_alt", { count: res.alternative.length }), res.alternative.map(m => li(m.name,
-        m.instead ? t("mg.instead", { name: m.instead }) : t("mg.via", { site: m.via }))), t("mg.none"))
+    + col(t("mg.col_ready", { count: res.ready.length }), res.ready.map(m => li(m.name, beta(m))), t("mg.none"))
+    + col(t("mg.col_missing", { count: res.missing.length }), res.missing.map(m => li(m.name, missingNote(m))), t("mg.none"))
+    + col(t("mg.col_alt", { count: res.alternative.length }), res.alternative.map(altItem), t("mg.none"))
     + `</div>`
-    + (res.libs.length ? `<p class="an-hint">${esc(t("mg.libs", { count: res.libs.length, ok: libsOk }))}</p>` : "")
-    + (res.installable ? `<div class="dg-actions mg-create"><button class="btn-primary" type="button" id="mg-create">${esc(t("mg.create", { version: res.target, count: res.installable }))}</button></div>
+    + (res.install_mods ? `<p class="mg-wont">${esc(res.wont_have.length ? t("mg.wont_have", { count: res.wont_have.length, names: joinList(res.wont_have) }) : t("mg.wont_have_none"))}</p>
+       <div class="dg-actions mg-create"><button class="btn-primary" type="button" id="mg-create"></button></div>
        <p class="an-hint">${esc(t("mg.create_hint", { current: res.current }))}</p>` : "");
-  $("#mg-create")?.addEventListener("click", async () => {
-    const go = await api().migrate_create();
+  const label = () => {
+    const extra = box.querySelectorAll("[data-mg-opt]:checked").length;
+    const mods = t("mg.n_mods", { count: res.install_mods + extra });
+    const parts = res.install_libs ? `${mods} + ${t("mg.n_libs", { count: res.install_libs })}` : mods;
+    $("#mg-create").textContent = t("mg.create", { version: res.target, parts });
+  };
+  if (!$("#mg-create")) return;
+  label();
+  box.onchange = e => { if (e.target.matches("[data-mg-opt]")) label(); };
+  $("#mg-create").addEventListener("click", async () => {
+    const btn = $("#mg-create");
+    btn.disabled = true;
+    const opts = [...box.querySelectorAll("[data-mg-opt]:checked")].map(i => i.dataset.mgOpt);
+    const go = await api().migrate_create(opts);
+    btn.disabled = false;
     if (go.cancelled) return;
-    if (!go.ok) { $("#mg-result").insertAdjacentHTML("beforeend", `<p class="cl-error">${esc(go.message)}</p>`); return; }
+    if (!go.ok) { box.querySelector(".mg-create + .cl-error")?.remove(); $("#mg-create").parentElement.insertAdjacentHTML("afterend", `<p class="cl-error">${esc(go.message)}</p>`); return; }
+    if (go.state) setState(go.state);
     startApplyRows(go.rows);
   });
 }
+
 
 function anCard(label, value, sub = "") {
   return `<div class="an-card"><span class="an-card-label">${esc(label)}</span>

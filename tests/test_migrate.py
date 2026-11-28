@@ -81,19 +81,19 @@ def test_groups_ready_missing_and_alternatives():
         inst("Apagado", cf=6, disabled=True),                    # desactivado: no cuenta
     ]
     out = check(mods, target=TARGET, loader=LOADER, curseforge=FakeCf({1: 101, EMI_CF: 900}),
-                modrinth=FakeMr(by_sha={"sha-SoloModrinth": "pm2"}))
+                modrinth=FakeMr(by_sha={"sha-SoloModrinth": "pm2"}), finder=DepFinder({}))
     assert names(out["ready"]) == ["Listo"]
     assert names(out["alternative"]) == ["JEI", "SoloModrinth"]
     alt = {a["name"]: a for a in out["alternative"]}
     assert alt["SoloModrinth"]["via"] == "Modrinth" and alt["JEI"]["instead"] == "EMI"
-    assert out["missing"] == [{"name": "Falta", "key": "curseforge:3", "date": "2025-03-10T00:00:00Z", "lib": False}]
-    assert [lib["name"] for lib in out["libs"]] == ["Balm"] and out["libs"][0]["ok"] is False
+    assert out["missing"] == [{"name": "Falta", "key": "curseforge:3", "date": "2025-03-10T00:00:00Z", "why": ""}]
     assert out["total"] == 4 and out["ready_count"] == 1
 
 
 def test_install_items_for_the_new_profile():
     mods = [inst("Listo", cf=1), inst("SoloModrinth", cf=2, mr="pm2")]
-    out = check(mods, target=TARGET, loader=LOADER, curseforge=FakeCf({1: 101}), modrinth=FakeMr(by_sha={"sha-SoloModrinth": "pm2"}))
+    out = check(mods, target=TARGET, loader=LOADER, curseforge=FakeCf({1: 101}), modrinth=FakeMr(by_sha={"sha-SoloModrinth": "pm2"}),
+                finder=DepFinder({}))
     files = sorted(r.new_file_name for r in out["install"])
     assert files == ["f101.jar", "pm2-9.9.jar"]
     assert all(r.mod is None and r.download_url for r in out["install"])
@@ -101,7 +101,7 @@ def test_install_items_for_the_new_profile():
 
 def test_without_curseforge_key_only_modrinth():
     mods = [inst("A", cf=1, mr="pa"), inst("B", cf=2)]
-    out = check(mods, target=TARGET, loader=LOADER, curseforge=None, modrinth=FakeMr(by_sha={"sha-A": "pa"}))
+    out = check(mods, target=TARGET, loader=LOADER, curseforge=None, modrinth=FakeMr(by_sha={"sha-A": "pa"}), finder=DepFinder({}))
     assert names(out["alternative"]) == ["A"] and names(out["missing"]) == ["B"] and out["no_curseforge"] is True
 
 
@@ -110,6 +110,82 @@ def test_compare_with_last_result():
     assert compare_with_last(now, {"target": TARGET, "ready": ["curseforge:1"]}) == 2
     assert compare_with_last(now, {"target": "1.21.3", "ready": []}) is None
     assert compare_with_last(now, None) is None
+
+
+# ---------------------------------------------------------------- punto de control C
+
+class DepFinder:
+    """Para las dependencias de las versiones nuevas: `catalog` {(fuente, id): Resolution o None}."""
+
+    def __init__(self, catalog):
+        self.catalog = catalog
+
+    def find(self, dep):
+        return self.catalog.get(dep.key)
+
+    def version_date(self, dep):
+        return None
+
+    def describe(self, dep):
+        return dep.id
+
+
+def lib_candidate(name, pid, url=True):
+    from mod_updater.resolver import ACTUALIZABLE, DESCARGA_MANUAL, INSTALL
+    return Resolution(mod=None, kind=INSTALL, status=ACTUALIZABLE if url else DESCARGA_MANUAL, source=MR, project_id=pid,
+                      project_name=name, new_version="1.0", new_file_name=f"{pid}.jar",
+                      download_url="https://cdn.modrinth.com/l.jar" if url else None, known_ids={(MR, pid)})
+
+
+class DepsMr(FakeMr):
+    """La versión nueva de cada mod pide las dependencias de `deps` {proyecto: [ids de Modrinth]}."""
+
+    def __init__(self, by_sha, deps, projects=()):
+        super().__init__(by_sha=by_sha, projects=projects)
+        self.deps = deps
+
+    def latest_from_hashes(self, sha1s, loader, game_version):
+        out = super().latest_from_hashes(sha1s, loader, game_version)
+        for v in out.values():
+            v.dependencies = [{"project_id": d, "dependency_type": "required"} for d in self.deps.get(v.project_id, [])]
+        return out
+
+
+def test_needed_libraries_are_included_and_counted():
+    mods = [inst("A", mr="pa"), inst("B", mr="pb"), inst("Vieja", mr="pv", cats=("librerias",))]
+    out = check(mods, target=TARGET, loader=LOADER, curseforge=None,
+                modrinth=DepsMr({"sha-A": "pa", "sha-B": "pb", "sha-Vieja": "pv"}, {"pa": ["lib1"], "pb": ["lib1"]}),
+                finder=DepFinder({(MR, "lib1"): lib_candidate("Lib1", "lib1")}))
+    assert names(out["ready"]) == ["A", "B"]
+    assert sorted(r.new_file_name for r in out["install"]) == ["lib1.jar", "pa-9.9.jar", "pb-9.9.jar"]
+    assert out["install_mods"] == 2 and out["install_libs"] == 1  # "Vieja" no la necesita nadie: no va
+
+
+def test_a_mod_whose_library_is_missing_is_not_ready():
+    mods = [inst("A", mr="pa"), inst("B", mr="pb")]
+    out = check(mods, target=TARGET, loader=LOADER, curseforge=None,
+                modrinth=DepsMr({"sha-A": "pa", "sha-B": "pb"}, {"pa": ["nolib"]}),
+                finder=DepFinder({(MR, "nolib"): lib_candidate("NoLib", "nolib", url=False)}))
+    assert names(out["ready"]) == ["B"] and names(out["missing"]) == ["A"]
+    assert "NoLib" in out["missing"][0]["why"]
+    assert [r.new_file_name for r in out["install"]] == ["pb-9.9.jar"]
+
+
+def test_other_mod_alternatives_are_optional():
+    mods = [inst("JEI", cf=JEI_CF), inst("Listo", cf=1)]
+    out = check(mods, target=TARGET, loader=LOADER, curseforge=FakeCf({1: 101, EMI_CF: 900}), modrinth=FakeMr(),
+                finder=DepFinder({}))
+    alt = out["alternative"][0]
+    assert alt["instead"] == "EMI" and alt["optional"] == f"curseforge:{EMI_CF}"
+    assert [r.new_file_name for r in out["install"]] == ["f101.jar"]  # EMI no entra por defecto
+    assert [r.new_file_name for r in out["optional"][f"curseforge:{EMI_CF}"]] == ["f900.jar"]
+
+
+def test_wont_have_lists_everything_left_out():
+    mods = [inst("Falta", cf=3), inst("JEI", cf=JEI_CF), inst("SinFuente"), inst("Listo", cf=1)]
+    out = check(mods, target=TARGET, loader=LOADER, curseforge=FakeCf({1: 101, EMI_CF: 900}), modrinth=FakeMr(),
+                finder=DepFinder({}))
+    assert out["wont_have"] == ["Falta", "JEI", "SinFuente"]
 
 
 # ---------------------------------------------------------------- API
@@ -189,3 +265,57 @@ def test_api_create_refuses_a_folder_with_mods(tmp_path, monkeypatch):
     assert not a.migrate_create()["ok"]
     a._folder_dialog = lambda: str(d)  # ni la carpeta del perfil actual
     assert not a.migrate_create()["ok"]
+
+
+def test_api_create_does_not_offer_undo_nor_wipe_the_current_scan(tmp_path, monkeypatch):
+    from mod_updater import downloader
+    from test_toggle import make_jar
+    a, d, calls = make_api(tmp_path, monkeypatch, fake)
+    events = []
+    a._emit = lambda e, p: events.append((e, p))
+    a.migrate_check(TARGET)
+    a._folder_dialog = lambda: str(tmp_path / "nueva")
+    monkeypatch.setattr(downloader, "download_verified", lambda res, dest, sf: make_jar(dest, "listo"))
+    out = a.migrate_create([])
+    done = next(p for e, p in events if e == "apply_done")
+    assert done["no_undo"] is True and done["created"]["folder"] == str(tmp_path / "nueva" / "mods")
+    assert a._results  # la revisión del perfil actual sigue valiendo
+    assert any(p["mods_dir"] == str(tmp_path / "nueva" / "mods") for p in out["state"]["profiles"])
+
+
+def test_api_create_with_a_chosen_alternative(tmp_path, monkeypatch):
+    from mod_updater import downloader
+    from mod_updater.gui import api as api_mod
+    from mod_updater.resolver import ACTUALIZABLE, INSTALL
+    from test_toggle import make_jar
+
+    def with_alt(target):
+        r = fake(target)
+        emi = Resolution(mod=None, kind=INSTALL, status=ACTUALIZABLE, source=CF, project_id=str(EMI_CF), project_name="EMI",
+                         new_version="1", new_file_name="emi.jar", download_url="https://edge.forgecdn.net/e.jar", new_sha1="s")
+        r["optional"] = {f"curseforge:{EMI_CF}": [emi]}
+        return r
+
+    a, d, calls = make_api(tmp_path, monkeypatch, with_alt)
+    monkeypatch.setattr(api_mod, "DependencyFinder", lambda *x, **k: DepFinder({}))
+    a.migrate_check(TARGET)
+    a._folder_dialog = lambda: str(tmp_path / "nueva")
+    monkeypatch.setattr(downloader, "download_verified", lambda res, dest, sf: make_jar(dest, "x"))
+    assert a.migrate_create([f"curseforge:{EMI_CF}"])["ok"]
+    assert sorted(p.name for p in (tmp_path / "nueva" / "mods").iterdir()) == ["emi.jar", "listo-2.0.jar"]
+
+
+def test_api_create_releases_the_lock_on_errors(tmp_path, monkeypatch):
+    from mod_updater import profiles
+    a, d, calls = make_api(tmp_path, monkeypatch, fake)
+    a.migrate_check(TARGET)
+    a._folder_dialog = lambda: str(tmp_path / "nueva")
+    monkeypatch.setattr(profiles, "add", lambda *x, **k: (_ for _ in ()).throw(OSError("disco lleno")))
+    assert a.migrate_create([])["ok"] is False and not a._busy.locked()
+
+
+def test_api_switching_profile_forgets_the_check(tmp_path, monkeypatch):
+    a, d, calls = make_api(tmp_path, monkeypatch, fake)
+    a.migrate_check(TARGET)
+    a._reset_session()
+    assert a.migrate_create([])["ok"] is False
