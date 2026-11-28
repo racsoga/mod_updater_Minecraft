@@ -1,0 +1,15 @@
+---- Minecraft Crash Report ----
+// Ejemplo inventado: excepción en un mod, sin mixins
+
+Time: 2026-11-28 12:00:00
+Description: Ticking block entity
+
+java.lang.NullPointerException: Cannot invoke "Object.toString()" because "value" is null
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.world.level.Level.tickBlockEntities(Level.java:500)
+	at TRANSFORMER/storagedrawers@13.8.0/com.texelsaur.storagedrawers.block.tile.TileEntityDrawers.tick(TileEntityDrawers.java:120)
+	at TRANSFORMER/neoforge@21.1.267/net.neoforged.neoforge.event.EventHooks.fireTick(EventHooks.java:10)
+
+-- Head --
+Thread: Server thread
+Suspected Mod:
+	Storage Drawers (storagedrawers), Version: 13.8.0

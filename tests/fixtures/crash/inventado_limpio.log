@@ -1,0 +1,5 @@
+[28nov2026 11:00:01.000] [main/INFO] [cpw.mods.modlauncher.Launcher/MODLAUNCHER]: ModLauncher running
+[28nov2026 11:00:20.000] [Render thread/INFO] [net.minecraft.client.Minecraft/]: Loaded 1234 recipes
+[28nov2026 11:05:00.000] [Render thread/INFO] [net.minecraft.client.Minecraft/]: Stopping!
+[12:30:33] [main/WARN]: @Mixin target dev.latvian.mods.kubejs.recipe.RecipesKubeEvent was not found mixins.hammerlib.json:compat.kubejs.RecipeEventJSMixin from mod hammerlib
+[28nov2026 12:30:35.896] [main/DEBUG] [mixin/]: Renaming synthetic method lambda$codecui$tagEnum$0 to md889e13$codecui$lambda in codecui.mixins.json:StringRepresentableCodecMixin from mod codecui

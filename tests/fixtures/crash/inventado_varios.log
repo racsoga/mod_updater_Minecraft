@@ -1,0 +1,6 @@
+[28nov2026 10:00:01.000] [main/INFO] [cpw.mods.modlauncher.Launcher/MODLAUNCHER]: ModLauncher running: args [--username, Ana_Juega, --version, neoforge-21.1.267, --gameDir, C:\Users\Ana\AppData\Roaming\.minecraft, --assetsDir, C:\Users\Ana\AppData\Roaming\.minecraft\assets, --uuid, 0123456789abcdef0123456789abcdef, --accessToken, ????????, --clientId, abc, --xuid, 123]
+[28nov2026 10:00:02.000] [main/INFO] [net.minecraft.client.Minecraft/]: Setting user: Ana_Juega
+[28nov2026 10:00:05.000] [main/ERROR] [net.neoforged.fml.loading.moddiscovery.ModDiscoverer/SCAN]: Found duplicate mods:
+	Mod ID: 'jei' from mod files: jei-1.21.1-neoforge-19.20.0.jar, jei-1.21.1-neoforge-19.21.0.jar
+[28nov2026 10:00:05.100] [main/ERROR] [net.neoforged.fml.loading.moddiscovery.ModDiscoverer/SCAN]: File appleskin-fabric-mc1.21-3.0.5.jar is a Fabric mod and cannot be loaded
+[28nov2026 10:00:06.000] [main/ERROR] [net.neoforged.fml.ModLoader/]: Mod file C:\Users\Ana\AppData\Roaming\.minecraft\mods\viejo.jar has been compiled by a more recent version of the Java Runtime (class file version 67.0), this version of the Java Runtime only recognizes class file versions up to 65.0

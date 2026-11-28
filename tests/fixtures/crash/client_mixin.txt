@@ -1,0 +1,39 @@
+---- Minecraft Crash Report ----
+// Don't do that.
+
+Time: 2026-11-24 12:08:00
+Description: Rendering screen
+
+org.spongepowered.asm.mixin.transformer.throwables.MixinTransformerError: An unexpected critical error was encountered
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinProcessor.applyMixins(MixinProcessor.java:381) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinTransformer.transformClass(MixinTransformer.java:253) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:526) ~[?:?] {}
+	at TRANSFORMER/ponder@1.0.82+mc1.21.1/net.createmod.ponder.foundation.instruction.TextInstruction.<init>(TextInstruction.java:20) ~[ponder-neoforge-1.0.82+mc1.21.1.jar%23536!/:1.0.82+mc1.21.1] {re:classloading}
+	at TRANSFORMER/ponder@1.0.82+mc1.21.1/net.createmod.ponder.foundation.PonderSceneBuilder$PonderOverlayInstructions.showOutlineWithText(PonderSceneBuilder.java:270) ~[ponder-neoforge-1.0.82+mc1.21.1.jar%23536!/:1.0.82+mc1.21.1] {re:classloading}
+	at TRANSFORMER/mekanism_ponders@1.0.4-1.21.1/io.github.alyx.mekponder.ponder.scenes.DynamicTankScenes.creatingDynamicTank(DynamicTankScenes.java:36) ~[mekanism_ponders-1.0.4-1.21.1.jar%23404!/:?] {re:classloading}
+	at TRANSFORMER/ponder@1.0.82+mc1.21.1/net.createmod.ponder.foundation.registration.PonderSceneRegistry.compileScene(PonderSceneRegistry.java:120) ~[ponder-neoforge-1.0.82+mc1.21.1.jar%23536!/:1.0.82+mc1.21.1] {re:classloading}
+	at TRANSFORMER/ponder@1.0.82+mc1.21.1/net.createmod.ponder.foundation.registration.PonderSceneRegistry.compile(PonderSceneRegistry.java:108) ~[ponder-neoforge-1.0.82+mc1.21.1.jar%23536!/:1.0.82+mc1.21.1] {re:classloading}
+	at TRANSFORMER/ponder@1.0.82+mc1.21.1/net.createmod.ponder.foundation.registration.PonderSceneRegistry.compile(PonderSceneRegistry.java:89) ~[ponder-neoforge-1.0.82+mc1.21.1.jar%23536!/:1.0.82+mc1.21.1] {re:classloading}
+	at TRANSFORMER/ponder@1.0.82+mc1.21.1/net.createmod.ponder.foundation.ui.PonderUI.of(PonderUI.java:151) ~[ponder-neoforge-1.0.82+mc1.21.1.jar%23536!/:1.0.82+mc1.21.1] {re:mixin,re:classloading,pl:mixin:APP:mekanism_ponders.mixins.json:InvokerPonderUI from mod mekanism_ponders,pl:mixin:A}
+	at TRANSFORMER/ponder@1.0.82+mc1.21.1/net.createmod.ponder.foundation.PonderTooltipHandler.deferredTick(PonderTooltipHandler.java:70) ~[ponder-neoforge-1.0.82+mc1.21.1.jar%23536!/:1.0.82+mc1.21.1] {re:classloading}
+	at TRANSFORMER/ponder@1.0.82+mc1.21.1/net.createmod.ponder.foundation.PonderTooltipHandler.addToTooltip(PonderTooltipHandler.java:91) ~[ponder-neoforge-1.0.82+mc1.21.1.jar%23536!/:1.0.82+mc1.21.1] {re:classloading}
+	at TRANSFORMER/ponder@1.0.82+mc1.21.1/net.createmod.ponder.NeoForgePonderClient$ClientEvents.onItemTooltip(NeoForgePonderClient.java:110) ~[ponder-neoforge-1.0.82+mc1.21.1.jar%23536!/:1.0.82+mc1.21.1] {re:mixin,re:classloading,pl:mixin:APP:irisflw.mixins.create.json:MixinNeoForgePonderClient from mod irisflw,pl:mixin:A}
+	at MC-BOOTSTRAP/net.neoforged.bus/net.neoforged.bus.EventBus.post(EventBus.java:360) ~[bus-8.0.5.jar%23110!/:?] {}
+	at MC-BOOTSTRAP/net.neoforged.bus/net.neoforged.bus.EventBus.post(EventBus.java:328) ~[bus-8.0.5.jar%23110!/:?] {}
+	at TRANSFORMER/neoforge@21.1.267/net.neoforged.neoforge.event.EventHooks.onItemTooltip(EventHooks.java:455) ~[neoforge-21.1.267-universal.jar%23319!/:?] {re:classloading}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.world.item.ItemStack.getTooltipLines(ItemStack.java:813) ~[client-1.21.1-20240808.144430-srg.jar%23318!/:?] {re:mixin,pl:accesstransformer:B,re:computing_frames,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B,pl:mixin:APP:mixins.hammerlib.json:ItemStackMixin from mod hammerlib,pl:mixin:APP:placebo.mixins.json:ItemStackMixin from mod plac
+Caused by: org.spongepowered.asm.mixin.transformer.throwables.MixinPreProcessorException: Attach error for irisflw.mixins.create.json:MixinOutlineParams from mod irisflw during activity: [Transform -> Method irisflw$withFaceTexture(Lnet/createmod/catnip/render/BindableTexture;Lorg/spongepowered/asm/mixin/injection/callback/CallbackInfoReturnable;)V -> GETSTATIC -> com/simibubi/create/AllSpecialTex
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinPreProcessorStandard.attach(MixinPreProcessorStandard.java:313) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinPreProcessorStandard.createContextFor(MixinPreProcessorStandard.java:277) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinInfo.createContextFor(MixinInfo.java:1292) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+Caused by: java.lang.RuntimeException: java.lang.ClassNotFoundException: com.simibubi.create.AllSpecialTextures
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinPreProcessorStandard.transformMemberReference(MixinPreProcessorStandard.java:791) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinPreProcessorStandard.transformField(MixinPreProcessorStandard.java:782) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinPreProcessorStandard.transform(MixinPreProcessorStandard.java:745) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+Caused by: java.lang.ClassNotFoundException: com.simibubi.create.AllSpecialTextures
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinPreProcessorStandard.transformMemberReference(MixinPreProcessorStandard.java:791) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinPreProcessorStandard.transformField(MixinPreProcessorStandard.java:782) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin@0.16.4+mixin.0.8.7/org.spongepowered.asm.mixin.transformer.MixinPreProcessorStandard.transform(MixinPreProcessorStandard.java:745) ~[sponge-mixin-0.16.4+mixin.0.8.7.jar:0.16.4+mixin.0.8.7] {}
+-- Head --
+Thread: Render thread
+Stacktrace:

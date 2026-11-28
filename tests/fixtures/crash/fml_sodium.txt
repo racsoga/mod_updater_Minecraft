@@ -1,0 +1,45 @@
+---- Minecraft Crash Report ----
+// Hey, that tickles! Hehehe!
+
+Time: 2026-11-22 18:08:26
+Description: Mod loading failures have occurred; consult the issue messages for more details
+
+net.neoforged.neoforge.logging.CrashReportExtender$ModLoadingCrashException: Mod loading has failed
+
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- Mod loading issue for: irisflw --
+Details:
+	Mod file: /C:/Users/Ana/AppData/Roaming/.minecraft/mods/iris-flywheel-compat-NeoForge-2.4.0.jar
+	Failure message: Mod irisflw requires sodium 0.6.9 or above
+		Currently, sodium is not installed
+		
+	Mod version: 2.4.0
+	Mod issues URL: <No issues URL found>
+	Exception message: <No associated exception found>
+
+-- Mod loading issue for: createbetterfps --
+Details:
+	Mod file: /C:/Users/Ana/AppData/Roaming/.minecraft/mods/createbetterfps-1.21.1-1.1.5.jar
+	Failure message: Mod createbetterfps requires sodium 0.6.9 or above
+		Currently, sodium is not installed
+		
+	Mod version: 1.1.5
+	Mod issues URL: <No issues URL found>
+	Exception message: <No associated exception found>
+
+-- Mod loading issue for: iris --
+Details:
+	Mod file: /C:/Users/Ana/AppData/Roaming/.minecraft/mods/iris-neoforge-1.8.14-beta.1+mc1.21.1.jar
+	Failure message: Mod iris is incompatible with embeddium 0.0.1 or above
+		Currently, embeddium is 1.0.15+mc1.21.1
+		The reason is: Iris and Embeddium cannot be used together. Please use Sodium 0.8 instead.
+	Mod version: 1.8.14-beta.1+mc1.21.1
+	Mod issues URL: <No issues URL found>
+	Exception message: <No associated exception found>
+
+-- System Details --
+Details:
+	Minecraft Version: 1.21.1

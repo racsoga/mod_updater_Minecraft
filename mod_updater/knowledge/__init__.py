@@ -26,4 +26,5 @@ def load_knowledge() -> dict:
         "esenciales": _read("esenciales.json").get("estilos") or {},
         "duros": _read("duros.json").get("mods") or [],
         "configuracion": _read("configuracion.json").get("mods") or [],
+        "crasheos": _read("crasheos.json").get("patrones") or [],
     }
