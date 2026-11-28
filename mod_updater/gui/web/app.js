@@ -1353,6 +1353,49 @@ function fmtMonth(iso) {
 async function openAnalysis() {
   show("analysis");
   renderAnalysis(await api().analysis(anLibs));
+  fillMigrateTargets();
+}
+
+/* ---------------------------------------------------------------- pasar a otra versión */
+
+async function fillMigrateTargets() {
+  const current = state && state.settings ? state.settings.minecraft_version : "";
+  const sel = $("#mg-target");
+  if (sel.options.length) return;
+  const versions = (await api().mc_versions([])).filter(v => v !== current);
+  sel.innerHTML = versions.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
+}
+
+async function migrateCheck() {
+  const target = $("#mg-target").value;
+  const box = $("#mg-result");
+  $("#mg-check").disabled = true;
+  box.innerHTML = `<p class="cl-loading">${esc(t("mg.checking", { version: target }))}</p>`;
+  const res = await api().migrate_check(target);
+  $("#mg-check").disabled = false;
+  if (!res.ok) { box.innerHTML = `<p class="cl-error">${esc(res.message)}</p>`; return; }
+  const li = (name, note = "") => `<li><span class="an-name">${esc(name)}${note ? `<span class="an-note">${esc(note)}</span>` : ""}</span></li>`;
+  const col = (title, items, empty) => `<div class="mg-col"><h4>${esc(title)}</h4>${items.length
+    ? `<ul class="an-list">${items.join("")}</ul>` : `<p class="an-hint">${esc(empty)}</p>`}</div>`;
+  const libsOk = res.libs.filter(l => l.ok).length;
+  box.innerHTML = `<p class="mg-head">${esc(t("mg.head", { ready: res.ready_count, total: res.total, version: res.target, loader: res.loader }))}</p>`
+    + (res.delta !== null ? `<p class="an-hint">${esc(t("mg.delta", { count: res.delta, date: formatDateTime(res.last_date) }))}</p>` : "")
+    + (res.no_curseforge ? `<p class="ex-note warn">${esc(t("mg.no_curseforge"))}</p>` : "")
+    + `<div class="mg-cols">`
+    + col(t("mg.col_ready", { count: res.ready.length }), res.ready.map(m => li(m.name)), t("mg.none"))
+    + col(t("mg.col_missing", { count: res.missing.length }), res.missing.map(m => li(m.name, m.date ? t("mg.last_version", { date: fmtMonth(m.date) }) : "")), t("mg.none"))
+    + col(t("mg.col_alt", { count: res.alternative.length }), res.alternative.map(m => li(m.name,
+        m.instead ? t("mg.instead", { name: m.instead }) : t("mg.via", { site: m.via }))), t("mg.none"))
+    + `</div>`
+    + (res.libs.length ? `<p class="an-hint">${esc(t("mg.libs", { count: res.libs.length, ok: libsOk }))}</p>` : "")
+    + (res.installable ? `<div class="dg-actions mg-create"><button class="btn-primary" type="button" id="mg-create">${esc(t("mg.create", { version: res.target, count: res.installable }))}</button></div>
+       <p class="an-hint">${esc(t("mg.create_hint", { current: res.current }))}</p>` : "");
+  $("#mg-create")?.addEventListener("click", async () => {
+    const go = await api().migrate_create();
+    if (go.cancelled) return;
+    if (!go.ok) { $("#mg-result").insertAdjacentHTML("beforeend", `<p class="cl-error">${esc(go.message)}</p>`); return; }
+    startApplyRows(go.rows);
+  });
 }
 
 function anCard(label, value, sub = "") {
@@ -1853,6 +1896,7 @@ async function checkBisectPending() {
 
 function wireDiag() {
   wireBisect();
+  $("#mg-check").addEventListener("click", migrateCheck);
   $("#dg-report").addEventListener("change", e => runDiag(Number(e.target.value)));
   $("#dg-list").addEventListener("click", e => { const b = e.target.closest("[data-dg]"); if (b) diagAction(b); });
   $("#dg-open-folder").addEventListener("click", () => api().diag_open_folder());

@@ -254,6 +254,16 @@ a:hover { text-decoration: underline; }
 .btn-answer { height: 44px; min-width: 170px; padding: 0 22px; font-size: 15px; }
 #bs-cancel { padding-left: 0; padding-right: 0; }  /* alineado con el texto de encima */
 
+/* Pasar a otra versión de Minecraft (hito 6) */
+.mg-box { margin-top: 16px; }
+.mg-form { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 14px 0 6px; }
+.mg-form .select { min-width: 160px; }
+.mg-head { margin: 16px 0 4px; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+.mg-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin: 14px 0; }
+.mg-col h4 { margin: 0; font-size: 14px; font-weight: 600; color: var(--muted-strong); }
+.mg-col .an-list { max-height: 260px; overflow: auto; }
+.mg-create { margin-top: 8px; }
+
 /* Panel de versiones: fijar y volver a una versión anterior */
 .pin-box { padding: 4px 0 18px; border-bottom: 1px solid var(--rule); margin-bottom: 8px; }
 .pin-box .pin-state { margin: 6px 0 12px; color: var(--muted-strong); }

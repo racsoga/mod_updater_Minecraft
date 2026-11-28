@@ -24,6 +24,8 @@ La sección de cada versión es la que se publica como notas de la Release al cr
 
 - **Buscar el mod culpable por mitades** (desde *Diagnóstico*): desactiva la mitad de los sospechosos, abres Minecraft y dices si sigue fallando; repite hasta dar con él y al terminar lo deja todo como estaba. Nunca deja un mod activo sin su librería, permite descartar mods de antemano, dice cuántas vueltas quedan, más o menos, y, si se cierra la app a medias, ofrece continuar o restaurar. Si una vuelta no se puede preparar, cancela y lo deja todo como estaba. Mientras dura, no se pueden cambiar mods desde otro sitio (ni desde la CLI).
 
+- **Pasar a otra versión de Minecraft** (en *Análisis*): elige la versión de destino y mira cuántos de tus mods existen ya para ella con tu cargador ("142 de 150 listos"), en tres grupos: *Listos*, *Faltan* (con la fecha de su última versión) y *Con alternativa* (solo en la otra web, o un mod que hace lo mismo y sí está). Las librerías aparte. Recuerda el resultado para decirte cuántos más están listos desde la última vez. *Crear perfil para esa versión* lo prepara en una carpeta nueva y descarga lo que está listo, sin tocar tu perfil actual. Usa la lista oficial de versiones que ya se consultaba en Modrinth: no se conecta a ningún sitio nuevo.
+
 ### Cambiado
 - Las notas de cada Release enlazan la **política de firma de código** (*Code signing policy*, SignPath Foundation).
 
