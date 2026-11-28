@@ -237,6 +237,18 @@ def _disabled(r: Resolution) -> bool:
     return r.mod is not None and r.mod.disabled
 
 
+def required_disabled(results: list[Resolution], targets: list[Resolution]) -> list[Resolution]:
+    """Mods desactivados que hacen falta para que `targets` carguen al activarlos (recursivo)."""
+    need = list(targets)
+    out: list[Resolution] = []
+    for r in need:
+        for x in results:
+            if _disabled(x) and x not in need and _needs(_current_deps(r), x):
+                need.append(x)
+                out.append(x)
+    return out
+
+
 def dependents_of(results: list[Resolution], targets: list[Resolution]) -> list[Resolution]:
     """Mods activos que dejarían de cargar si se desactivan `targets` (también los indirectos:
     si Waystones necesita Balm y otro mod necesita Waystones, caen los dos)."""

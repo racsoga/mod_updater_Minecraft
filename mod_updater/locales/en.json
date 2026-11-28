@@ -29,6 +29,8 @@
   "deps.kept_for_added_one": "{name} isn't removed: {names} needs it, and you're adding it.",
   "deps.kept_for_added_other": "{name} isn't removed: {names} need it, and you're adding them.",
   "deps.kept_title": "Not removed",
+  "toggle.dependents_one": "If you disable {name}, {names} will stop loading.",
+  "toggle.dependents_other": "If you disable {name}, {names} will stop loading.",
 
   "beta.only_published": "Only published version; required by {names}",
   "beta.allowed_dep": "Beta version (you have betas enabled); required by {names}",

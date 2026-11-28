@@ -185,3 +185,90 @@ def test_disabled_mod_does_not_pull_or_break_dependencies():
     off = fake("Apagado", "2", deps=[Dep(CF, "404")], disabled=True)
     plan = plan_with_dependencies([off], [], NoFinder())
     assert plan.items == [] and plan.broken == [] and plan.ignored == []
+
+
+# ---------------------------------------------------------------- API
+
+def make_api(tmp_path, names_deps, running=()):
+    """names_deps: [(archivo, pid, [pids que necesita])]. Devuelve (api, carpeta de mods)."""
+    from mod_updater.gui.api import Api
+    from mod_updater.settings import Settings, save_settings
+    d = mods_dir(tmp_path)
+    f = tmp_path / "s.json"
+    save_settings(Settings(mods_dir=str(d), setup_done=True), f)
+    a = Api(f, get_key=lambda: (None, None), run_async=lambda fn: fn(), cache_dir=tmp_path / "c",
+            running=lambda game_dir: list(running))
+    results = []
+    for file_name, pid, needs in names_deps:
+        make_jar(d / file_name, file_name.split(".")[0].lower())
+        r = res_for(d / file_name)
+        r.project_id, r.known_ids, r.project_name = pid, {(CF, pid)}, file_name.split(".")[0]
+        r.current_deps = [Dep(CF, n) for n in needs]
+        results.append(r)
+    a._results, a._rows = results, list(results)
+    a._row_s = ["ok"] * len(results)
+    return a, d
+
+
+def files(d):
+    return sorted(p.name for p in d.iterdir())
+
+
+def test_api_disable_and_enable(tmp_path):
+    a, d = make_api(tmp_path, [("Jei.jar", "1", [])])
+    res = a.mods_set_enabled([0], False)
+    assert res["ok"] and res["rows"] == [{"id": 0, "off": True}] and files(d) == ["Jei.jar.disabled"]
+    assert a._results[0].mod.disabled  # en memoria también, sin volver a revisar
+    res = a.mods_set_enabled([0], True)
+    assert res["ok"] and res["rows"] == [{"id": 0, "off": False}] and files(d) == ["Jei.jar"]
+
+
+def test_api_blocks_when_minecraft_is_open(tmp_path):
+    a, d = make_api(tmp_path, [("Jei.jar", "1", [])], running=[1234])
+    res = a.mods_set_enabled([0], False)
+    assert not res["ok"] and res["reason"] == "minecraft" and files(d) == ["Jei.jar"]
+
+
+def test_api_warns_before_disabling_a_library(tmp_path):
+    a, d = make_api(tmp_path, [("Balm.jar", "1", []), ("Waystones.jar", "2", ["1"]), ("A.jar", "3", ["1"]),
+                               ("Otro.jar", "4", [])])
+    res = a.mods_set_enabled([0], False)
+    assert not res["ok"] and res["reason"] == "dependents" and res["names"] == ["A", "Waystones"]
+    assert res["message"] == "Si desactivas Balm, dejarán de cargar A y Waystones."
+    assert files(d) == ["A.jar", "Balm.jar", "Otro.jar", "Waystones.jar"]
+    res = a.mods_set_enabled([0], False, "with")
+    assert res["ok"] and files(d) == ["A.jar.disabled", "Balm.jar.disabled", "Otro.jar", "Waystones.jar.disabled"]
+    assert sorted(r["id"] for r in res["rows"] if r["off"]) == [0, 1, 2]
+
+
+def test_api_disable_only_the_library(tmp_path):
+    a, d = make_api(tmp_path, [("Balm.jar", "1", []), ("Waystones.jar", "2", ["1"])])
+    assert a.mods_set_enabled([0], False, "only")["ok"]
+    assert files(d) == ["Balm.jar.disabled", "Waystones.jar"]
+
+
+def test_api_enabling_also_enables_its_disabled_library(tmp_path):
+    a, d = make_api(tmp_path, [("Balm.jar.disabled", "1", []), ("Waystones.jar.disabled", "2", ["1"])])
+    res = a.mods_set_enabled([1], True)
+    assert res["ok"] and res["also"] == ["Balm"] and files(d) == ["Balm.jar", "Waystones.jar"]
+
+
+def test_api_toggle_is_undoable(tmp_path):
+    a, d = make_api(tmp_path, [("Jei.jar", "1", [])])
+    a.mods_set_enabled([0], False)
+    assert a.undo_last()["ok"] and files(d) == ["Jei.jar"]
+
+
+def test_api_reports_rename_conflict(tmp_path):
+    a, d = make_api(tmp_path, [("Jei.jar.disabled", "1", [])])
+    make_jar(d / "Jei.jar", "jei_otro")
+    res = a.mods_set_enabled([0], True)
+    assert not res["ok"] and res["failed"][0]["name"] == "Jei"
+
+
+def test_rows_include_off_and_file(tmp_path):
+    from mod_updater.deps import DepPlan
+    from mod_updater.gui.api import serialize
+    off = fake("Apagado", "2", disabled=True)
+    row = serialize([off], DepPlan(items=[]), allow_beta=False)["rows"][0]
+    assert row["off"] is True and row["file"] == "Apagado.jar.disabled"

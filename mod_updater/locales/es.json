@@ -29,6 +29,8 @@
   "deps.kept_for_added_one": "No se quita {name}: lo necesita {names}, que vas a añadir.",
   "deps.kept_for_added_other": "No se quita {name}: lo necesitan {names}, que vas a añadir.",
   "deps.kept_title": "No se quitan",
+  "toggle.dependents_one": "Si desactivas {name}, dejará de cargar {names}.",
+  "toggle.dependents_other": "Si desactivas {name}, dejarán de cargar {names}.",
 
   "beta.only_published": "Única versión publicada; la requiere {names}",
   "beta.allowed_dep": "Versión beta (tienes activadas las betas); la requiere {names}",
