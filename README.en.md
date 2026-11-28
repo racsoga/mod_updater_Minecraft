@@ -73,6 +73,8 @@ Mod Updater checks your Minecraft `mods` folder, recognises each mod by its fing
 
 **Why it happens:** it's a `.exe` built with Python (PyInstaller) and **not digitally signed** (the certificate costs money). Windows doesn't know it yet, and some antivirus engines confuse it with malicious programs packaged the same way. It's a false positive: version 0.3.0 is flagged by 3 of VirusTotal's 68 engines (Bkav, SecureAge and Microsoft, with a generic machine-learning detection, `Wacatac.C!ml`) ([see report](https://www.virustotal.com/gui/file/0ef3739ed7676be34873107f1c2f580e76e542784049a0a194e38406e40201db)).
 
+**[Code signing policy](CODE_SIGNING_POLICY.md):** an application to SignPath Foundation for a free open-source certificate is in progress; until it is approved, the `.exe` is not signed.
+
 **Check it yourself:** your file's SHA-256 must match the one in the Release (see *How do I check the .exe is the original?* in the [FAQ](#faq)), and each Release's notes link to the VirusTotal scan of that exact file. The full source code is in this repository.
 
 ## First run
