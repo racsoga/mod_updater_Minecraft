@@ -29,7 +29,8 @@ def inst(name, mod_id, *, pid=None, source=MR, status=AL_DIA, deps=(), requires=
 
 def candidate(name, pid, source=MR):
     return Resolution(mod=None, kind=INSTALL, status=ACTUALIZABLE, source=source, project_id=pid, project_name=name,
-                      new_version="0.8.13", download_url="https://cdn.modrinth.com/x.jar", known_ids={(source, pid)})
+                      new_version="0.8.13", new_file_name=f"{name}-0.8.13.jar",
+                      download_url="https://cdn.modrinth.com/x.jar", known_ids={(source, pid)})
 
 
 def cards_for(fixture, results, lookup=lambda modid: None):

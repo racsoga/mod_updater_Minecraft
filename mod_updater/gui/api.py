@@ -19,7 +19,9 @@ import os
 import re
 import subprocess
 import threading
+import time
 import webbrowser
+from datetime import datetime
 from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Callable
@@ -44,6 +46,7 @@ from ..curseforge import LOADER_TYPES, CurseForgeAuthError, CurseForgeClient
 from ..deps import DependencyFinder, DepPlan, dependents_of, keep_needed, plan_with_dependencies, required_disabled
 from ..resolver import DISABLE, ENABLE, REMOVE, UPDATE, Dep
 from ..pins import apply_pins, find_pins, pin_entry, pin_key
+from .. import diagnose as diag
 from .. import net
 from ..downloader import (
     Outcome,
@@ -150,6 +153,7 @@ def serialize(results: list[Resolution], plan: DepPlan, *, allow_beta: bool = Fa
 
 
 MAX_VERSION_LIST = 40  # versiones que se ofrecen para volver atrás
+DIAG_NEW_DAYS = 14  # un crash report más viejo no se avisa como nuevo
 ROLLBACK_ROW = 300000  # id de la fila en la pantalla de aplicar
 
 
@@ -196,6 +200,9 @@ class Api:
         self._applying = False              # hay una actualización en curso (aviso al cerrar)
         self._changelogs: dict = {}         # changelogs ya descargados (por mod y rango de versiones)
         self._version_lists: dict = {}      # versiones publicadas de cada mod (para volver atrás)
+        self._diag_reports: list = []       # informes de la pestaña Diagnóstico (id = posición)
+        self._diag_actions: dict = {}       # acciones propuestas por el diagnóstico (id -> diag.Action)
+        self._diag_cards: dict = {}         # tarjetas del último diagnóstico de cada informe (para copiar)
         self._explore_cache: dict = {}      # búsquedas recientes (no repetir peticiones al volver atrás)
         self._install: list[Resolution] = []  # plan de la cesta de Explorar, pendiente de confirmar
         self._import: dict | None = None    # lista importada y comparada, pendiente de confirmar
@@ -1031,6 +1038,141 @@ class Api:
         return {"ok": True, "rows": [{"id": ROLLBACK_ROW, "s": "up", "name": r.name, "icon": r.icon_url,
                                       "from": r.current_version, "to": v["version"], "beta": v["channel"] != "release",
                                       "neededBy": []}]}
+
+    # ------------------------------------------------------------------ diagnóstico
+
+    def _game_dir(self, s: Settings) -> Path:
+        return s.mods_path.parent  # la carpeta de la partida contiene mods, logs y crash-reports
+
+    def diag_new(self) -> dict:
+        """¿Hay un crash report nuevo (de los últimos 14 días) que aún no se ha visto?"""
+        s = self._settings()
+        try:
+            crashes = [r for r in diag.list_reports(self._game_dir(s)) if r["kind"] != "log"]
+        except OSError:
+            crashes = []
+        newest = max((r["mtime"] for r in crashes), default=0)
+        fresh = newest > time.time() - DIAG_NEW_DAYS * 86400
+        return {"new": bool(newest > (s.diag_seen or 0) and fresh),
+                "date": datetime.fromtimestamp(newest).isoformat(timespec="minutes") if newest else None}
+
+    def diag_reports(self) -> dict:
+        """Informes de la partida del perfil activo (y los marca como vistos)."""
+        s = self._settings()
+        self._diag_reports = diag.list_reports(self._game_dir(s))
+        newest = max((r["mtime"] for r in self._diag_reports if r["kind"] != "log"), default=0)
+        if newest > (s.diag_seen or 0):
+            s.diag_seen = newest
+            save_settings(s, self._settings_file)
+        return {"ok": True, "scanned": bool(self._results), "reports": [
+            {"id": i, "name": r["name"], "kind": r["kind"],
+             "date": datetime.fromtimestamp(r["mtime"]).isoformat(timespec="minutes")}
+            for i, r in enumerate(self._diag_reports)]}
+
+    def _diag_lookup(self, s: Settings):
+        """modId de una dependencia que falta → lo que se instalaría (Modrinth por slug). Sin red: None."""
+        cf, mr = self._clients(s)
+        finder = DependencyFinder(cf, mr, loader=s.loader, game_version=s.minecraft_version, allow_beta=s.allow_beta)
+        cache: dict = {}
+
+        def lookup(modid: str):
+            if modid not in cache:
+                try:
+                    found = finder.find(Dep(MR, modid))
+                except ApiError:
+                    found = None
+                cache[modid] = found if found is not None and found.status == ACTUALIZABLE else None
+            return cache[modid]
+        return lookup
+
+    @_never_hang
+    def diag_run(self, report_id) -> dict:
+        """Lee un informe y devuelve las tarjetas con sus acciones (todo en local salvo buscar lo que falta)."""
+        try:
+            rep_ = self._diag_reports[int(report_id)]
+        except (IndexError, TypeError, ValueError):
+            return {"ok": False, "message": t("dg.err_report")}
+        s = self._settings()
+        try:
+            text = diag.read_text(rep_["path"])
+        except OSError:
+            return {"ok": False, "message": t("dg.err_report")}
+        findings = diag.analyze(text, log=rep_["kind"] == "log")
+        cards = diag.plan_cards(findings, self._results, lookup=self._diag_lookup(s), knowledge=load_knowledge())
+        self._diag_cards[int(report_id)] = (rep_, cards)
+        out_cards = []
+        for c in cards:
+            acts = []
+            for a in c.actions:
+                aid = f"a{len(self._diag_actions)}"
+                self._diag_actions[aid] = a
+                acts.append({"id": aid, "label": a.label, "primary": a.primary, "type": a.type})
+            out_cards.append({"kind": c.kind, "kicker": c.kicker, "title": c.title, "why": c.why, "note": c.note,
+                              "evidence": [diag.anonymize(e) for e in c.evidence], "actions": acts})
+        load = {"missing", "version", "platform", "incompatible", "duplicate", "wrong_loader"}
+        if not cards:
+            head, deck = t("dg.h_none_found"), t("dg.d_none_found")
+        elif rep_["kind"] == "fml" or all(c.kind in load for c in cards):
+            head, deck = t("dg.h_load", count=len(cards)), t("dg.d_load")
+        elif cards[0].kind in ("mixin", "suspect"):
+            head, deck = t("dg.t_suspect", name=cards[0].subject), t("dg.d_game")
+        else:
+            head, deck = cards[0].title, t("dg.d_game")
+        return {"ok": True, "head": head, "deck": deck, "name": rep_["name"], "cards": out_cards,
+                "scanned": bool(self._results)}
+
+    def diag_copy(self, report_id) -> dict:
+        """Copia un resumen para pegarlo en el issue del mod, sin usuario de Windows ni de Minecraft."""
+        found = self._diag_cards.get(int(report_id)) if str(report_id).lstrip("-").isdigit() else None
+        if found is None:
+            return {"ok": False, "message": t("dg.err_report")}
+        rep_, cards = found
+        s = self._settings()
+        lines = [t("dg.sum_title", file=rep_["name"]),
+                 t("dg.sum_env", minecraft=s.minecraft_version, loader=LOADER_LABEL.get(s.loader, s.loader)), ""]
+        for c in cards:
+            lines.append(f"- {c.title}: {c.why}")
+            lines += [f"    {e}" for e in c.evidence]
+        if not cards:
+            lines.append(t("dg.h_none_found"))
+        try:
+            self._clipboard(diag.anonymize("\n".join(lines) + "\n"))
+        except (OSError, subprocess.SubprocessError):
+            return {"ok": False, "message": t("ml.err_clipboard")}
+        return {"ok": True}
+
+    @_never_hang
+    def diag_do(self, action_id: str) -> dict:
+        """Ejecuta una acción del diagnóstico. Desactivar/activar al momento; instalar, cambiar y
+        actualizar pasan por la pantalla de aplicar (con copia y Deshacer)."""
+        a = self._diag_actions.get(str(action_id))
+        if a is None:
+            return {"ok": False, "message": t("dg.err_action")}
+        index = {id(r): i for i, r in enumerate(self._rows)}
+        if a.type in ("disable", "enable", "swap"):
+            ids = [i for i, r in enumerate(self._rows) if r.mod is not None and r.mod.file_name in a.files]
+            res = self.mods_set_enabled(ids, a.type == "enable", "only")
+            if not res.get("ok") or a.type != "swap":
+                return res
+        if a.type in ("install", "swap"):
+            cand = a.install
+            plan = self.install_plan([{"source": cand.source, "id": cand.project_id, "name": cand.name}])
+            if not plan.get("ok") or not plan.get("rows"):
+                return plan if not plan.get("ok") else {"ok": False, "message": t("dg.err_action")}
+            go = self.install_start()
+            return {**go, "rows": plan["rows"]} if go.get("ok") else go
+        if a.type == "update":
+            i = index.get(id(a.row))
+            if i is None:
+                return {"ok": False, "message": t("apply.no_scan")}
+            go = self.apply([i])
+            r = a.row
+            return {**go, "rows": [{"id": i, "s": "up", "name": r.name, "icon": r.icon_url, "from": r.current_version,
+                                    "to": r.new_version, "beta": False, "neededBy": []}]} if go.get("ok") else go
+        if a.type == "versions":
+            i = index.get(id(a.row))
+            return {"ok": True, "open_versions": i} if i is not None else {"ok": False, "message": t("apply.no_scan")}
+        return {"ok": False, "message": t("dg.err_action")}
 
     # ------------------------------------------------------------------ análisis
 

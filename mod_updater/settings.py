@@ -31,7 +31,8 @@ class Settings:
     language: str = "auto"  # "auto" = idioma de la interfaz de Windows; o "es", "en"
     check_updates: bool = True  # avisar de nuevas versiones de la app (como mucho una vez al día)
     answers: dict = field(default_factory=dict)  # cuestionario de Sugerencias (por perfil)
-    pins: dict = field(default_factory=dict)  # mods fijados (por perfil): {"fuente:proyecto": {name, version, reason}}
+    pins: dict = field(default_factory=dict)
+    diag_seen: float = 0  # fecha del crash report más nuevo ya visto en Diagnóstico (por perfil)  # mods fijados (por perfil): {"fuente:proyecto": {name, version, reason}}
     profiles: list = field(default_factory=list)  # [{id, name, mods_dir, minecraft_version, loader, ...}]
     active_profile: str = ""  # id del perfil activo (sus campos se reflejan arriba)
 
