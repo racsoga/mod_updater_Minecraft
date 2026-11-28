@@ -847,16 +847,23 @@ function renderProfiles(help = "") {
       <div class="prof-info">
         <span class="prof-name"><span class="prof-label">${esc(p.name)}</span>
           ${p.active ? `<span class="prof-tag">${esc(t("profile.active"))}</span>` : ""}
-          ${p.exists ? "" : `<span class="prof-tag bad">${esc(t("profile.missing"))}</span>`}</span>
+          ${p.exists ? "" : `<span class="prof-tag bad">${esc(t("profile.missing"))}</span>`}
+          ${p.server ? `<span class="prof-tag">${esc(t("sv.tag"))}</span>` : ""}</span>
         <span class="prof-meta" title="${esc(p.mods_dir)}">${esc(envText(p))} · ${esc(p.mods_dir)}</span>
       </div>
       <div class="prof-actions">
         ${p.active ? "" : `<button class="btn-small" type="button" data-prof-use>${esc(t("profile.use"))}</button>`}
         <button class="btn-small" type="button" data-prof-rename>${esc(t("profile.rename"))}</button>
+        <button class="btn-small" type="button" data-prof-server aria-pressed="${p.server ? "true" : "false"}">${esc(t(p.server ? "sv.unmark" : "sv.mark"))}</button>
         ${list.length > 1 ? `<button class="btn-small" type="button" data-prof-remove>${esc(t("profile.remove"))}</button>` : ""}
       </div>
     </li>`).join("");
   const others = list.filter(p => !p.active);
+  // Servidor: los perfiles marcados como servidor (que no sean el activo).
+  const servers = others.filter(p => p.server);
+  $("#sv-row").hidden = !servers.length;
+  $("#sv-help").textContent = servers.length ? "" : t(list.some(p => p.server) ? "sv.active_is_server" : "sv.none");
+  $("#sv-target").innerHTML = servers.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
   $("#ml-compare-row").hidden = !others.length;
   $("#ml-compare-with").innerHTML = others.map(p => `<option value="${esc(p.id)}">${esc(t("ml.compare_option", { name: p.name }))}</option>`).join("");
   const dup = state.same_folder || [];
@@ -882,6 +889,12 @@ function wireProfiles() {
     if (!li) return;
     const id = li.dataset.prof;
     if (e.target.closest("[data-prof-use]")) { switchProfile(id); return; }
+    const sv = e.target.closest("[data-prof-server]");
+    if (sv) {
+      setState(await api().profile_set_server(id, sv.getAttribute("aria-pressed") !== "true"));
+      renderProfiles();
+      return;
+    }
     const rm = e.target.closest("[data-prof-remove]");
     if (rm) {
       if (!rm.dataset.confirm) { rm.dataset.confirm = "1"; rm.textContent = t("profile.remove_confirm"); rm.classList.add("danger"); return; }
@@ -1925,8 +1938,65 @@ async function checkBisectPending() {
   $("#bs-pending-go").addEventListener("click", openBisect);
 }
 
+/* ---------------------------------------------------------------- preparar el servidor */
+
+async function serverCompare() {
+  const id = $("#sv-target").value;
+  $("#sv-help").textContent = t("ex.loading");
+  let res;
+  try { res = await api().server_compare(id); } catch { res = { ok: false, message: t("sv.err_compare_first") }; }
+  if (!res.ok) { $("#sv-help").textContent = res.message; return; }
+  $("#sv-help").textContent = "";
+  openExDrawer(t("sv.review_title", { server: res.server }), t("sv.review_sub", { client: res.client }));
+  const li = (name, note = "") => `<li><span class="an-name">${esc(name)}${note ? `<span class="an-note">${esc(note)}</span>` : ""}</span></li>`;
+  const list = (title, items) => items.length ? `<h3 class="ex-h">${esc(title)}</h3><ul class="an-list">${items.join("")}</ul>` : "";
+  const unknown = res.unknown.filter(u => !u.same);
+  const pick = (attr, value, name, note = "") => `<li><label class="toggle"><input type="checkbox" ${attr}="${esc(value)}"><span class="an-name">${esc(name)}${note ? `<span class="an-note">${esc(note)}</span>` : ""}</span></label></li>`;
+  $("#ex-d-body").innerHTML =
+      (res.loader_too_old.length ? `<p class="ex-note warn">${esc(t("sv.loader_old", { server: res.server_loader, names: joinList(res.loader_too_old.map(m => t("sv.loader_need", { name: m.name, version: m.needs }))) }))}</p>` : "")
+    + (res.client_only_on_server.length ? `<h3 class="ex-h">${esc(t("sv.client_on_server", { count: res.client_only_on_server.length }))}</h3><p class="an-hint">${esc(t("sv.client_on_server_hint"))}</p>
+        <ul class="an-list">${res.client_only_on_server.map(c => c.server_files.map(f => pick("data-sv-remove", f, c.name, f)).join("")).join("")}</ul>` : "")
+    + list(t("sv.copy", { count: res.copy.length }), res.copy.map(m => li(m.name, m.client_version || "")))
+    + list(t("sv.update", { count: res.update.length }), res.update.map(m => li(m.name, t("sv.versions", { server: m.server_version || "?", client: m.client_version || "?" }))))
+    + (unknown.length ? `<h3 class="ex-h">${esc(t("sv.unknown", { count: unknown.length }))}</h3><p class="an-hint">${esc(t("sv.unknown_hint"))}</p>
+        <ul class="an-list">${unknown.map(u => `<li><label class="toggle"><input type="checkbox" data-sv-unknown="${esc(u.file)}"${u.preselect ? " checked" : ""}><span class="an-name">${esc(u.name)}${u.server_version ? `<span class="an-note">${esc(t("sv.versions", { server: u.server_version, client: u.client_version || "?" }))}</span>` : ""}</span></label></li>`).join("")}</ul>` : "")
+    + list(t("sv.client_only", { count: res.client_only.length }), res.client_only.map(m => li(m.name)))
+    + (res.extra.length ? `<h3 class="ex-h">${esc(t("sv.extra", { count: res.extra.length }))}</h3><p class="an-hint">${esc(t("sv.extra_hint"))}</p>
+        <ul class="an-list">${res.extra.map(f => pick("data-sv-remove", f, f)).join("")}</ul>` : "")
+    + `<p class="an-hint">${esc(t("sv.same", { count: res.same }))} ${esc(t("sv.safe"))}</p>`;
+  const count = () => res.copy.length + res.update.length + document.querySelectorAll("[data-sv-unknown]:checked").length;
+  const removing = () => document.querySelectorAll("[data-sv-remove]:checked").length;
+  const foot = () => {
+    const n = count(), r = removing();
+    const label = r ? `${t("sv.go", { count: n })} · ${t("sv.go_remove", { count: r })}` : t("sv.go", { count: n });
+    $("#ex-d-foot").innerHTML = `<button class="btn-secondary" type="button" id="sv-cancel">${esc(t("ui.cancel"))}</button>
+      <button class="btn-primary" type="button" id="sv-go" ${n || r ? "" : "disabled"}>${esc(label)}</button>`;
+    $("#sv-cancel").addEventListener("click", closeExDrawer);
+    $("#sv-go").addEventListener("click", async () => {
+      $("#sv-go").disabled = true;
+      const chosen = [...document.querySelectorAll("[data-sv-unknown]:checked")].map(i => i.dataset.svUnknown);
+      const remove = [...document.querySelectorAll("[data-sv-remove]:checked")].map(i => i.dataset.svRemove);
+      const done = await api().server_copy(id, chosen, remove);
+      if (!done.ok && !done.copied) {
+        $("#sv-go").disabled = false;
+        $("#ex-d-body > .cl-error")?.remove();  // un solo aviso, el último
+        $("#ex-d-body").insertAdjacentHTML("afterbegin", `<p class="cl-error">${esc(done.message || done.failed.map(f => `${f.name}: ${f.message}`).join(" "))}</p>`);
+        return;
+      }
+      $("#ex-d-body").innerHTML = `<p class="ex-note">${esc(t("sv.done", { count: done.copied, server: done.server }))}${done.removed ? ` ${esc(t("sv.done_removed", { count: done.removed }))}` : ""}</p>`
+        + (done.failed.length ? list(t("ui.done_failed", { count: done.failed.length }), done.failed.map(f => li(f.name, f.message))) : "")
+        + `<p class="an-hint">${esc(t("sv.undo_hint", { server: done.server }))}</p>`;
+      $("#ex-d-foot").innerHTML = `<button class="btn-primary" type="button" id="sv-close">${esc(t("cl.close"))}</button>`;
+      $("#sv-close").addEventListener("click", closeExDrawer);
+    });
+  };
+  foot();
+  $("#ex-d-body").onchange = e => { if (e.target.matches("[data-sv-unknown], [data-sv-remove]")) foot(); };
+}
+
 function wireDiag() {
   wireBisect();
+  $("#sv-compare").addEventListener("click", serverCompare);
   $("#mg-check").addEventListener("click", migrateCheck);
   $("#dg-report").addEventListener("change", e => runDiag(Number(e.target.value)));
   $("#dg-list").addEventListener("click", e => { const b = e.target.closest("[data-dg]"); if (b) diagAction(b); });
