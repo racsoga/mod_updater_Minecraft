@@ -115,6 +115,7 @@ Asistente para encontrar el mod que rompe la partida cuando el diagnóstico no b
 ## 6. ¿Puedo pasar a otra versión de Minecraft?
 
 - Selector de versión de destino. La lista sale del manifiesto oficial de versiones de Mojang (comprobar la URL actual antes de usarla; caché de un día), solo versiones *release*.
+- **Privacidad:** si se consulta el manifiesto de Mojang, añadirlo a la sección *Privacidad* del README (es/en) y a la de `CODE_SIGNING_POLICY.md` (nota de Oscar, 28/11).
 - Para cada mod del perfil, consultar en CurseForge y Modrinth si hay versión para el destino y el cargador del perfil.
 - Resultado: "142 de 150 listos" con tres grupos: **Listos**, **Faltan** (con fecha de su última versión, para ver si está vivo) y **Con alternativa** (existe en la otra web o hay un mod del mismo grupo de solapamiento que sí está).
 - Las librerías se agrupan aparte: lo que importa es si los mods que las usan están listos.

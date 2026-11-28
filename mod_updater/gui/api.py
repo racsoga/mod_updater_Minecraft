@@ -54,6 +54,7 @@ from ..downloader import (
     clear_backups,
     list_backups,
     prune_backups,
+    toggle_one,
     undo_backup,
     updatable,
 )
@@ -807,7 +808,8 @@ class Api:
         c = modlist_mod.compare(data, self._results, minecraft=s.minecraft_version, loader=s.loader)
         c["remove"], kept = keep_needed(self._results, c["remove"])  # lo que sobra pero necesita un mod que se queda
         self._import = c
-        row = lambda m: {"name": m["nombre"], "version": m.get("version"), "have": m.get("tienes")}  # noqa: E731
+        row = lambda m: {"name": m["nombre"], "version": m.get("version"), "have": m.get("tienes"),  # noqa: E731
+                         "off": m.get("activo") is False}
         return {"ok": True, "file": Path(path).name, "mismatch": c["mismatch"],
                 "profile": {"minecraft": s.minecraft_version, "loader": LOADER_LABEL.get(s.loader, s.loader)},
                 "add": [row(m) for m in c["add"]], "update": [row(m) for m in c["update"]],
@@ -951,8 +953,8 @@ class Api:
 
         Al desactivar algo que necesitan mods activos: con `dependents="ask"` no cambia nada y
         devuelve el aviso; con "with" desactiva también esos; con "only", solo lo elegido. Al
-        activar, activa también las librerías desactivadas que hagan falta. Queda en el historial
-        (cambios.json) y se puede deshacer como una actualización.
+        activar, activa también las librerías desactivadas que hagan falta. No crea copia de
+        seguridad: se deshace volviendo a activar o desactivar.
         """
         s = self._settings()
         rows = {id(r): i for i, r in enumerate(self._rows)}
@@ -979,21 +981,20 @@ class Api:
         if not self._busy.acquire(blocking=False):
             return {"ok": False, "message": t("apply.busy")}
         try:
+            # Solo se renombra: sin copia de seguridad (no hay nada que guardar) y sin contar para el
+            # límite de copias. Deshacer es volver a pulsar el interruptor.
             chosen = [replace(r, kind=ENABLE if enabled else DISABLE) for r in targets + also]
-            backup_dir, outcomes = apply_updates(chosen, s.mods_path, modrinth_session=None, curseforge_session=None)
+            outcomes = [toggle_one(r) for r in chosen]
             done = []
             for o, original in zip(outcomes, targets + also):
                 if o.ok and o.new_path is not None:  # la fila sigue valiendo: solo cambia el nombre
                     original.mod.path, original.mod.file_name = o.new_path, o.new_path.name
                     done.append(original)
-            if done:
-                prune_backups(s.mods_path, s.backups_to_keep)
         finally:
             self._busy.release()
         failed = [{"name": o.resolution.name, "message": o.message} for o in outcomes if not o.ok]
         return {"ok": not failed, "rows": [{"id": rows[id(r)], "off": r.mod.disabled} for r in done if id(r) in rows],
-                "also": [r.name for r in also if r in done], "failed": failed,
-                "backup": backup_info(backup_dir) if backup_dir.exists() else None}
+                "also": [r.name for r in also if r in done], "failed": failed}
 
     def clear_backups(self) -> dict:
         if not self._busy.acquire(blocking=False):

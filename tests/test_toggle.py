@@ -253,10 +253,25 @@ def test_api_enabling_also_enables_its_disabled_library(tmp_path):
     assert res["ok"] and res["also"] == ["Balm"] and files(d) == ["Balm.jar", "Waystones.jar"]
 
 
-def test_api_toggle_is_undoable(tmp_path):
+def test_api_toggle_makes_no_backup_and_keeps_the_last_update_copy(tmp_path):
+    """Activar/desactivar no crea copia ni cuenta para el límite (por defecto 1): la copia de la
+    última actualización sigue ahí. Deshacer = volver a pulsar el interruptor."""
+    import json
+    from mod_updater.downloader import backup_root, list_backups
+    from mod_updater.settings import load_settings, save_settings
     a, d = make_api(tmp_path, [("Jei.jar", "1", [])])
-    a.mods_set_enabled([0], False)
-    assert a.undo_last()["ok"] and files(d) == ["Jei.jar"]
+    s = load_settings(a._settings_file)
+    s.backups_to_keep = 1
+    save_settings(s, a._settings_file)
+    update_copy = backup_root(d) / "2026-11-28_1000"
+    update_copy.mkdir(parents=True)
+    (update_copy / "cambios.json").write_text(json.dumps({"complete": True, "mods_dir": str(d), "changes": [
+        {"ok": True, "state": "ok", "action": "update", "name": "Jei", "old_file": "Jei-old.jar",
+         "new_file": "Jei.jar", "backup_file": "Jei-old.jar"}]}), encoding="utf-8")
+    (update_copy / "Jei-old.jar").write_bytes(b"viejo")
+    assert a.mods_set_enabled([0], False)["ok"] and files(d) == ["Jei.jar.disabled"]
+    assert a.mods_set_enabled([0], True)["ok"] and files(d) == ["Jei.jar"]
+    assert list_backups(d) == [update_copy] and (update_copy / "Jei-old.jar").exists()
 
 
 def test_api_reports_rename_conflict(tmp_path):
@@ -359,3 +374,40 @@ def test_api_refuses_rows_from_another_folder(tmp_path):
     save_settings(s, a._settings_file)
     res = a.mods_set_enabled([0], False)
     assert not res["ok"] and files(d) == ["Jei.jar"]
+
+
+# ---------------------------------------------------------------- importar con "activo": false
+
+def test_resolve_exact_marks_inactive_installs():
+    from types import SimpleNamespace
+    from mod_updater.modlist import resolve_exact
+    f = SimpleNamespace(url="https://cdn.modrinth.com/a.jar", filename="a-1.0.jar", sha1="s", sha512="x", size=1)
+    mr = SimpleNamespace(version=lambda vid: SimpleNamespace(primary_file=f, project_id="pa", version_number="1.0"))
+    m = {"nombre": "A", "fuente": "modrinth", "proyecto": "pa", "archivo": "va"}
+    out, _ = resolve_exact({"add": [m | {"activo": False}, m | {"nombre": "B", "proyecto": "pa"}], "update": []},
+                           [], curseforge=None, modrinth=mr)
+    assert [r.install_disabled for r in out] == [True, False]
+
+
+def test_install_disabled_lands_as_jar_disabled(tmp_path, monkeypatch):
+    from mod_updater import downloader
+    from mod_updater.resolver import INSTALL
+    d = mods_dir(tmp_path)
+    r = Resolution(mod=None, kind=INSTALL, status=ACTUALIZABLE, source=CF, project_id="1", project_name="A",
+                   new_file_name="a-1.0.jar", download_url="https://cdn.modrinth.com/a.jar", install_disabled=True)
+    monkeypatch.setattr(downloader, "download_verified", lambda res, dest, sf: make_jar(dest, "a"))
+    _, out = run([r], d)
+    assert out[0].ok and files(d) == ["a-1.0.jar.disabled"]
+
+
+def test_modlist_import_shows_inactive_mods(tmp_path, monkeypatch):
+    from mod_updater import modlist as modlist_mod
+    a, d = make_api(tmp_path, [("Jei.jar", "1", [])])
+    monkeypatch.setattr(modlist_mod, "parse", lambda text: {})
+    monkeypatch.setattr(modlist_mod, "compare", lambda data, results, **k: {
+        "mismatch": None, "add": [{"nombre": "Nuevo", "version": "1", "activo": False}], "update": [], "same": [],
+        "unavailable": [], "remove": []})
+    path = tmp_path / "x.modlist.json"
+    path.write_text("{}", encoding="utf-8")
+    a._file_dialog = lambda *x, **k: str(path)
+    assert a.modlist_import()["add"] == [{"name": "Nuevo", "version": "1", "have": None, "off": True}]
