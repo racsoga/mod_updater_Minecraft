@@ -809,6 +809,7 @@ async function importList() {
     + (res.remove.length ? `<h3 class="ex-h">${esc(t("ml.extra", { count: res.remove.length }))}</h3>
         <label class="toggle"><input type="checkbox" id="ml-remove"> <span>${esc(t("ml.remove_too"))}</span></label>
         <ul class="an-list">${res.remove.map(r => li(r.name, r.version || "")).join("")}</ul>` : "")
+    + list(t("deps.kept_title"), (res.kept || []).map(k => li(k)))
     + `<p class="an-hint">${esc(t("ml.same", { count: res.same }))} ${esc(t("ex.safe"))}</p>`;
   const actionable = res.add.length + res.update.length + res.remove.length;
   $("#ex-d-foot").innerHTML = actionable ? `<button class="btn-secondary" type="button" id="ml-cancel">${esc(t("ui.cancel"))}</button>
@@ -1009,6 +1010,7 @@ function renderPlanReview(res, onStart) {
     + list(t("ex.will_add_deps"), deps.map(r => li(r.name, `${ver(r)} · ${t("ui.needed_by", { names: r.neededBy.join(", ") })}`)))
     + (installs.length && res.size ? `<p class="ex-total">${esc(t("ex.total_size", { size: fmtSize(res.size), count: installs.length }))}</p>` : "")
     + list(t("sg.will_remove"), removals.map(r => li(r.name, r.from || "")))
+    + list(t("deps.kept_title"), (res.kept || []).map(k => li(k)))
     + list(t("ex.cant_manual"), res.manual.map(m => `<li><span class="an-name"><a href="${esc(m.url)}" data-external>${esc(m.name)}</a></span></li>`))
     + list(t("ex.cant_blocked"), res.blocked.map(b => li(b.name, b.reason)))
     + list(t("ex.cant_unavailable"), res.unavailable.map(n => li(n)))

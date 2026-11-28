@@ -4,6 +4,11 @@ Todos los cambios importantes de Mod Updater. Formato basado en [Keep a Changelo
 
 La sección de cada versión es la que se publica como notas de la Release al crear la etiqueta `vX.Y.Z`.
 
+## [0.4.0] - sin publicar
+
+### Corregido
+- **Sugerencias** ya no quita un mod que necesita otro que vas a añadir o que se queda (p. ej. Balm si añades Waystones), ni sus dependencias indirectas. Lo explica en una frase en la revisión del plan. Lo mismo al importar una lista y quitar lo que sobra ([#12](https://github.com/racsoga/mod_updater_Minecraft/issues/12)).
+
 ## [0.3.0] - 2026-11-21
 
 ### Añadido

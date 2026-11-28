@@ -24,6 +24,11 @@
   "deps.ignored": "{parent} menciona {dep} como necesaria, pero no hay ninguna versión de {dep} para tu Minecraft y cargador de mods. Suele ser la versión para otro cargador: no tienes que hacer nada.",
   "deps.missing_manual": "le falta {name} y no se puede descargar automáticamente",
   "deps.needs_newer": "necesita una versión más nueva de {name}",
+  "deps.kept_one": "No se quita {name}: lo necesita {names}.",
+  "deps.kept_other": "No se quita {name}: lo necesitan {names}.",
+  "deps.kept_for_added_one": "No se quita {name}: lo necesita {names}, que vas a añadir.",
+  "deps.kept_for_added_other": "No se quita {name}: lo necesitan {names}, que vas a añadir.",
+  "deps.kept_title": "No se quitan",
 
   "beta.only_published": "Única versión publicada; la requiere {names}",
   "beta.allowed_dep": "Versión beta (tienes activadas las betas); la requiere {names}",
