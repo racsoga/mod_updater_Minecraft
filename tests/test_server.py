@@ -1,6 +1,5 @@
 """Hito 7 (v4): preparar el servidor (copiar del perfil de cliente lo que hace falta y comparar)."""
 
-import msvcrt
 import os
 import zipfile
 from pathlib import Path
@@ -69,7 +68,8 @@ def test_plan_copy_by_side_and_versions(tmp_path):
     assert [(u["name"], u["server_version"], u["client_version"]) for u in plan["update"]] == [("Create", "6.0.1", "6.0.4")]
     assert names(plan["client_only"]) == ["Sodium"] and names(plan["unknown"]) == ["Raro"]
     assert plan["same"] == 1
-    assert sorted(plan["extra"]) == ["sodium.jar", "viejo.jar"]  # sobran en el servidor (sodium: solo cliente)
+    assert plan["extra"] == ["viejo.jar"]  # sobra en el servidor (se queda salvo que se marque)
+    assert [c["name"] for c in plan["client_only_on_server"]] == ["Sodium"]  # solo cliente, ya en el servidor
 
 
 def test_copy_into_with_backup_and_undo(tmp_path):
@@ -93,6 +93,7 @@ def test_unknown_side_only_if_chosen(tmp_path):
 
 
 def test_server_running_by_command_line_and_world_lock(tmp_path):
+    msvcrt = pytest.importorskip("msvcrt")  # el bloqueo de session.lock solo se comprueba en Windows
     game = tmp_path / "servidor"
     (game / "world").mkdir(parents=True)
     lock = game / "world" / "session.lock"
@@ -106,6 +107,104 @@ def test_server_running_by_command_line_and_world_lock(tmp_path):
         finally:
             f.seek(0)
             msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+
+
+# ---------------------------------------------------------------- cambios de Oscar antes de fusionar
+
+def jar_needing(path: Path, mod_id: str, neoforge_range: str) -> Path:
+    toml = (f'modLoader="javafml"\nloaderVersion="[1,)"\n[[mods]]\nmodId="{mod_id}"\nversion="1.0"\n'
+            f'[[dependencies.{mod_id}]]\nmodId="neoforge"\ntype="required"\nversionRange="{neoforge_range}"\n')
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr("META-INF/neoforge.mods.toml", toml)
+    return path
+
+
+def test_update_never_leaves_two_versions_of_the_same_mod(tmp_path):
+    cd, results = client(tmp_path, [("create-6.0.10.jar", "create", "6.0.10", "both")])
+    sd = server_dir(tmp_path, [("create-6.0.1.jar", "create", "6.0.1"), ("create-6.0.4.jar", "create", "6.0.4")])
+    copy_into(plan_copy(results, scan_folder(sd)), [], sd)
+    assert sorted(p.name for p in sd.iterdir()) == ["create-6.0.10.jar"]
+    r = undo_backup(last_undoable(sd))
+    assert not r.errors and sorted(p.name for p in sd.iterdir()) == ["create-6.0.1.jar", "create-6.0.4.jar"]
+
+
+def test_warns_when_a_copied_mod_needs_a_newer_neoforge(tmp_path):
+    from mod_updater.server import server_loader_version
+    cd, results = client(tmp_path, [("nuevo.jar", "nuevo", "1.0", "both"), ("viejo.jar", "viejo", "1.0", "both")])
+    jar_needing(cd / "nuevo.jar", "nuevo", "[21.1.200,)")
+    jar_needing(cd / "viejo.jar", "viejo", "[21.1.80,)")
+    sd = server_dir(tmp_path)
+    (sd.parent / "libraries" / "net" / "neoforged" / "neoforge" / "21.1.172").mkdir(parents=True)
+    (sd.parent / "libraries" / "net" / "neoforged" / "neoforge" / "21.1.95").mkdir(parents=True)
+    assert server_loader_version(sd.parent) == "21.1.172"
+    plan = plan_copy(scan_results_again(results), scan_folder(sd), server_loader="21.1.172")
+    assert plan["loader_too_old"] == [{"name": "Nuevo", "needs": "21.1.200", "server": "21.1.172"}]
+
+
+def scan_results_again(results):
+    for r in results:  # el jar se reescribió: hash nuevo
+        r.mod = next(m for m in scan_folder(r.mod.path.parent) if m.file_name == r.mod.file_name)
+    return results
+
+
+def test_extras_stay_unless_chosen_and_client_only_on_server_can_be_removed(tmp_path):
+    cd, results = client(tmp_path, [("create.jar", "create", "6.0", "both"), ("sodium.jar", "sodium", "0.8", "client")])
+    sd = server_dir(tmp_path, [("solo-servidor.jar", "lagfix", "1.0"), ("sodium-server.jar", "sodium", "0.8")])
+    plan = plan_copy(results, scan_folder(sd))
+    assert plan["extra"] == ["solo-servidor.jar"]
+    assert [(c["name"], c["server_file"]) for c in plan["client_only_on_server"]] == [("Sodium", "sodium-server.jar")]
+    copy_into(plan, [], sd)  # por defecto no se quita nada
+    assert sorted(p.name for p in sd.iterdir()) == ["create.jar", "sodium-server.jar", "solo-servidor.jar"]
+    plan = plan_copy(results, scan_folder(sd))
+    copy_into(plan, [], sd, remove=["sodium-server.jar", "solo-servidor.jar"])
+    assert sorted(p.name for p in sd.iterdir()) == ["create.jar"]
+    r = undo_backup(last_undoable(sd))
+    assert not r.errors and sorted(p.name for p in sd.iterdir()) == ["create.jar", "sodium-server.jar", "solo-servidor.jar"]
+
+
+# ---------------------------------------------------------------- revisión final
+
+def test_failed_copy_with_the_same_name_keeps_the_original(tmp_path, monkeypatch):
+    import shutil as sh
+    from mod_updater import server as server_mod
+    cd, results = client(tmp_path, [("create.jar", "create", "6.0.10", "both")])
+    sd = server_dir(tmp_path, [("create.jar", "create", "6.0.4")])
+    original = (sd / "create.jar").read_bytes()
+
+    def broken(src, dst, *a, **k):
+        Path(dst).write_bytes(b"medio")  # se corta a mitad (disco lleno, antivirus...)
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(server_mod.shutil, "copy2", broken)
+    backup, outcomes = copy_into(plan_copy(results, scan_folder(sd)), [], sd)
+    assert not outcomes[0].ok and sorted(p.name for p in sd.iterdir()) == ["create.jar"]
+    assert (sd / "create.jar").read_bytes() == original
+    monkeypatch.setattr(server_mod.shutil, "copy2", sh.copy2)
+
+
+def test_extra_mod_ids_count_as_the_same_mod(tmp_path):
+    cd, results = client(tmp_path, [("todo-en-uno.jar", "foo", "2.0", "both")])
+    results[0].mod.extra_mod_ids = ["foo_core"]
+    sd = server_dir(tmp_path, [("foo-1.0.jar", "foo", "1.0"), ("foo-core-1.0.jar", "foo_core", "1.0")])
+    copy_into(plan_copy(results, scan_folder(sd)), [], sd)
+    assert sorted(p.name for p in sd.iterdir()) == ["todo-en-uno.jar"]  # nunca dos jars con el mismo modId
+
+
+def test_unknown_side_already_on_the_server_is_preselected(tmp_path):
+    cd, results = client(tmp_path, [("raro-2.jar", "raro", "2.0", None), ("nuevo.jar", "nuevo", "1.0", None)])
+    sd = server_dir(tmp_path, [("raro-1.jar", "raro", "1.0")])
+    plan = plan_copy(results, scan_folder(sd))
+    u = {i["name"]: i for i in plan["unknown"]}
+    assert u["Raro"]["preselect"] is True and u["Raro"]["server_version"] == "1.0" and u["Nuevo"]["preselect"] is False
+
+
+def test_nothing_to_do_creates_no_backup(tmp_path):
+    from mod_updater.downloader import list_backups
+    cd, results = client(tmp_path, [("a.jar", "a", "1.0", "both")])
+    sd = server_dir(tmp_path)
+    (sd / "a.jar").write_bytes((cd / "a.jar").read_bytes())
+    backup, outcomes = copy_into(plan_copy(results, scan_folder(sd)), [], sd)
+    assert outcomes == [] and list_backups(sd) == []
 
 
 # ---------------------------------------------------------------- API
@@ -160,3 +259,23 @@ def test_api_copy_needs_a_fresh_compare(tmp_path):
     assert not a.server_copy(sid, [])["ok"]
     a._results = []
     assert not a.server_compare(sid)["ok"]
+
+
+def test_api_copy_refuses_during_a_half_split_search(tmp_path, monkeypatch):
+    from mod_updater import server as server_mod
+    a, cd, sd, sid = make_api(tmp_path)
+    monkeypatch.setattr(server_mod, "list_java_processes", lambda: [])
+    a.server_compare(sid)
+    a._bisect_file(a._settings(), sid).parent.mkdir(parents=True, exist_ok=True)
+    a._bisect_file(a._settings(), sid).write_text("{}", encoding="utf-8")  # búsqueda a medias en el servidor
+    res = a.server_copy(sid, [])
+    assert not res["ok"] and res["reason"] == "bisect"
+
+
+def test_api_compare_is_forgotten_when_the_client_changes(tmp_path, monkeypatch):
+    from mod_updater import server as server_mod
+    a, cd, sd, sid = make_api(tmp_path)
+    monkeypatch.setattr(server_mod, "list_java_processes", lambda: [])
+    a.server_compare(sid)
+    a._forget_client_state()  # p. ej. tras actualizar o volver a revisar el perfil de cliente
+    assert a.server_copy(sid, [])["ok"] is False

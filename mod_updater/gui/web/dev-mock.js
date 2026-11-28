@@ -214,8 +214,10 @@
       copy: [{ name: "Waystones", file: "waystones.jar", client_version: "21.1.47", same: false }],
       update: [{ name: "Create", file: "create-6.0.10.jar", server_version: "6.0.4", client_version: "6.0.10", same: false }],
       unknown: [{ name: "Mod de ejemplo", file: "ejemplo.jar", same: false }],
-      client_only: [{ name: "Sodium" }, { name: "JourneyMap" }], extra: ["viejo-mod-1.0.jar"], same: 98 }),
-    server_copy: async (id, chosen) => ({ ok: true, copied: 2 + chosen.length, failed: [], server: "Servidor con Ana", backup: null }),
+      client_only: [{ name: "Sodium" }, { name: "JourneyMap" }], extra: ["viejo-mod-1.0.jar"], same: 98,
+      client_only_on_server: [{ name: "JourneyMap", server_files: ["journeymap-6.0.jar"] }],
+      loader_too_old: [{ name: "Waystones", needs: "21.1.200", server: "21.1.172" }], server_loader: "21.1.172" }),
+    server_copy: async (id, chosen, remove) => ({ ok: true, copied: 2 + chosen.length, removed: (remove || []).length, failed: [], server: "Servidor con Ana", backup: null }),
     // Pasar a otra versión de ejemplo (sin red).
     migrate_check: async target => {
       await new Promise(r => setTimeout(r, 300));

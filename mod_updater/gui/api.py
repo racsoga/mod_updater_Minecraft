@@ -517,6 +517,7 @@ class Api:
             results.append(Resolution(mod=mod, status=NO_ENCONTRADO, unreadable=True,
                                       note=t("row.unreadable", error=friendly_error(exc))))
         self._results, self._plan = results, plan
+        self._forget_client_state()
 
         data = serialize(results, plan, allow_beta=s.allow_beta)
         self._rows = plan.installs + results
@@ -596,6 +597,7 @@ class Api:
             if created is None:
                 self._plan = None  # la revisión ya no refleja la carpeta: hay que volver a revisar
                 self._results = []
+                self._forget_client_state()
             self._emit("apply_done", {
                 "no_undo": created is not None, "created": created,
                 "updated": sum(1 for o in ok if o.resolution.kind not in (INSTALL, REMOVE)),
@@ -1501,14 +1503,20 @@ class Api:
             server_mods = scan_folder(server_dir, cache_path=self._scan_cache(server_dir))
         except FileNotFoundError:
             return {"ok": False, "message": t("ml.err_compare_folder")}
-        plan = server_mod.plan_copy(self._results, server_mods)
+        plan = server_mod.plan_copy(self._results, server_mods, server_loader=server_mod.server_loader_version(server_dir.parent))
         self._server_plan = (p["id"], plan)
         public = lambda items: [{k: v for k, v in i.items() if k != "src"} for i in items]  # noqa: E731
         return {"ok": True, "client": self._active_name(s), "server": p.get("name"),
-                **{k: public(plan[k]) for k in ("copy", "update", "client_only", "unknown")},
-                "same": plan["same"], "extra": plan["extra"]}
+                **{k: public(plan[k]) for k in ("copy", "update", "client_only", "client_only_on_server", "unknown")},
+                "same": plan["same"], "extra": plan["extra"], "loader_too_old": plan["loader_too_old"],
+                "server_loader": plan["server_loader"]}
 
-    def server_copy(self, server_id: str, chosen_unknown: list | None = None) -> dict:
+    def _forget_client_state(self) -> None:
+        """Los mods del cliente han cambiado: la comparación con el servidor ya no vale."""
+        self._server_plan = None
+
+    @_never_hang
+    def server_copy(self, server_id: str, chosen_unknown: list | None = None, remove: list | None = None) -> dict:
         """Copia al servidor lo que hace falta (con copia de seguridad en la carpeta del servidor)."""
         if not self._server_plan or self._server_plan[0] != str(server_id):
             return {"ok": False, "message": t("sv.err_compare_first")}
@@ -1517,14 +1525,20 @@ class Api:
         if p is None:
             return {"ok": False, "message": t("profile.not_found")}
         server_dir = Path(p["mods_dir"])
+        if self._bisect_active() or self._bisect_file(s, p["id"]).exists():
+            return {"ok": False, "reason": "bisect", "message": t("bs.busy")}
         if server_mod.server_running(server_dir.parent, lister=server_mod.list_java_processes):
             return {"ok": False, "reason": "server", "message": t("sv.running")}
         if not self._busy.acquire(blocking=False):
             return {"ok": False, "message": t("apply.busy")}
         try:
-            backup_dir, outcomes = server_mod.copy_into(self._server_plan[1], [str(f) for f in chosen_unknown or []], server_dir)
+            plan = self._server_plan[1]
+            # Solo se quita lo que el panel ofrecía quitar (lo que sobra y los mods solo de cliente).
+            allowed = set(plan["extra"]) | {f for c in plan["client_only_on_server"] for f in c["server_files"]}
+            backup_dir, outcomes = server_mod.copy_into(plan, [str(f) for f in chosen_unknown or []], server_dir,
+                                                        remove=[str(f) for f in remove or [] if str(f) in allowed])
             ok = [o for o in outcomes if o.ok]
-            if ok:
+            if ok and backup_dir is not None:
                 prune_backups(server_dir, int(p.get("backups_to_keep") or 1))
         except OSError as exc:
             return {"ok": False, "message": t("sv.failed", error=friendly_error(exc))}
@@ -1532,8 +1546,9 @@ class Api:
             self._busy.release()
         self._server_plan = None  # el servidor ha cambiado: hay que volver a comparar
         failed = [{"name": o.resolution.name, "message": o.message} for o in outcomes if not o.ok]
-        return {"ok": not failed, "copied": len(ok), "failed": failed, "server": p.get("name"),
-                "backup": backup_info(backup_dir) if backup_dir.exists() and ok else None}
+        return {"ok": not failed, "copied": sum(1 for o in ok if o.new_path), "removed": sum(1 for o in ok if not o.new_path),
+                "failed": failed, "server": p.get("name"),
+                "backup": backup_info(backup_dir) if backup_dir is not None and backup_dir.exists() and ok else None}
 
     # ------------------------------------------------------------------ análisis
 
