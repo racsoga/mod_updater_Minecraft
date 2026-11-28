@@ -47,13 +47,13 @@ const MODS_SCREENS = ["scan", "recover", "results", "apply", "done"];
 let modsScreen = null;
 
 function show(screen) {
-  for (const s of ["setup", "diag", "analysis", "explore", "suggest", ...MODS_SCREENS]) $(`#screen-${s}`).hidden = s !== screen;
+  for (const s of ["setup", "diag", "bisect", "analysis", "explore", "suggest", ...MODS_SCREENS]) $(`#screen-${s}`).hidden = s !== screen;
   $("#ex-basket").hidden = screen !== "explore" || !BASKET.size;
   if (MODS_SCREENS.includes(screen)) modsScreen = screen;
   // Pestañas: ocultas en la bienvenida (primera vez) y mientras se actualiza (no se puede salir).
   $("#tabs").hidden = (screen === "setup" && setupMode === "setup") || screen === "apply";
   renderProfileSelect(screen);
-  selectTab({ setup: "settings", diag: "diag", analysis: "analysis", explore: "explore", suggest: "suggest" }[screen] || "mods");
+  selectTab({ setup: "settings", diag: "diag", bisect: "diag", analysis: "analysis", explore: "explore", suggest: "suggest" }[screen] || "mods");
   $("#btn-rescan").hidden = screen !== "results";
   $("#actionbar").hidden = screen !== "results" || picking;
   $("#pickbar").hidden = screen !== "results" || !picking;
@@ -247,6 +247,7 @@ function showResults(data) {
   picking = false; PICK.clear();  // las filas cambian: lo marcado antes apuntaría a otros mods
   DATA = data;
   checkDiagNew();
+  checkBisectPending();
   MODS = data.rows;
   byName = Object.fromEntries(MODS.filter(m => m.s !== "dep").map(m => [m.name, m]));
   filter = "all"; query = ""; okOpen = false;
@@ -379,6 +380,7 @@ function render() {
   if (focusKey) document.querySelector(focusKey)?.focus();
   summary();
   renderPickbar();
+  applyBisectLock();
 }
 
 /* ---------------------------------------------------------------- activar y desactivar */
@@ -481,7 +483,7 @@ function summary() {
   const sel = MODS.filter(m => m.checked);
   const selUp = sel.filter(m => m.s === "up").length, selDep = sel.filter(m => m.s === "dep").length;
   const btn = $("#go");
-  btn.disabled = sel.length === 0;
+  btn.disabled = sel.length === 0 || bisectActive;
   btn.textContent = !sel.length ? t("ui.go_choose")
     : selDep && selUp ? t("ui.go_both", { updates: selUp, installs: selDep })
     : selDep ? t("ui.go_install", { count: selDep })
@@ -491,7 +493,7 @@ function summary() {
   const warn = broken.length
     ? `<span class="warn">${esc(t("ui.dep_warning", { dep: joinList(deps.filter(d => !d.checked).map(d => d.name)), names: joinList(broken) }))}</span>` : "";
   $("#summary").innerHTML = `<span class="count">${esc(t("ui.selected", { count: ups.length + deps.length, selected: sel.length }))}</span>`
-    + (warn || `<span class="safe">${esc(t("ui.safe"))}</span>`);
+    + (bisectActive ? `<span class="warn">${esc(t("bs.busy"))}</span>` : warn || `<span class="safe">${esc(t("ui.safe"))}</span>`);
 }
 
 /* ================================================================ actualizando / final */
@@ -764,7 +766,23 @@ async function revertLanguagePreview() {
   applyStrings(s.lang, s.strings);
 }
 
+let modsStale = false;
+let bisectActive = false;  // búsqueda por mitades a medias: Mis mods no deja cambiar nada
+
+// Con una búsqueda a medias, nada de Mis mods puede cambiar archivos (el servidor también lo rechaza).
+function applyBisectLock() {
+  for (const el of document.querySelectorAll("#list [data-toggle], #btn-pick, #go")) {
+    if (bisectActive) { el.disabled = true; el.title = t("bs.busy"); }
+    else if (el.title === t("bs.busy")) {
+      el.title = "";
+      if (el.id === "btn-pick") el.disabled = false;  // los demás los vuelve a pintar render()/summary()
+    }
+  }
+  if (bisectActive && picking) endPicking();
+}  // la búsqueda por mitades cambió archivos: Mis mods se vuelve a revisar
+
 function goMods() {
+  if (modsStale) { modsStale = false; startScan(); return; }
   if (modsScreen && modsScreen !== "apply") show(modsScreen);
   else if (DATA) showResults(DATA);
   else startScan();
@@ -1620,10 +1638,13 @@ async function openDiag() {
   $("#dg-new-notice")?.remove();
   const res = await api().diag_reports();
   DG.reports = res.reports || [];
+  const pending = await api().bisect_status();
+  $("#dg-bisect-resume").hidden = !(pending && pending.active);
   const empty = !DG.reports.length;
   $("#dg-source").hidden = empty;
   $("#dg-foot").hidden = empty;
   $("#dg-need-scan").hidden = empty || res.scanned;
+  $("#dg-unclear").hidden = empty;
   if (empty) {
     $("#dg-title").textContent = t("dg.empty_title");
     $("#dg-deck").textContent = t("dg.empty_deck");
@@ -1681,7 +1702,157 @@ async function diagAction(btn) {
   startScan();
 }
 
+/* ---------------------------------------------------------------- búsqueda por mitades */
+
+const maxRounds = n => (n > 1 ? Math.ceil(Math.log2(n)) + 1 : 1);
+const bisectable = m => !!m.file && !m.off && m.s !== "unreadable";
+
+function bsShow(part) {
+  for (const p of ["intro", "round", "result"]) $(`#bs-${p}`).hidden = p !== part;
+  $("#bs-error").hidden = true;
+}
+
+function bsError(msg) {
+  $("#bs-error").textContent = msg || "";
+  $("#bs-error").hidden = !msg;
+}
+
+async function openBisect() {
+  show("bisect");
+  const st = await api().bisect_status();
+  if (st && st.active) { renderBisect(st); return; }
+  $("#bs-kicker").hidden = true;
+  $("#bs-combo").hidden = true;
+  $("#bs-title").textContent = t("bs.title");
+  $("#bs-deck").textContent = t("bs.deck");
+  bsShow("intro");
+  const mods = MODS.filter(bisectable);
+  if (!mods.length) {
+    $("#bs-stats").textContent = t("dg.need_scan");
+    $("#bs-start").disabled = true;
+    return;
+  }
+  $("#bs-start").disabled = false;
+  const stats = () => {
+    const n = mods.length - document.querySelectorAll("#bs-exclude-list input:checked").length;
+    $("#bs-stats").textContent = t("bs.stats", { count: n, rounds: maxRounds(n) });
+  };
+  $("#bs-exclude-list").innerHTML = mods.map(m => `<li><label class="toggle"><input type="checkbox" value="${m.id}">
+    <span>${esc(m.name)}</span></label></li>`).join("");
+  $("#bs-exclude-list").onchange = stats;
+  stats();
+}
+
+function renderBisect(st) {
+  show("bisect");
+  modsStale = true;
+  bisectActive = !st.done;
+  if (st.done) {
+    $("#bs-pending-notice")?.remove();
+    $("#bs-kicker").hidden = true;
+    bsShow("result");
+    const one = st.result.length === 1;
+    $("#bs-title").textContent = !st.result.length ? t("bs.result_none") : one ? t("bs.result_one", { name: st.result[0] })
+      : t("bs.result_group", { names: joinList(st.result) });
+    $("#bs-deck").textContent = st.problems.length ? t("bs.restore_failed", { names: joinList(st.problems) })
+      : st.result.length ? t("bs.restored") : `${t("bs.result_none_deck")} ${t("bs.restored")}`;
+    // Puede que el fallo sea una combinación con otro mod: la búsqueda señala a uno de los dos.
+    $("#bs-combo").hidden = !st.result.length;
+    const acts = [];
+    if (st.result_rows.length) acts.push(`<button class="btn-primary" type="button" id="bs-disable">${esc(t("dg.act_disable", { names: joinList(st.result) }))}</button>`);
+    if (one && st.result_rows.length && MODS[st.result_rows[0]] && MODS[st.result_rows[0]].vers)
+      acts.push(`<button class="btn-secondary" type="button" id="bs-versions">${esc(t("bs.versions", { name: st.result[0] }))}</button>`);
+    acts.push(`<button class="btn-secondary" type="button" id="bs-done">${esc(t("bs.back"))}</button>`);
+    $("#bs-result-actions").innerHTML = acts.join("");
+    $("#bs-disable")?.addEventListener("click", async () => {
+      const res = await api().mods_set_enabled(st.result_rows, false, "with");
+      if (!res.ok) { bsError(res.message || ""); return; }
+      startScan();
+    });
+    $("#bs-versions")?.addEventListener("click", e => openChangelog(st.result_rows[0], e.currentTarget));
+    $("#bs-done").addEventListener("click", openDiag);
+    return;
+  }
+  $("#bs-kicker").hidden = false;
+  $("#bs-combo").hidden = true;
+  $("#bs-kicker").textContent = t("bs.round", { round: st.round, total: st.round - 1 + st.left });
+  $("#bs-title").textContent = t("bs.round_title");
+  // Primera vuelta: "Buscamos entre N sospechosos"; después, "Quedan N".
+  $("#bs-deck").textContent = t(st.round === 1 ? "bs.round_deck_first" : "bs.round_deck", { count: st.testing.length, suspects: st.suspects });
+  $("#bs-off-summary").textContent = t("bs.off_list", { count: st.testing.length });
+  $("#bs-off-list").innerHTML = st.testing.map(n => `<li>${esc(n)}</li>`).join("");
+  bsShow("round");
+  if (st.problems && st.problems.length) bsError(t("bs.restore_failed", { names: joinList(st.problems) }));
+}
+
+const bsButtons = () => [$("#bs-fails"), $("#bs-works"), $("#bs-cancel"), $("#bs-start")];
+
+async function bsCall(fn) {
+  bsButtons().forEach(b => { b.disabled = true; });  // una sola llamada a la vez
+  try { return await fn(); } finally { bsButtons().forEach(b => { b.disabled = false; }); }
+}
+
+async function bisectAnswer(fails) {
+  const st = await bsCall(() => api().bisect_answer(fails));
+  if (!st.ok) {
+    if (st.reason !== "minecraft" && !(await api().bisect_status())) { modsStale = true; renderBisectAborted(st.message); return; }
+    bsError(st.message); return;
+  }
+  renderBisect(st);
+}
+
+// La vuelta no se pudo preparar: la búsqueda se canceló y todo está como al empezar.
+function renderBisectAborted(message) {
+  bisectActive = false;
+  $("#bs-combo").hidden = true;
+  $("#bs-kicker").hidden = true;
+  $("#bs-title").textContent = t("bs.title");
+  $("#bs-deck").textContent = message;
+  $("#bs-result-actions").innerHTML = `<button class="btn-secondary" type="button" id="bs-done">${esc(t("bs.back"))}</button>`;
+  $("#bs-done").addEventListener("click", openDiag);
+  bsShow("result");
+  $("#bs-pending-notice")?.remove();
+}
+
+function wireBisect() {
+  $("#dg-bisect").addEventListener("click", openBisect);
+  $("#dg-bisect-continue").addEventListener("click", openBisect);
+  $("#bs-back").addEventListener("click", openDiag);
+  $("#bs-start").addEventListener("click", async () => {
+    const excluded = [...document.querySelectorAll("#bs-exclude-list input:checked")].map(i => Number(i.value));
+    const st = await bsCall(() => api().bisect_start(excluded));
+    if (!st.ok) { bsError(st.message); return; }
+    renderBisect(st);
+  });
+  $("#bs-fails").addEventListener("click", () => bisectAnswer(true));
+  $("#bs-works").addEventListener("click", () => bisectAnswer(false));
+  $("#bs-cancel").addEventListener("click", async () => {
+    const res = await bsCall(() => api().bisect_cancel());
+    if (!res.ok) { bsError(res.message); return; }
+    modsStale = true;
+    bisectActive = false;
+    $("#bs-pending-notice")?.remove();
+    openDiag();
+  });
+}
+
+// Búsqueda a medias (se cerró la app): aviso en Mis mods para continuar.
+async function checkBisectPending() {
+  let st;
+  try { st = await api().bisect_status(); } catch { return; }
+  $("#bs-pending-notice")?.remove();
+  const was = bisectActive;
+  bisectActive = !!(st && st.active);
+  if (was !== bisectActive && !$("#screen-results").hidden) render();  // pie y controles al día
+  else applyBisectLock();
+  if (!st || !st.active || !$("#notices")) return;
+  $("#notices").insertAdjacentHTML("afterbegin", `<li class="bad" id="bs-pending-notice">${esc(t("bs.resume"))}
+    <button class="linkbtn" type="button" id="bs-pending-go">${esc(t("bs.continue"))}</button></li>`);
+  $("#bs-pending-go").addEventListener("click", openBisect);
+}
+
 function wireDiag() {
+  wireBisect();
   $("#dg-report").addEventListener("change", e => runDiag(Number(e.target.value)));
   $("#dg-list").addEventListener("click", e => { const b = e.target.closest("[data-dg]"); if (b) diagAction(b); });
   $("#dg-open-folder").addEventListener("click", () => api().diag_open_folder());

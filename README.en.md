@@ -39,6 +39,7 @@ Mod Updater checks your Minecraft `mods` folder, recognises each mod by its fing
 - **Enable and disable mods** without deleting them (they become `.jar.disabled`, as in Prism, CurseForge and Modrinth App), one by one or several at once. If you disable a library other mods use, it warns you.
 - **Pin a mod's version** so it isn't updated (with a reason, e.g. "the server uses this one") and **go back to an earlier version** if the new one causes problems.
 - **Crash diagnosis**: reads Minecraft's crash report on your PC and tells you which mod to suspect, with the line that shows it and a button to fix it (install what's missing, swap an incompatible mod, disable, or go back to an earlier version).
+- **Find the mod that breaks your game by halves**, when the diagnosis isn't clear: you just open Minecraft and say whether it still fails.
 - **See the changes before updating**: the notes of every version between yours and the new one, highlighting possible world-breaking changes.
 
 <p align="center">

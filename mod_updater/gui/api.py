@@ -47,6 +47,8 @@ from ..deps import DependencyFinder, DepPlan, dependents_of, keep_needed, plan_w
 from ..resolver import DISABLE, ENABLE, REMOVE, UPDATE, Dep
 from ..pins import apply_pins, find_pins, pin_entry, pin_key
 from .. import diagnose as diag
+from .. import bisect as bis
+from ..deps import _current_deps, _needs
 from .. import net
 from ..downloader import (
     Outcome,
@@ -341,6 +343,8 @@ class Api:
 
     def profile_remove(self, profile_id: str) -> dict:
         """Quita el perfil de la lista; su carpeta y sus mods no se tocan."""
+        if self._bisect_file(self._settings(), str(profile_id)).exists():
+            return {"ok": False, "reason": "bisect", "message": t("bs.busy")}
         if not self._busy.acquire(blocking=False):  # no cambiar de carpeta a mitad de una revisión
             return {"ok": False, "message": t("apply.busy")}
         try:
@@ -375,6 +379,9 @@ class Api:
         if self._busy.locked():  # a mitad de una revisión o actualización: la carpeta no puede cambiar
             return {"ok": False, "message": t("apply.busy")}
         s = self._settings()
+        new_dir = data.get("mods_dir")
+        if new_dir and os.path.normcase(os.path.normpath(str(new_dir))) != os.path.normcase(os.path.normpath(str(s.mods_path)))                 and self._bisect_active():  # la búsqueda por mitades se quedaría con mods desactivados sin aviso
+            return {"ok": False, "reason": "bisect", "message": t("bs.busy")}
         if data.get("language") in ("auto", *i18n.SUPPORTED):
             s.language = data["language"]
             i18n.set_language(s.language)
@@ -518,6 +525,9 @@ class Api:
 
     # ------------------------------------------------------------------ acciones
 
+    def _bisect_active(self) -> bool:
+        return self._bisect_load() is not None
+
     def apply(self, ids: list[int]) -> dict:
         """Aplica los cambios elegidos (filas "up" y "dep") en segundo plano.
 
@@ -525,6 +535,8 @@ class Api:
         """
         if self._plan is None:
             return {"ok": False, "message": t("apply.no_scan")}
+        if self._bisect_active():
+            return {"ok": False, "reason": "bisect", "message": t("bs.busy")}
         chosen = [self._rows[i] for i in sorted(set(ids)) if 0 <= i < len(self._rows) and self._row_s[i] in ("up", "dep")]
         if not chosen:
             return {"ok": False, "message": t("apply.nothing")}
@@ -759,6 +771,8 @@ class Api:
         """Instala el plan preparado con install_plan (misma pantalla y copia que al actualizar)."""
         if not self._install:
             return {"ok": False, "message": t("apply.nothing")}
+        if self._bisect_active():
+            return {"ok": False, "reason": "bisect", "message": t("bs.busy")}
         s = self._settings()
         if self._running(s.mods_path.parent):
             return {"ok": False, "reason": "minecraft", "message": t("apply.minecraft_open")}
@@ -850,6 +864,8 @@ class Api:
         """Instala las versiones exactas de la lista importada (y quita lo que sobra si se pide)."""
         if not self._import:
             return {"ok": False, "message": t("apply.nothing")}
+        if self._bisect_active():
+            return {"ok": False, "reason": "bisect", "message": t("bs.busy")}
         s = self._settings()
         if self._running(s.mods_path.parent):
             return {"ok": False, "reason": "minecraft", "message": t("apply.minecraft_open")}
@@ -1017,6 +1033,8 @@ class Api:
             return {"ok": False, "message": t("scan.err_offline") if exc.kind == "offline" else t("cl.err_network")}
         if v is None or self._is_current(r, v) or not v["url"] or not v["file"]:
             return {"ok": False, "message": t("pin.err_version")}
+        if self._bisect_active():
+            return {"ok": False, "reason": "bisect", "message": t("bs.busy")}
         if not self._busy.acquire(blocking=False):
             return {"ok": False, "message": t("apply.busy")}
         res = replace(r, kind=UPDATE, status=ACTUALIZABLE, new_version=v["version"], new_channel=v["channel"],
@@ -1203,6 +1221,148 @@ class Api:
             return {"ok": True, "open_versions": i} if i is not None else {"ok": False, "message": t("dg.err_action")}
         return {"ok": False, "message": t("dg.err_action")}
 
+    # ------------------------------------------------------------------ búsqueda por mitades
+
+    def _bisect_file(self, s: Settings, profile_id: str | None = None) -> Path:
+        return bis.state_file(self._cache(), profile_id or s.active_profile)
+
+    def _bisect_sync_rows(self) -> None:
+        """Tras renombrar en disco, las filas apuntan al archivo que hay ahora (x.jar o x.jar.disabled)."""
+        mods_dir = self._settings().mods_path
+        for r in self._results:
+            if r.mod is None:
+                continue
+            on = mods_dir / r.mod.enabled_name
+            off = on.with_name(on.name + bis.SUFFIX)
+            target = on if on.exists() else off if off.exists() else None
+            if target is not None:
+                r.mod.path, r.mod.file_name = target, target.name
+
+    def _bisect_abort(self, b, s: Settings, problems: list) -> dict:
+        """Una vuelta que no se pudo preparar (archivo bloqueado o repetido): se deja todo como al
+        empezar en vez de hacer una pregunta cuya respuesta sería engañosa."""
+        bis.restore(s.mods_path, b)
+        self._bisect_save(None)
+        self._bisect_sync_rows()
+        return {"ok": False, "message": t("bs.apply_failed", names=_join([b.display(j) for j in problems]))}
+
+    def _bisect_load(self) -> bis.Bisect | None:
+        s = self._settings()
+        try:
+            data = json.loads(self._bisect_file(s).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        if os.path.normcase(str(data.get("mods_dir"))) != os.path.normcase(str(s.mods_path)):
+            return None
+        try:
+            return bis.Bisect.from_dict(data["state"])
+        except (KeyError, TypeError):
+            return None
+
+    def _bisect_save(self, b: bis.Bisect | None) -> None:
+        s = self._settings()
+        path = self._bisect_file(s)
+        if b is None:
+            path.unlink(missing_ok=True)
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"mods_dir": str(s.mods_path), "state": b.to_dict()}, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, path)
+
+    def _bisect_view(self, b: bis.Bisect, problems: list | None = None) -> dict:
+        rows = {r.mod.enabled_name: i for i, r in enumerate(self._rows) if r.mod is not None}
+        return {"ok": True, "active": not b.done, "done": b.done, "round": b.round, "left": b.rounds_left,
+                "suspects": len(b.suspects), "testing": [b.display(j) for j in b.testing],
+                "result": [b.display(j) for j in b.result], "result_rows": [rows[j] for j in b.result if j in rows],
+                "problems": [b.display(j) for j in problems or []]}
+
+    def bisect_status(self) -> dict | None:
+        """La búsqueda en curso del perfil activo (para retomarla), o None."""
+        b = self._bisect_load()
+        if b is None:
+            return None
+        self._bisect_sync_rows()  # al retomar, las filas pueden venir de una revisión hecha a mitad de vuelta
+        return self._bisect_view(b)
+
+    def bisect_start(self, excluded: list) -> dict:
+        """Empieza: guarda qué está activo y desactiva la primera mitad. `excluded`: filas
+        "seguro que no es este" (no son sospechosos, pero sí se respetan sus dependencias)."""
+        if not self._results:
+            return {"ok": False, "message": t("ex.need_scan")}
+        s = self._settings()
+        if self._running(s.mods_path.parent):
+            return {"ok": False, "reason": "minecraft", "message": t("apply.minecraft_open")}
+        if self._bisect_active():
+            return {"ok": False, "reason": "bisect", "message": t("bs.busy")}
+        try:
+            skip = {self._rows[int(i)].mod.enabled_name for i in excluded or []
+                    if 0 <= int(i) < len(self._rows) and self._rows[int(i)].mod is not None}
+        except (TypeError, ValueError):
+            return {"ok": False, "message": t("bs.none")}
+        active = [r for r in self._results if r.mod is not None and not r.unreadable and not r.mod.disabled]
+        needs = {r.mod.enabled_name: [x.mod.enabled_name for x in active if x is not r and _needs(_current_deps(r), x)]
+                 for r in active}
+        b = bis.Bisect.start([r.mod.enabled_name for r in active], needs, excluded=skip,
+                             names={r.mod.enabled_name: r.name for r in active})
+        if b.done:
+            return {"ok": False, "message": t("bs.nothing")}
+        if not self._busy.acquire(blocking=False):
+            return {"ok": False, "message": t("apply.busy")}
+        try:
+            self._bisect_save(b)  # primero el estado: si algo se corta, se sabe qué restaurar
+            problems = bis.apply_round(s.mods_path, b)
+            if problems:
+                return self._bisect_abort(b, s, problems)
+            self._bisect_sync_rows()
+            return self._bisect_view(b)
+        finally:
+            self._busy.release()
+
+    def bisect_answer(self, fails: bool) -> dict:
+        """"¿Sigue fallando?" Sí/No: siguiente vuelta, o resultado (y todo restaurado)."""
+        b = self._bisect_load()
+        if b is None:
+            return {"ok": False, "message": t("bs.none")}
+        s = self._settings()
+        if self._running(s.mods_path.parent):
+            return {"ok": False, "reason": "minecraft", "message": t("bs.close_minecraft")}
+        if not self._busy.acquire(blocking=False):
+            return {"ok": False, "message": t("apply.busy")}
+        try:
+            b.answer(bool(fails))
+            if b.done:
+                problems = bis.restore(s.mods_path, b)
+                self._bisect_save(None)
+            else:
+                self._bisect_save(b)
+                problems = bis.apply_round(s.mods_path, b)
+                if problems:
+                    return self._bisect_abort(b, s, problems)
+            self._bisect_sync_rows()
+            return self._bisect_view(b, problems)
+        finally:
+            self._busy.release()
+
+    def bisect_cancel(self) -> dict:
+        """Cancela y deja todo como al empezar."""
+        b = self._bisect_load()
+        if b is None:
+            return {"ok": True, "problems": []}
+        s = self._settings()
+        if self._running(s.mods_path.parent):
+            return {"ok": False, "reason": "minecraft", "message": t("bs.close_minecraft")}
+        if not self._busy.acquire(blocking=False):
+            return {"ok": False, "message": t("apply.busy")}
+        try:
+            problems = bis.restore(s.mods_path, b)
+            self._bisect_save(None)
+            self._bisect_sync_rows()
+        finally:
+            self._busy.release()
+        return {"ok": not problems, "problems": [b.display(j) for j in problems],
+                "message": t("bs.restore_failed", names=_join([b.display(j) for j in problems])) if problems else ""}
+
     # ------------------------------------------------------------------ análisis
 
     def analysis(self, include_libraries: bool = False) -> dict:
@@ -1239,6 +1399,8 @@ class Api:
 
     def _undo(self, target: Path | None) -> dict:
         s = self._settings()
+        if self._bisect_active():
+            return {"ok": False, "reason": "bisect", "message": t("bs.busy")}
         if target is None:
             return {"ok": False, "message": t("undo.none")}
         if self._running(s.mods_path.parent):
@@ -1273,6 +1435,8 @@ class Api:
         rows = {id(r): i for i, r in enumerate(self._rows)}
         picked = [self._rows[i] for i in sorted({int(i) for i in ids or []}) if 0 <= i < len(self._rows)]
         targets = [r for r in picked if r.mod is not None and not r.unreadable and r.mod.disabled == enabled]
+        if self._bisect_active():
+            return {"ok": False, "reason": "bisect", "message": t("bs.busy")}
         if not targets:
             return {"ok": True, "rows": [], "also": [], "failed": []}
         if any(r.mod.path.parent.resolve() != s.mods_path.resolve() for r in targets):

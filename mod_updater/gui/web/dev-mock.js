@@ -50,6 +50,16 @@
 
   const emit = (e, p) => window.onBackend(e, p);
   let diagSeen = false;
+  let bs = null;
+  const bsView = () => ({ ok: true, active: !bs.done, done: bs.done, round: bs.round, left: bs.done ? 0 : Math.max(1, Math.ceil(Math.log2(Math.max(bs.suspects.length, 1))) + (bs.proven ? 0 : 1)), suspects: bs.suspects.length,
+    testing: bs.testing, result: bs.result, result_rows: bs.result.map(n => rows.find(r => r.name === n).id), problems: [] });
+  const bsNext = () => {
+    if (!bs.suspects.length) { bs.done = true; bs.result = []; return; }
+    if (bs.suspects.length === 1 && bs.proven) { bs.done = true; bs.result = bs.suspects; bs.testing = []; return; }
+    bs.testing = bs.suspects.length === 1 ? bs.suspects : bs.suspects.slice(0, Math.floor(bs.suspects.length / 2));
+    bs.round++;
+  };
+  if (params.has("bspending")) { bs = { suspects: ["Balm", "Accessories", "Curios API"], testing: ["Balm"], round: 2, max: 4, proven: false, done: false, result: [] }; }
   window.pywebview = { api: {
     get_state: state,
     profile_switch: async id => { profs.forEach(p => p.active = p.id === id); return { ok: true, state: await state() }; },
@@ -100,6 +110,7 @@
     },
     // Activar/desactivar: Curios API la necesita Accessories (para ver el aviso de librería).
     mods_set_enabled: async (ids, enabled, mode = "ask") => {
+      if (bs && !bs.done) return { ok: false, reason: "bisect", message: "Hay una búsqueda por mitades en curso. Termínala o cancélala en Diagnóstico antes de cambiar mods." };
       if (params.has("mcopen")) return { ok: false, reason: "minecraft", message: "Minecraft está abierto con esta carpeta. Ciérralo y vuelve a pulsar el botón." };
       const S = await strings(settings.language);
       const fill = (key, p = {}) => S[key].replace(/\{(\w+)\}/g, (m, k) => p[k] ?? m);
@@ -114,6 +125,7 @@
       return { ok: true, rows: targets.map(r => ({ id: r.id, off: r.off })), also: [], failed: [] };
     },
     apply: async ids => {
+      if (bs && !bs.done) return { ok: false, reason: "bisect", message: "Hay una búsqueda por mitades en curso. Termínala o cancélala en Diagnóstico antes de cambiar mods." };
       if (params.has("mcopen")) return { ok: false, reason: "minecraft", message: "Minecraft está abierto con esta carpeta. Ciérralo y vuelve a pulsar el botón." };
       const chosen = rows.filter(r => ids.includes(r.id));
       let done = 0;
@@ -196,6 +208,19 @@
         backup: { path: "C:\\…\\mods_backup\\2026-11-21_1600", date: "2026-11-21T16:00:00", changes: 1, undone: false, undoable: true } }), 800);
       return { ok: true, total: 1 };
     },
+    // Búsqueda por mitades de ejemplo: el culpable es Accessories (?bspending: una búsqueda a medias).
+    bisect_status: async () => (bs && !bs.done ? bsView() : null),
+    bisect_start: async excluded => {
+      const names = rows.filter(r => r.file && !r.off && !excluded.includes(r.id)).map(r => r.name);
+      bs = { suspects: names, testing: [], round: 0, max: names.length > 1 ? Math.ceil(Math.log2(names.length)) + 1 : 1, proven: false, done: false, result: [] };
+      bsNext(); return bsView();
+    },
+    bisect_answer: async fails => {
+      const t = new Set(bs.testing);
+      if (fails) bs.suspects = bs.suspects.filter(n => !t.has(n)); else { bs.suspects = bs.suspects.filter(n => t.has(n)); bs.proven = true; }
+      bsNext(); return bsView();
+    },
+    bisect_cancel: async () => { bs = null; return { ok: true, problems: [] }; },
     // Diagnóstico de ejemplo (?nodiag: sin informes). Casos de dos crash reports reales (anonimizados).
     diag_new: async () => ({ new: !params.has("nodiag") && !diagSeen, date: "2026-11-24T12:08" }),
     diag_reports: async () => {

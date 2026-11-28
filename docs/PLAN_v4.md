@@ -190,6 +190,7 @@ No bloquea la Release 0.4.0: si no está aprobada a tiempo, se publica sin firma
 
 ## 12. Pulido, QA y Release 0.4.0
 
+0. **Búsqueda por mitades: "Buscar con qué otro mod choca"** (decisión de Oscar en el punto de control B, 28/11). Cuando el fallo viene de dos mods juntos (A con B), la búsqueda señala a uno (A). Botón en el resultado que repite la búsqueda dejando A siempre activo para encontrar B. Mientras tanto, el resultado ya avisa de que puede ser una combinación.
 1. Pasada completa con **qa-bug-hunter** e **Impeccable** sobre todas las pantallas nuevas. Corregir críticos e importantes sin preguntar; preguntar por los menores dudosos.
 2. Accesibilidad: teclado, contraste, `prefers-reduced-motion`, textos alternativos.
 3. Rendimiento: abrir con 150 mods en menos de 3 s con caché; leer logs grandes y consultar versiones sin congelar la ventana.

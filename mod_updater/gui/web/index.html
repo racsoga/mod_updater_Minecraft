@@ -211,11 +211,53 @@
       <button class="btn-small" type="button" id="dg-open-folder" data-i18n="dg.open_folder"></button>
     </div>
     <p class="ex-note" id="dg-need-scan" hidden><span data-i18n="dg.need_scan"></span> <button class="linkbtn" type="button" id="dg-scan" data-i18n="ui.check_again"></button></p>
+    <p class="ex-note" id="dg-bisect-resume" hidden><span data-i18n="bs.resume"></span>
+      <button class="linkbtn" type="button" id="dg-bisect-continue" data-i18n="bs.continue"></button></p>
     <div class="dg-list" id="dg-list"></div>
+    <p class="dg-unclear" id="dg-unclear" hidden><span data-i18n="bs.unclear"></span>
+      <button class="linkbtn" type="button" id="dg-bisect" data-i18n="bs.link"></button></p>
     <div class="dg-foot" id="dg-foot" hidden>
       <button class="btn-small" type="button" id="dg-copy" data-i18n="dg.copy"></button>
       <p class="an-hint" id="dg-hint" data-i18n="dg.honest"></p>
     </div>
+  </section>
+
+  <!-- ============================================ Búsqueda por mitades (en la pestaña Diagnóstico) -->
+  <section class="screen" id="screen-bisect" hidden>
+    <div class="lede" aria-live="polite">
+      <span class="dg-kicker likely" id="bs-kicker" hidden></span>
+      <h2 id="bs-title"></h2>
+      <p id="bs-deck"></p>
+      <p class="bs-combo" id="bs-combo" hidden data-i18n="bs.combo_hint"></p>
+    </div>
+    <div id="bs-intro" hidden>
+      <p class="bs-stats" id="bs-stats"></p>
+      <details class="bs-exclude">
+        <summary data-i18n="bs.exclude_title"></summary>
+        <p class="an-hint" data-i18n="bs.exclude_hint"></p>
+        <ul class="bs-list" id="bs-exclude-list"></ul>
+      </details>
+      <div class="dg-actions">
+        <button class="btn-primary" type="button" id="bs-start" data-i18n="bs.start"></button>
+        <button class="btn-secondary" type="button" id="bs-back" data-i18n="ui.cancel"></button>
+      </div>
+    </div>
+    <div id="bs-round" hidden>
+      <details class="bs-exclude">
+        <summary id="bs-off-summary"></summary>
+        <ul class="bs-list" id="bs-off-list"></ul>
+      </details>
+      <div class="dg-actions">
+        <button class="btn-small btn-answer" type="button" id="bs-fails" data-i18n="bs.fails"></button>
+        <button class="btn-small btn-answer" type="button" id="bs-works" data-i18n="bs.works"></button>
+      </div>
+      <p class="an-hint" data-i18n="bs.round_hint"></p>
+      <p class="dg-unclear"><button class="linkbtn" type="button" id="bs-cancel" data-i18n="bs.cancel"></button></p>
+    </div>
+    <div id="bs-result" hidden>
+      <div class="dg-actions" id="bs-result-actions"></div>
+    </div>
+    <p class="cl-error" id="bs-error" hidden></p>
   </section>
 
   <!-- ============================================ Análisis -->
