@@ -55,6 +55,7 @@
   "mg.n_libs_other": "{count} libraries",
   "mg.wont_have_one": "Won't be in the new profile: {names}.",
   "mg.wont_have_other": "Won't be in the new profile ({count}): {names}.",
+  "mg.wont_have_title": "Won't be in the new profile ({count})",
   "mg.wont_have_none": "All your mods will be there.",
   "mg.beta_only": "beta only",
   "mg.created": "Profile “{name}” created in {folder}. Pick it in the profile selector to check it.",

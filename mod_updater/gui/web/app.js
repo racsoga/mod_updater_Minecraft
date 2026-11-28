@@ -1401,8 +1401,10 @@ async function migrateCheck() {
     + col(t("mg.col_missing", { count: res.missing.length }), res.missing.map(m => li(m.name, missingNote(m))), t("mg.none"))
     + col(t("mg.col_alt", { count: res.alternative.length }), res.alternative.map(altItem), t("mg.none"))
     + `</div>`
-    + (res.install_mods ? `<p class="mg-wont">${esc(res.wont_have.length ? t("mg.wont_have", { count: res.wont_have.length, names: joinList(res.wont_have) }) : t("mg.wont_have_none"))}</p>
-       <div class="dg-actions mg-create"><button class="btn-primary" type="button" id="mg-create"></button></div>
+    + (res.install_mods ? (res.wont_have.length > 8  // lista larga: plegada, para no repetir la columna "Faltan"
+        ? `<details class="mg-wont"><summary>${esc(t("mg.wont_have_title", { count: res.wont_have.length }))}</summary>${esc(joinList(res.wont_have))}</details>`
+        : `<p class="mg-wont">${esc(res.wont_have.length ? t("mg.wont_have", { count: res.wont_have.length, names: joinList(res.wont_have) }) : t("mg.wont_have_none"))}</p>`)
+      + `<div class="dg-actions mg-create"><button class="btn-primary" type="button" id="mg-create"></button></div>
        <p class="an-hint">${esc(t("mg.create_hint", { current: res.current }))}</p>` : "");
   const label = () => {
     const extra = box.querySelectorAll("[data-mg-opt]:checked").length;

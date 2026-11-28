@@ -55,6 +55,7 @@
   "mg.n_libs_other": "{count} librerías",
   "mg.wont_have_one": "No estará en el perfil nuevo: {names}.",
   "mg.wont_have_other": "No estarán en el perfil nuevo ({count}): {names}.",
+  "mg.wont_have_title": "No estarán en el perfil nuevo ({count})",
   "mg.wont_have_none": "Estarán todos tus mods.",
   "mg.beta_only": "solo en beta",
   "mg.created": "Perfil «{name}» creado en {folder}. Elígelo en el selector de perfiles para revisarlo.",
