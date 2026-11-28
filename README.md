@@ -42,6 +42,7 @@ Mod Updater revisa la carpeta `mods` de tu Minecraft, reconoce cada mod por su h
 - **Buscar el mod que rompe la partida por mitades**, si el diagnóstico no lo deja claro: tú solo abres Minecraft y dices si sigue fallando.
 - **¿Puedo pasar a otra versión de Minecraft?**: cuántos de tus mods existen ya para ella y, si te convence, un perfil nuevo para esa versión sin tocar el actual.
 - **Preparar el servidor**: compara tu perfil con el del servidor y copia solo lo que el servidor necesita (sin los mods de solo cliente).
+- **Compartir también la configuración**: exporta la lista con la carpeta `config` para que la otra persona tenga los mismos mods **y** los mismos ajustes. Las copias de seguridad guardan también la configuración.
 - **Ver los cambios antes de actualizar**: las notas de todas las versiones entre la tuya y la nueva, con avisos de posibles cambios que rompen partidas.
 
 <p align="center">

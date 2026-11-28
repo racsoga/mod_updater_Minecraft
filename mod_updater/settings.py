@@ -29,6 +29,7 @@ class Settings:
     setup_done: bool = False  # ya pasó por la pantalla de bienvenida
     use_curseforge: bool = True  # False = "continuar sin key (solo Modrinth)"
     language: str = "auto"  # "auto" = idioma de la interfaz de Windows; o "es", "en"
+    backup_config: bool = True  # guardar también config y defaultconfigs en las copias (si cambian)
     check_updates: bool = True  # avisar de nuevas versiones de la app (como mucho una vez al día)
     answers: dict = field(default_factory=dict)  # cuestionario de Sugerencias (por perfil)
     pins: dict = field(default_factory=dict)  # mods fijados (por perfil): {"fuente:proyecto": {name, version, reason, ids}}

@@ -165,17 +165,19 @@
       // Simula S3: con algo para añadir, el primero que se quita lo necesita lo nuevo y no se quita.
       kept: sel.add.length && sel.remove.length ? [`No se quita ${sel.remove[0]}: lo necesita ${sel.add[0].name}, que vas a añadir.`] : [] }),
     // Lista de mods (sin archivos reales).
-    modlist_export: async kind => ({ ok: true, file: kind === "mrpack" ? "Principal.mrpack" : "Principal.modlist.json",
+    modlist_export: async kind => ({ ok: true, config: kind === "zip", file: kind === "mrpack" ? "Principal.mrpack" : kind === "zip" ? "Principal.zip" : "Principal.modlist.json",
       excluded: kind === "mrpack" ? ["Mod de ejemplo"] : [], no_loader_version: false }),
     modlist_import: async () => ({ ok: true, file: "Servidor.modlist.json", mismatch: null,
       profile: { minecraft: "1.21.1", loader: "NeoForge" }, same: 118,
       add: [{ name: "Waystones", version: "21.1.47" }], update: [{ name: "Create", version: "6.0.8", have: "6.0.6" }],
-      unavailable: [{ name: "Mod privado", version: "1.0" }], remove: [{ name: "Mod de ejemplo", version: "1.4.0" }] }),
-    modlist_import_start: async remove => {
+      unavailable: [{ name: "Mod privado", version: "1.0" }], remove: [{ name: "Mod de ejemplo", version: "1.4.0" }],
+      config: params.has("noconfig") ? null : { total: 34, overwrite: ["config/create-client.toml", "config/jei/jei-client.ini"], new: [] } }),
+    modlist_import_start: async (remove, withConfig) => {
       setTimeout(() => emit("apply_done", { updated: 1, installed: 0, added: 1, removed: remove ? 1 : 0, failed: [], pruned: 0,
         backup: { path: "C:\\…\\mods_backup\\2026-11-21_1700", date: "2026-11-21T17:00:00", changes: 3, undone: false, undoable: true } }), 800);
       return { ok: true, manual: [], rows: [{ id: 200000, s: "dep", name: "Waystones", from: null, to: "21.1.47", neededBy: [] },
-        { id: 200001, s: "up", name: "Create", from: "6.0.6", to: "6.0.8", neededBy: [] }] };
+        { id: 200001, s: "up", name: "Create", from: "6.0.6", to: "6.0.8", neededBy: [] }],
+        config_saved: withConfig ? "C:\Users\Ana\AppData\Roaming\.minecraft\mods_backup\config-antes-2026-11-28_150000" : null };
     },
     compare_profiles: async () => ({ ok: true, a: "Principal", b: "Servidor con Ana", only_a: ["Mod de ejemplo"],
       only_b: ["Waystones"], different: ["Create"], same: 118 }),
