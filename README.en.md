@@ -42,6 +42,7 @@ Mod Updater checks your Minecraft `mods` folder, recognises each mod by its fing
 - **Find the mod that breaks your game by halves**, when the diagnosis isn't clear: you just open Minecraft and say whether it still fails.
 - **Can I move to another Minecraft version?**: how many of your mods already exist for it and, if you like it, a new profile for that version without touching the current one.
 - **Prepare the server**: compare your profile with the server's and copy only what the server needs (without client-only mods).
+- **Share the configuration too**: export the list with the `config` folder so the other person gets the same mods **and** the same settings. Backups also keep the configuration.
 - **See the changes before updating**: the notes of every version between yours and the new one, highlighting possible world-breaking changes.
 
 <p align="center">

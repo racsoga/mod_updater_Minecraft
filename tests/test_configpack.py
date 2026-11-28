@@ -107,6 +107,16 @@ def test_read_zip_ignores_files_outside_config_and_needs_a_list(tmp_path):
         read_zip(z2)
 
 
+def test_export_leaves_out_files_with_personal_paths(tmp_path):
+    g = game(tmp_path)
+    (g / "config" / "rutas.json").write_text(r'{"carpeta": "C:\\Users\\Ana\\Desktop"}', encoding="utf-8")  # escapada como en JSON
+    (g / "config" / "jugador.txt").write_text("ultimo_usuario=AnaGamer", encoding="utf-8")
+    out = tmp_path / "p.zip"
+    excluded = export_zip(out, LIST, g, private=[r"C:\Users\Ana", "AnaGamer"])
+    assert sorted(excluded) == ["config/jugador.txt", "config/rutas.json"]
+    assert "config/rutas.json" not in zipfile.ZipFile(out).namelist()
+
+
 # ---------------------------------------------------------------- importar
 
 def test_import_over_existing_config_with_backup(tmp_path):
@@ -123,3 +133,78 @@ def test_import_over_existing_config_with_backup(tmp_path):
     assert (dst / "config" / "jei.toml").read_text(encoding="utf-8") == "x = 99\n"
     assert (dst / "config" / "nuevo.toml").exists()
     assert (saved / "config" / "jei.toml").read_text(encoding="utf-8") == "x = 1\n"  # copia de lo sobrescrito
+
+
+# ---------------------------------------------------------------- API
+
+def make_api(tmp_path, monkeypatch):
+    from mod_updater.gui.api import Api
+    from mod_updater.settings import Settings, save_settings
+    from test_toggle import make_jar, res_for
+    g = game(tmp_path)
+    make_jar(g / "mods" / "create.jar", "create")
+    f = tmp_path / "s.json"
+    save_settings(Settings(mods_dir=str(g / "mods"), setup_done=True), f)
+    a = Api(f, get_key=lambda: (None, None), run_async=lambda fn: fn(), cache_dir=tmp_path / "c", running=lambda d: [])
+    r = res_for(g / "mods" / "create.jar")
+    r.source, r.project_id, r.project_name, r.current_file_id = "curseforge", "328085", "Create", "1"
+    a._results, a._rows = [r], [r]
+    a._emit = lambda e, p: None
+    return a, g
+
+
+def test_api_update_backs_up_the_config(tmp_path, monkeypatch):
+    from mod_updater import downloader
+    from mod_updater.downloader import list_backups
+    from mod_updater.resolver import ACTUALIZABLE
+    from test_toggle import make_jar
+    a, g = make_api(tmp_path, monkeypatch)
+    r = a._results[0]
+    r.status, r.new_file_name, r.download_url, r.new_version = ACTUALIZABLE, "create-2.jar", "https://cdn.modrinth.com/c.jar", "2"
+    monkeypatch.setattr(downloader, "download_verified", lambda res, dest, sf: make_jar(dest, "create"))
+    a._busy.acquire()  # como hace apply() antes de lanzar _apply
+    a._apply([r], a._settings())
+    assert (list_backups(g / "mods")[-1] / "config.zip").exists()
+
+
+def test_api_config_backup_can_be_turned_off(tmp_path, monkeypatch):
+    from mod_updater import downloader
+    from mod_updater.downloader import list_backups
+    from mod_updater.resolver import ACTUALIZABLE
+    from mod_updater.settings import load_settings, save_settings
+    from test_toggle import make_jar
+    a, g = make_api(tmp_path, monkeypatch)
+    s = load_settings(a._settings_file)
+    s.backup_config = False
+    save_settings(s, a._settings_file)
+    r = a._results[0]
+    r.status, r.new_file_name, r.download_url, r.new_version = ACTUALIZABLE, "create-2.jar", "https://cdn.modrinth.com/c.jar", "2"
+    monkeypatch.setattr(downloader, "download_verified", lambda res, dest, sf: make_jar(dest, "create"))
+    a._busy.acquire()  # como hace apply() antes de lanzar _apply
+    a._apply([r], a._settings())
+    assert not (list_backups(g / "mods")[-1] / "config.zip").exists()
+
+
+def test_api_export_and_import_with_config(tmp_path, monkeypatch):
+    a, g = make_api(tmp_path, monkeypatch)
+    out = tmp_path / "Principal.zip"
+    a._file_dialog = lambda *x, **k: str(out)
+    res = a.modlist_export("zip")
+    assert res["ok"] and out.exists() and res["excluded"] == []
+    (g / "config" / "jei.toml").write_text("x = 5\n", encoding="utf-8")  # cambia la config local
+    imp = a.modlist_import()
+    assert imp["ok"] and imp["config"]["overwrite"] == ["config/jei.toml"]
+    go = a.modlist_import_start(False, True)
+    assert (g / "config" / "jei.toml").read_text(encoding="utf-8") == "x = 1\n"
+    assert go["config_saved"] and Path(go["config_saved"], "config", "jei.toml").read_text(encoding="utf-8") == "x = 5\n"
+
+
+def test_api_import_zip_without_config_choice_keeps_local_config(tmp_path, monkeypatch):
+    a, g = make_api(tmp_path, monkeypatch)
+    out = tmp_path / "Principal.zip"
+    a._file_dialog = lambda *x, **k: str(out)
+    a.modlist_export("zip")
+    (g / "config" / "jei.toml").write_text("x = 5\n", encoding="utf-8")
+    a.modlist_import()
+    a.modlist_import_start(False, False)
+    assert (g / "config" / "jei.toml").read_text(encoding="utf-8") == "x = 5\n"

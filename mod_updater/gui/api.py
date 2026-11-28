@@ -13,6 +13,7 @@ Reglas:
 
 from __future__ import annotations
 
+import getpass
 import hashlib
 import json
 import os
@@ -50,6 +51,7 @@ from .. import diagnose as diag
 from .. import bisect as bis
 from .. import migrate as migrate_mod
 from .. import server as server_mod
+from .. import configpack
 from ..deps import _current_deps, _needs
 from .. import net
 from ..downloader import (
@@ -59,6 +61,7 @@ from ..downloader import (
     last_undoable,
     apply_updates,
     backup_info,
+    backup_root,
     clear_backups,
     list_backups,
     prune_backups,
@@ -206,7 +209,8 @@ class Api:
         self._changelogs: dict = {}         # changelogs ya descargados (por mod y rango de versiones)
         self._version_lists: dict = {}      # versiones publicadas de cada mod (para volver atrás)
         self._migration: dict | None = None  # última comprobación de "pasar a otra versión"
-        self._server_plan: tuple | None = None  # (id del perfil servidor, plan) de la última comparación
+        self._server_plan: tuple | None = None
+        self._import_zip: Path | None = None  # .zip importado (lista + configuración)  # (id del perfil servidor, plan) de la última comparación
         self._diag_reports: list = []       # informes de la pestaña Diagnóstico (id = posición)
         self._diag_actions: dict = {}       # acciones propuestas por el diagnóstico (id -> diag.Action)
         self._diag_cards: dict = {}         # tarjetas del último diagnóstico de cada informe (para copiar)
@@ -414,6 +418,8 @@ class Api:
             s.allow_beta = bool(data["allow_beta"])
         if "check_updates" in data:
             s.check_updates = bool(data["check_updates"])
+        if "backup_config" in data:
+            s.backup_config = bool(data["backup_config"])
         if "backups_to_keep" in data:
             s.backups_to_keep = max(1, int(data["backups_to_keep"] or 1))
         s.setup_done = True
@@ -591,6 +597,11 @@ class Api:
             )
             ok = [o for o in outcomes if o.ok]
             result = outcomes
+            if ok and created is None and s.backup_config and backup_dir.exists():
+                try:  # config y defaultconfigs de la partida, solo si han cambiado desde la última copia
+                    configpack.backup_config(s.mods_path.parent, backup_dir, self._cache() / "config-state.json")
+                except OSError:
+                    pass  # una copia de la configuración que falla no debe estropear la actualización
             if after is not None:  # p. ej. fijar tras volver a una versión anterior (con el bloqueo puesto)
                 after(outcomes)
             pruned = prune_backups(s.mods_path, s.backups_to_keep) if ok else []
@@ -842,6 +853,19 @@ class Api:
                                                       loader=s.loader, loader_version=lv)
             Path(path).write_bytes(blob)
             return {"ok": True, "file": Path(path).name, "excluded": excluded, "no_loader_version": lv is None}
+        if kind == "zip":
+            path = self._file_dialog(True, f"{safe}.zip", (t("ml.type_zip") + " (*.zip)",))
+            if not path:
+                return {"ok": False, "cancelled": True}
+            data = modlist_mod.build(self._results, minecraft=s.minecraft_version, loader=s.loader,
+                                     app=f"Mod Updater {__version__}")
+            try:
+                user = getpass.getuser()
+            except Exception:  # noqa: BLE001 - sin usuario no hay nada que quitar
+                user = ""
+            # Los archivos de configuración con la carpeta o el nombre de usuario del PC no se exportan.
+            excluded = configpack.export_zip(Path(path), data, s.mods_path.parent, private=[str(Path.home()), user])
+            return {"ok": True, "file": Path(path).name, "excluded": excluded, "count": len(data["mods"]), "config": True}
         path = self._file_dialog(True, f"{safe}.modlist.json", (t("ml.type_modlist") + " (*.modlist.json)",))
         if not path:
             return {"ok": False, "cancelled": True}
@@ -855,14 +879,21 @@ class Api:
         """Abre una lista y la compara con el perfil activo (no instala nada todavía)."""
         if not self._results:
             return {"ok": False, "message": t("ex.need_scan")}
-        path = self._file_dialog(False, "", (t("ml.type_modlist") + " (*.modlist.json;*.json)",))
+        path = self._file_dialog(False, "", (t("ml.type_modlist") + " (*.modlist.json;*.json;*.zip)",))
         if not path:
             return {"ok": False, "cancelled": True}
-        try:
-            data = modlist_mod.parse(Path(path).read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, modlist_mod.ModlistError):
-            return {"ok": False, "message": t("ml.err_file")}
         s = self._settings()
+        config = None
+        self._import_zip = None
+        try:
+            if Path(path).suffix.lower() == ".zip":  # lista + configuración
+                data, _ = configpack.read_zip(Path(path))
+                config = configpack.preview_import(Path(path), s.mods_path.parent)
+                self._import_zip = Path(path)
+            else:
+                data = modlist_mod.parse(Path(path).read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, modlist_mod.ModlistError, configpack.ConfigPackError):
+            return {"ok": False, "message": t("ml.err_file")}
         c = modlist_mod.compare(data, self._results, minecraft=s.minecraft_version, loader=s.loader)
         c["remove"], kept = keep_needed(self._results, c["remove"])  # lo que sobra pero necesita un mod que se queda
         self._import = c
@@ -872,10 +903,11 @@ class Api:
                 "profile": {"minecraft": s.minecraft_version, "loader": LOADER_LABEL.get(s.loader, s.loader)},
                 "add": [row(m) for m in c["add"]], "update": [row(m) for m in c["update"]],
                 "same": len(c["same"]), "unavailable": [row(m) for m in c["unavailable"]],
-                "remove": [{"name": r.name, "version": r.current_version} for r in c["remove"]], "kept": kept}
+                "remove": [{"name": r.name, "version": r.current_version} for r in c["remove"]], "kept": kept,
+                "config": config}
 
     @_never_hang
-    def modlist_import_start(self, remove: bool = False) -> dict:
+    def modlist_import_start(self, remove: bool = False, with_config: bool = False) -> dict:
         """Instala las versiones exactas de la lista importada (y quita lo que sobra si se pide)."""
         if not self._import:
             return {"ok": False, "message": t("apply.nothing")}
@@ -895,9 +927,21 @@ class Api:
                 "name": m.get("nombre") or "?", "version": m.get("version") or "", "reason": ""} for m in pinned},
                 **(s.pins or {})}  # una fijación que ya tenías (con su motivo) se respeta
             save_settings(s, self._settings_file)
+        config_saved = None
+        if with_config and self._import_zip is not None:
+            # La configuración primero, con copia de lo que se sobrescribe (fuera de las copias de mods).
+            stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+            try:
+                config_saved = str(configpack.import_config(self._import_zip, s.mods_path.parent,
+                                                            backup_root(s.mods_path) / f"config-antes-{stamp}"))
+            except (OSError, configpack.ConfigPackError) as exc:
+                return {"ok": False, "message": t("ml.err_config", error=friendly_error(exc) if isinstance(exc, OSError) else str(exc))}
         if remove:  # primero se quitan (así un jar con el mismo nombre que uno nuevo no choca)
             chosen = [replace(r, kind=REMOVE) for r in self._import["remove"]] + chosen
         if not chosen:
+            if config_saved:
+                self._import = None
+                return {"ok": True, "rows": [], "manual": manual, "config_saved": config_saved}
             return {"ok": False, "message": t("apply.nothing"), "manual": manual}
         if not self._busy.acquire(blocking=False):
             return {"ok": False, "message": t("apply.busy")}
@@ -908,7 +952,7 @@ class Api:
                 for i, r in enumerate(chosen)]
         self._explore_cache.clear()
         self._run_async(lambda: self._apply(chosen, s, index))
-        return {"ok": True, "rows": rows, "manual": manual}
+        return {"ok": True, "rows": rows, "manual": manual, "config_saved": config_saved}
 
     @_never_hang
     def compare_profiles(self, other_id: str) -> dict:

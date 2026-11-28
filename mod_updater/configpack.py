@@ -75,13 +75,31 @@ def backup_config(game_dir: Path, backup_dir: Path, state_file: Path) -> bool:
     return True
 
 
-def export_zip(path: Path, modlist_data: dict, game_dir: Path) -> list[str]:
-    """Escribe el .zip. Devuelve los archivos que se quedan fuera por tamaño."""
+def _variants(text: str) -> set[str]:
+    """Cómo puede aparecer una ruta en un archivo de configuración (\\, \\\\ escapada, /)."""
+    return {text, text.replace("\\", "\\\\"), text.replace("\\", "/")} - {""}
+
+
+def _has_private(p: Path, private: list[str]) -> bool:
+    """¿El archivo contiene la carpeta del usuario o su nombre? (solo archivos de texto)."""
+    if not private:
+        return False
+    try:
+        text = p.read_bytes().decode("utf-8", errors="ignore").lower()
+    except OSError:
+        return True  # si no se puede leer, mejor no exportarlo
+    return any(v.lower() in text for item in private for v in _variants(item))
+
+
+def export_zip(path: Path, modlist_data: dict, game_dir: Path, private: list[str] | None = None) -> list[str]:
+    """Escribe el .zip. Devuelve los archivos que se quedan fuera: los de más de 5 MB y los que
+    contienen datos personales (`private`: la carpeta de usuario de Windows, el nombre de usuario...)."""
     excluded = []
+    private = [x for x in (private or []) if x and len(x) >= 3]
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr(LIST_NAME, modlist_mod.dumps(modlist_data))
         for rel, p in _files(game_dir):
-            if p.stat().st_size > MAX_FILE:
+            if p.stat().st_size > MAX_FILE or _has_private(p, private):
                 excluded.append(rel)
                 continue
             z.write(p, rel)

@@ -28,6 +28,8 @@ La sección de cada versión es la que se publica como notas de la Release al cr
 
 - **Preparar el servidor** (en *Ajustes*): marca como *Servidor* el perfil de la carpeta mods de tu servidor y, desde tu perfil de cliente, compáralos: qué se copia, qué se actualiza en el servidor ("el servidor tiene la 6.0.4 y tú la 6.0.10"), qué es solo de cliente (no se copia), qué tiene lado desconocido (lo eliges tú) y qué sobra en el servidor. *Copiar al servidor* lleva tus mismos archivos (al actualizar un mod se apartan todas sus versiones del servidor: nunca quedan dos), con copia de seguridad del servidor y Deshacer desde su perfil. Avisa si algún mod necesita un NeoForge más nuevo que el del servidor. Lo que sobra en el servidor se queda (puede ser solo de servidor) y los mods solo de cliente que ya tenga se avisan; ambos se pueden quitar con una casilla. No se hace con el servidor en marcha.
 
+- **Configuración de los mods en las copias y en las listas**: las copias de seguridad guardan también `config` y `defaultconfigs` (comprimidas, solo si han cambiado; se puede desactivar en Ajustes). *Exportar con configuración* crea un `.zip` con la lista y la configuración, sin rutas de tu PC, sin archivos de más de 5 MB y sin los que contienen tu carpeta o tu nombre de usuario (dice cuáles se quedan fuera). Al importar ese `.zip` se ve qué archivos tuyos se sobrescribirían y se guarda una copia de ellos antes. El `.zip` se abre sin fiarse de él: nada fuera de `config/` y `defaultconfigs/`.
+
 ### Cambiado
 - Las notas de cada Release enlazan la **política de firma de código** (*Code signing policy*, SignPath Foundation).
 

@@ -148,6 +148,7 @@ async function openSetup(mode) {
   if (!first) refreshBackups();
   $("#allow-beta").checked = !!s.allow_beta;
   $("#check-updates").checked = s.check_updates !== false;
+  $("#backup-config").checked = s.backup_config !== false;
   $("#backups").value = s.backups_to_keep;
   fillLanguages(s.language || "auto");
   $("#btn-nokey").hidden = $("#nokey-note").hidden = !first || state.has_key;
@@ -168,6 +169,7 @@ async function saveSetup(useCurseforge) {
       use_curseforge: useCurseforge,
       allow_beta: $("#allow-beta").checked,
       check_updates: $("#check-updates").checked,
+      backup_config: $("#backup-config").checked,
       backups_to_keep: Number($("#backups").value) || 1,
       language: $("#language").value,
     });
@@ -969,7 +971,7 @@ async function exportList(kind) {
   if (res.cancelled) { mlHelp(""); return; }
   if (!res.ok) { mlHelp(res.message, true); return; }
   const parts = [t("ml.saved", { file: res.file })];
-  if (res.excluded.length) parts.push(t("ml.excluded", { count: res.excluded.length, names: joinList(res.excluded) }));
+  if (res.excluded.length) parts.push(t(res.config ? "ml.excluded_big" : "ml.excluded", { count: res.excluded.length, names: joinList(res.excluded) }));
   if (res.no_loader_version) parts.push(t("ml.no_loader_version"));
   mlHelp(parts.join(" "));
 }
@@ -993,17 +995,24 @@ async function importList() {
         <label class="toggle"><input type="checkbox" id="ml-remove"> <span>${esc(t("ml.remove_too"))}</span></label>
         <ul class="an-list">${res.remove.map(r => li(r.name, r.version || "")).join("")}</ul>` : "")
     + list(t("deps.kept_title"), (res.kept || []).map(k => li(k)))
+    + (res.config && res.config.total ? `<h3 class="ex-h">${esc(t("ml.config_title", { count: res.config.total }))}</h3>
+        <label class="toggle"><input type="checkbox" id="ml-with-config" checked> <span>${esc(t("ml.config_toggle"))}</span></label>
+        ${res.config.overwrite.length ? `<p class="an-hint">${esc(t("ml.config_overwrite", { count: res.config.overwrite.length }))}</p>
+          <ul class="an-list">${res.config.overwrite.map(f => li(f)).join("")}</ul>` : `<p class="an-hint">${esc(t("ml.config_no_overwrite"))}</p>`}` : "")
     + `<p class="an-hint">${esc(t("ml.same", { count: res.same }))} ${esc(t("ex.safe"))}</p>`;
-  const actionable = res.add.length + res.update.length + res.remove.length;
+  const actionable = res.add.length + res.update.length + res.remove.length + (res.config ? res.config.total : 0);
   $("#ex-d-foot").innerHTML = actionable ? `<button class="btn-secondary" type="button" id="ml-cancel">${esc(t("ui.cancel"))}</button>
       <button class="btn-primary" type="button" id="ml-apply">${esc(t("ml.apply"))}</button>` : "";
   if (!actionable) return;
   $("#ml-cancel").addEventListener("click", closeExDrawer);
   $("#ml-apply").addEventListener("click", async () => {
     const remove = !!($("#ml-remove") && $("#ml-remove").checked);
-    const go = await api().modlist_import_start(remove);
-    if (!go.ok) { $("#ex-d-body").insertAdjacentHTML("afterbegin", `<p class="cl-error">${esc(go.message)}</p>`); return; }
+    const withConfig = !!($("#ml-with-config") && $("#ml-with-config").checked);
+    const go = await api().modlist_import_start(remove, withConfig);
+    if (!go.ok) { $("#ex-d-body > .cl-error")?.remove(); $("#ex-d-body").insertAdjacentHTML("afterbegin", `<p class="cl-error">${esc(go.message)}</p>`); return; }
     closeExDrawer();
+    if (go.config_saved) mlHelp(t("ml.config_done", { path: shortPath(go.config_saved) }));
+    if (!go.rows.length) return;  // solo configuración: no hay mods que instalar
     if (go.manual.length) mlHelp(t("ml.manual", { names: joinList(go.manual.map(m => m.name)) }));
     startApplyRows(go.rows);
   });
@@ -1033,6 +1042,7 @@ async function copyList() {
 function wireModlist() {
   $("#ml-export").addEventListener("click", () => exportList("modlist"));
   $("#ml-mrpack").addEventListener("click", () => exportList("mrpack"));
+  $("#ml-zip").addEventListener("click", () => exportList("zip"));
   $("#ml-import").addEventListener("click", importList);
   $("#ml-copy").addEventListener("click", copyList);
   $("#ml-compare").addEventListener("click", compareProfiles);
