@@ -249,6 +249,9 @@ a:hover { text-decoration: underline; }
 .bs-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: 8px 16px; max-height: 320px; overflow: auto; }
 .bs-list li { color: var(--muted-strong); font-size: 14px; overflow-wrap: anywhere; }
 #screen-bisect .dg-actions { margin-bottom: 14px; }
+/* Las dos respuestas pesan lo mismo: mismo estilo (secundario) y mismo tamaño, sin botón principal. */
+.btn-answer { height: 44px; min-width: 170px; padding: 0 22px; font-size: 15px; }
+#bs-cancel { padding-left: 0; padding-right: 0; }  /* alineado con el texto de encima */
 
 /* Panel de versiones: fijar y volver a una versión anterior */
 .pin-box { padding: 4px 0 18px; border-bottom: 1px solid var(--rule); margin-bottom: 8px; }
@@ -292,6 +295,8 @@ a:hover { text-decoration: underline; }
 .switch[aria-checked="false"] { background: var(--edge); }
 .switch[aria-checked="false"] > span { left: 3px; background: var(--muted-strong); }
 .switch:hover { filter: brightness(1.12); }
+.switch:disabled { opacity: 0.4; cursor: not-allowed; filter: none; }
+.btn-small:disabled { opacity: 0.55; }
 .name .sub { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .name .sub.warn { color: var(--warn); white-space: normal; }
 .ver { display: flex; align-items: center; gap: 8px; font-size: 14px; min-width: 0; }

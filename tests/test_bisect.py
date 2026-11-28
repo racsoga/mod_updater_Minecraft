@@ -277,3 +277,23 @@ def test_cli_refuses_to_apply_during_a_search(tmp_path, monkeypatch):
     a._rows = list(a._results)
     a.bisect_start([])
     assert active_for_folder(d) is True
+
+
+def test_api_update_install_and_toggles_are_refused_during_a_search(tmp_path):
+    """B-4 del punto de control B: con una búsqueda a medias, "Actualizar e instalar", los
+    interruptores y "Activar o desactivar varios" no cambian nada (aquí y en la interfaz)."""
+    from mod_updater.deps import DepPlan
+    a, d = make_api(tmp_path, NAMES)
+    a._plan = DepPlan(items=list(a._results))
+    a._row_s = ["up"] * len(NAMES)
+    a.bisect_start([])
+    before = files(d)
+    assert a.apply([0, 1])["reason"] == "bisect"  # "Actualizar 3 e instalar 1"
+    a._install = [a._results[0]]
+    assert a.install_start()["reason"] == "bisect"
+    on = [i for i, r in enumerate(a._rows) if not r.mod.disabled]
+    off = [i for i, r in enumerate(a._rows) if r.mod.disabled]
+    assert a.mods_set_enabled(on[:1], False)["reason"] == "bisect"  # interruptor de un mod activo
+    assert a.mods_set_enabled(off[:1], True)["reason"] == "bisect"  # interruptor de uno desactivado por la búsqueda
+    assert a.mods_set_enabled(on + off, False, "with")["reason"] == "bisect"  # "Activar o desactivar varios"
+    assert files(d) == before

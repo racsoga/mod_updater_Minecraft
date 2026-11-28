@@ -380,6 +380,7 @@ function render() {
   if (focusKey) document.querySelector(focusKey)?.focus();
   summary();
   renderPickbar();
+  applyBisectLock();
 }
 
 /* ---------------------------------------------------------------- activar y desactivar */
@@ -482,7 +483,7 @@ function summary() {
   const sel = MODS.filter(m => m.checked);
   const selUp = sel.filter(m => m.s === "up").length, selDep = sel.filter(m => m.s === "dep").length;
   const btn = $("#go");
-  btn.disabled = sel.length === 0;
+  btn.disabled = sel.length === 0 || bisectActive;
   btn.textContent = !sel.length ? t("ui.go_choose")
     : selDep && selUp ? t("ui.go_both", { updates: selUp, installs: selDep })
     : selDep ? t("ui.go_install", { count: selDep })
@@ -492,7 +493,7 @@ function summary() {
   const warn = broken.length
     ? `<span class="warn">${esc(t("ui.dep_warning", { dep: joinList(deps.filter(d => !d.checked).map(d => d.name)), names: joinList(broken) }))}</span>` : "";
   $("#summary").innerHTML = `<span class="count">${esc(t("ui.selected", { count: ups.length + deps.length, selected: sel.length }))}</span>`
-    + (warn || `<span class="safe">${esc(t("ui.safe"))}</span>`);
+    + (bisectActive ? `<span class="warn">${esc(t("bs.busy"))}</span>` : warn || `<span class="safe">${esc(t("ui.safe"))}</span>`);
 }
 
 /* ================================================================ actualizando / final */
@@ -765,7 +766,20 @@ async function revertLanguagePreview() {
   applyStrings(s.lang, s.strings);
 }
 
-let modsStale = false;  // la búsqueda por mitades cambió archivos: Mis mods se vuelve a revisar
+let modsStale = false;
+let bisectActive = false;  // búsqueda por mitades a medias: Mis mods no deja cambiar nada
+
+// Con una búsqueda a medias, nada de Mis mods puede cambiar archivos (el servidor también lo rechaza).
+function applyBisectLock() {
+  for (const el of document.querySelectorAll("#list [data-toggle], #btn-pick, #go")) {
+    if (bisectActive) { el.disabled = true; el.title = t("bs.busy"); }
+    else if (el.title === t("bs.busy")) {
+      el.title = "";
+      if (el.id === "btn-pick") el.disabled = false;  // los demás los vuelve a pintar render()/summary()
+    }
+  }
+  if (bisectActive && picking) endPicking();
+}  // la búsqueda por mitades cambió archivos: Mis mods se vuelve a revisar
 
 function goMods() {
   if (modsStale) { modsStale = false; startScan(); return; }
@@ -1731,6 +1745,7 @@ async function openBisect() {
 function renderBisect(st) {
   show("bisect");
   modsStale = true;
+  bisectActive = !st.done;
   if (st.done) {
     $("#bs-pending-notice")?.remove();
     $("#bs-kicker").hidden = true;
@@ -1756,9 +1771,10 @@ function renderBisect(st) {
     return;
   }
   $("#bs-kicker").hidden = false;
-  $("#bs-kicker").textContent = `${t("bs.round", { round: st.round })} · ${t("bs.left", { count: st.left })}`;
+  $("#bs-kicker").textContent = t("bs.round", { round: st.round, total: st.round - 1 + st.left });
   $("#bs-title").textContent = t("bs.round_title");
-  $("#bs-deck").textContent = t("bs.round_deck", { count: st.testing.length, suspects: st.suspects });
+  // Primera vuelta: "Buscamos entre N sospechosos"; después, "Quedan N".
+  $("#bs-deck").textContent = t(st.round === 1 ? "bs.round_deck_first" : "bs.round_deck", { count: st.testing.length, suspects: st.suspects });
   $("#bs-off-summary").textContent = t("bs.off_list", { count: st.testing.length });
   $("#bs-off-list").innerHTML = st.testing.map(n => `<li>${esc(n)}</li>`).join("");
   bsShow("round");
@@ -1783,6 +1799,7 @@ async function bisectAnswer(fails) {
 
 // La vuelta no se pudo preparar: la búsqueda se canceló y todo está como al empezar.
 function renderBisectAborted(message) {
+  bisectActive = false;
   $("#bs-kicker").hidden = true;
   $("#bs-title").textContent = t("bs.title");
   $("#bs-deck").textContent = message;
@@ -1808,6 +1825,7 @@ function wireBisect() {
     const res = await bsCall(() => api().bisect_cancel());
     if (!res.ok) { bsError(res.message); return; }
     modsStale = true;
+    bisectActive = false;
     $("#bs-pending-notice")?.remove();
     openDiag();
   });
@@ -1818,6 +1836,10 @@ async function checkBisectPending() {
   let st;
   try { st = await api().bisect_status(); } catch { return; }
   $("#bs-pending-notice")?.remove();
+  const was = bisectActive;
+  bisectActive = !!(st && st.active);
+  if (was !== bisectActive && !$("#screen-results").hidden) render();  // pie y controles al día
+  else applyBisectLock();
   if (!st || !st.active || !$("#notices")) return;
   $("#notices").insertAdjacentHTML("afterbegin", `<li class="bad" id="bs-pending-notice">${esc(t("bs.resume"))}
     <button class="linkbtn" type="button" id="bs-pending-go">${esc(t("bs.continue"))}</button></li>`);

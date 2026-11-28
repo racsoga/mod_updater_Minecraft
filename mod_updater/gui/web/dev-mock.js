@@ -110,6 +110,7 @@
     },
     // Activar/desactivar: Curios API la necesita Accessories (para ver el aviso de librería).
     mods_set_enabled: async (ids, enabled, mode = "ask") => {
+      if (bs && !bs.done) return { ok: false, reason: "bisect", message: "Hay una búsqueda por mitades en curso. Termínala o cancélala en Diagnóstico antes de cambiar mods." };
       if (params.has("mcopen")) return { ok: false, reason: "minecraft", message: "Minecraft está abierto con esta carpeta. Ciérralo y vuelve a pulsar el botón." };
       const S = await strings(settings.language);
       const fill = (key, p = {}) => S[key].replace(/\{(\w+)\}/g, (m, k) => p[k] ?? m);
@@ -124,6 +125,7 @@
       return { ok: true, rows: targets.map(r => ({ id: r.id, off: r.off })), also: [], failed: [] };
     },
     apply: async ids => {
+      if (bs && !bs.done) return { ok: false, reason: "bisect", message: "Hay una búsqueda por mitades en curso. Termínala o cancélala en Diagnóstico antes de cambiar mods." };
       if (params.has("mcopen")) return { ok: false, reason: "minecraft", message: "Minecraft está abierto con esta carpeta. Ciérralo y vuelve a pulsar el botón." };
       const chosen = rows.filter(r => ids.includes(r.id));
       let done = 0;
