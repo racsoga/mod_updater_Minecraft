@@ -73,6 +73,8 @@ Mod Updater revisa la carpeta `mods` de tu Minecraft, reconoce cada mod por su h
 
 **Por qué pasa:** es un `.exe` hecho con Python (PyInstaller) y **sin firma digital** (el certificado es de pago). Windows no lo conoce todavía y algunos antivirus lo confunden con programas maliciosos empaquetados igual. Es un falso positivo: la versión 0.3.0 la marcan 3 de 68 antivirus de VirusTotal (Bkav, SecureAge y Microsoft, con una detección genérica por aprendizaje automático, `Wacatac.C!ml`) ([ver informe](https://www.virustotal.com/gui/file/0ef3739ed7676be34873107f1c2f580e76e542784049a0a194e38406e40201db)).
 
+**Política de firma de código** ([Code signing policy](CODE_SIGNING_POLICY.md)): está en curso la solicitud a SignPath Foundation de un certificado gratuito para proyectos de código abierto; hasta que lo aprueben, el `.exe` no está firmado.
+
 **Cómo comprobarlo tú:** el SHA-256 de tu archivo debe coincidir con el de la Release (ver *¿Cómo compruebo que el .exe es el original?* en [Preguntas frecuentes](#preguntas-frecuentes)), y las notas de cada Release enlazan al análisis de VirusTotal de ese archivo exacto. El código fuente completo está en este repositorio.
 
 ## Primer uso
