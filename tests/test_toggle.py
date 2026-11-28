@@ -302,3 +302,60 @@ def test_modlist_marks_disabled():
     on, off = fake("Activo", "1"), fake("Apagado", "2", disabled=True)
     mods = {m["nombre"]: m for m in build([on, off], minecraft="1.21.1", loader="neoforge", app="t")["mods"]}
     assert mods["Apagado"]["activo"] is False and "activo" not in mods["Activo"]
+
+
+# ---------------------------------------------------------------- revisión final
+
+def test_disabled_old_copy_is_not_a_duplicate_on_modrinth():
+    from test_resolver import FakeClient, mod, resolve, ver
+    v_old, v_new = ver("1.0", "p1", "release", "2024-01-01"), ver("1.1", "p1", "release", "2024-02-01")
+    client = FakeClient(current={"h1": v_new, "h0": v_old}, latest={"h1": v_new, "h0": v_new})
+    r = resolve(client, [mod("jei-1.1.jar", "h1"), mod("jei-1.0.jar.disabled", "h0")])
+    assert not r["jei-1.1.jar"].duplicate
+
+
+def test_disabled_old_copy_is_not_a_duplicate_on_curseforge():
+    from test_resolver import FakeClient, FakeCf, cf_file, cf_mod, run_all
+    from mod_updater.curseforge import CfMatch
+    cur, old, new = (cf_file(i, 1, "release", d) for i, d in ((10, "2024-01-01"), (9, "2023-01-01"), (11, "2024-02-01")))
+    cf = FakeCf(matches={100: CfMatch(1, cur), 99: CfMatch(1, old)}, index={1: [11]}, files={11: new})
+    r = run_all(cf, FakeClient(current={}, latest={}), [cf_mod("a.jar", "h1", 100), cf_mod("a-old.jar.disabled", "h0", 99)])
+    assert not r["a.jar"].duplicate and r["a.jar"].status == ACTUALIZABLE
+
+
+def test_toggle_renames_in_the_mods_own_folder(tmp_path):
+    other = tmp_path / "otro" / "mods"
+    other.mkdir(parents=True)
+    make_jar(other / "x.jar", "x")
+    d = mods_dir(tmp_path)  # carpeta del perfil activo: distinta
+    _, out = run([res_for(other / "x.jar", DISABLE)], d)
+    assert out[0].ok and files(other) == ["x.jar.disabled"] and files(d) == []
+
+
+def test_updatable_takes_the_active_copy_and_skips_the_disabled_one():
+    from mod_updater.downloader import updatable
+    active, old = fake("Jei", "1"), fake("Jei", "1", disabled=True)
+    old.mod.file_name = old.mod.path.name.replace("Jei", "Jei-old")
+    for r in (active, old):
+        r.status = ACTUALIZABLE
+    ok, skipped = updatable([active, old])
+    assert ok == [active] and skipped == [old]
+
+
+def test_updatable_still_updates_a_lone_disabled_mod():
+    from mod_updater.downloader import updatable
+    off = fake("Solo", "2", disabled=True)
+    off.status = ACTUALIZABLE
+    assert updatable([off])[0] == [off]
+
+
+def test_api_refuses_rows_from_another_folder(tmp_path):
+    from mod_updater.settings import load_settings, save_settings
+    a, d = make_api(tmp_path, [("Jei.jar", "1", [])])
+    other = tmp_path / "otra" / "mods"
+    other.mkdir(parents=True)
+    s = load_settings(a._settings_file)
+    s.mods_dir = str(other)  # se cambió de perfil y la revisión es de la carpeta anterior
+    save_settings(s, a._settings_file)
+    res = a.mods_set_enabled([0], False)
+    assert not res["ok"] and files(d) == ["Jei.jar"]

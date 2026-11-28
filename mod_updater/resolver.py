@@ -225,7 +225,8 @@ def resolve_with_modrinth(
     latest = client.latest_from_hashes(identified, loader, game_version) if identified else {}
     projects = client.projects([v.project_id for v in current.values()]) if current else {}
 
-    dup_count = Counter(current[m.sha1].project_id for m in mods if m.sha1 in current)
+    # Una copia vieja desactivada (.jar.disabled) junto a la activa no es un duplicado: no carga.
+    dup_count = Counter(current[m.sha1].project_id for m in mods if m.sha1 in current and not m.disabled)
 
     results: list[Resolution] = []
     for mod in mods:
@@ -326,7 +327,7 @@ def resolve_with_curseforge(
         for mod_id, ids in index_ids.items()
     }
 
-    dup_count = Counter(matches[m.cf_fingerprint].mod_id for m in mods if m.cf_fingerprint in matches)
+    dup_count = Counter(matches[m.cf_fingerprint].mod_id for m in mods if m.cf_fingerprint in matches and not m.disabled)
 
     results: list[Resolution] = []
     for mod in mods:

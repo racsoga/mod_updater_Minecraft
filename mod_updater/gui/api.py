@@ -960,6 +960,8 @@ class Api:
         targets = [r for r in picked if r.mod is not None and not r.unreadable and r.mod.disabled == enabled]
         if not targets:
             return {"ok": True, "rows": [], "also": [], "failed": []}
+        if any(r.mod.path.parent.resolve() != s.mods_path.resolve() for r in targets):
+            return {"ok": False, "message": t("apply.no_scan")}  # revisión de otra carpeta (otro perfil)
         if self._running(s.mods_path.parent):
             return {"ok": False, "reason": "minecraft", "message": t("apply.minecraft_open")}
         also: list[Resolution] = []

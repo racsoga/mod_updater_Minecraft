@@ -242,6 +242,7 @@ let DATA = null, MODS = [], byName = {};
 let filter = "all", query = "", okOpen = false;
 
 function showResults(data) {
+  picking = false; PICK.clear();  // las filas cambian: lo marcado antes apuntaría a otros mods
   DATA = data;
   MODS = data.rows;
   byName = Object.fromEntries(MODS.filter(m => m.s !== "dep").map(m => [m.name, m]));
@@ -746,7 +747,7 @@ async function switchProfile(id) {
   if (!res.ok) { $("#prof-help").className = "help bad"; $("#prof-help").textContent = res.message; renderProfileSelect(); return; }
   setState(res.state);
   // Lo revisado, analizado y buscado era del perfil anterior.
-  DATA = null; MODS = []; modsScreen = null; anSelected = null;
+  DATA = null; MODS = []; modsScreen = null; anSelected = null; picking = false; PICK.clear();
   EX.cards = []; EX.started = false; BASKET.clear(); renderBasket();
   $("#ex-results").innerHTML = ""; $("#ex-status").textContent = ""; $("#ex-more").hidden = true;
   SG = { loaded: false, result: null };

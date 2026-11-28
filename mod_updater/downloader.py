@@ -217,7 +217,7 @@ def _toggle_one(res: Resolution, mods_dir: Path, before_change=None) -> Outcome:
     if old is None or not old.exists():
         return Outcome(res, False, t("dl.old_missing"))
     name = res.mod.enabled_name if res.kind == ENABLE else res.mod.enabled_name + DISABLED_SUFFIX
-    target = mods_dir / name
+    target = old.with_name(name)  # en su propia carpeta, nunca en la de otro perfil
     if target.exists():
         return Outcome(res, False, t("dl.exists", name=name))
     if before_change:
@@ -234,7 +234,15 @@ def updatable(results: list[Resolution]) -> tuple[list[Resolution], list[Resolut
     (proyectos duplicados en la carpeta: actualizarlos chocaría)."""
     cands = [r for r in results if r.status == ACTUALIZABLE]
     count = Counter((r.source, r.project_id) for r in cands)
-    ok = [r for r in cands if count[(r.source, r.project_id)] == 1 and not r.duplicate]
+    active = Counter((r.source, r.project_id) for r in cands if not (r.mod and r.mod.disabled))
+
+    def alone(r: Resolution) -> bool:
+        key = (r.source, r.project_id)
+        if r.mod is not None and r.mod.disabled:  # copia desactivada: solo si no hay otra copia
+            return count[key] == 1
+        return active[key] == 1  # la activa se actualiza aunque haya copias viejas desactivadas
+
+    ok = [r for r in cands if alone(r) and not r.duplicate]
     skipped = [r for r in cands if r not in ok]
     return ok, skipped
 
