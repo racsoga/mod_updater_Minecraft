@@ -26,6 +26,8 @@ La sección de cada versión es la que se publica como notas de la Release al cr
 
 - **Pasar a otra versión de Minecraft** (en *Análisis*): elige la versión de destino y mira cuántos de tus mods existen ya para ella con tu cargador ("142 de 150 listos"), en tres grupos: *Listos*, *Faltan* (con la fecha de su última versión) y *Con alternativa* (solo en la otra web, o un mod que hace lo mismo y sí está). Las librerías aparte. Recuerda el resultado para decirte cuántos más están listos desde la última vez. *Crear perfil para esa versión* lo prepara en una carpeta nueva y descarga lo que está listo, sin tocar tu perfil actual. Usa la lista oficial de versiones que ya se consultaba en Modrinth: no se conecta a ningún sitio nuevo.
 
+- **Preparar el servidor** (en *Ajustes*): marca como *Servidor* el perfil de la carpeta mods de tu servidor y, desde tu perfil de cliente, compáralos: qué se copia, qué se actualiza en el servidor ("el servidor tiene la 6.0.4 y tú la 6.0.10"), qué es solo de cliente (no se copia), qué tiene lado desconocido (lo eliges tú) y qué sobra en el servidor. *Copiar al servidor* lleva tus mismos archivos, con copia de seguridad del servidor y Deshacer desde su perfil. No se hace con el servidor en marcha.
+
 ### Cambiado
 - Las notas de cada Release enlazan la **política de firma de código** (*Code signing policy*, SignPath Foundation).
 

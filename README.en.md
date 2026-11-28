@@ -41,6 +41,7 @@ Mod Updater checks your Minecraft `mods` folder, recognises each mod by its fing
 - **Crash diagnosis**: reads Minecraft's crash report on your PC and tells you which mod to suspect, with the line that shows it and a button to fix it (install what's missing, swap an incompatible mod, disable, or go back to an earlier version).
 - **Find the mod that breaks your game by halves**, when the diagnosis isn't clear: you just open Minecraft and say whether it still fails.
 - **Can I move to another Minecraft version?**: how many of your mods already exist for it and, if you like it, a new profile for that version without touching the current one.
+- **Prepare the server**: compare your profile with the server's and copy only what the server needs (without client-only mods).
 - **See the changes before updating**: the notes of every version between yours and the new one, highlighting possible world-breaking changes.
 
 <p align="center">

@@ -208,6 +208,14 @@
         backup: { path: "C:\\…\\mods_backup\\2026-11-21_1600", date: "2026-11-21T16:00:00", changes: 1, undone: false, undoable: true } }), 800);
       return { ok: true, total: 1 };
     },
+    // Servidor de ejemplo.
+    profile_set_server: async (id, on) => { profs.find(p => p.id === id).server = on; return await state(); },
+    server_compare: async () => ({ ok: true, client: "Principal", server: "Servidor con Ana",
+      copy: [{ name: "Waystones", file: "waystones.jar", client_version: "21.1.47", same: false }],
+      update: [{ name: "Create", file: "create-6.0.10.jar", server_version: "6.0.4", client_version: "6.0.10", same: false }],
+      unknown: [{ name: "Mod de ejemplo", file: "ejemplo.jar", same: false }],
+      client_only: [{ name: "Sodium" }, { name: "JourneyMap" }], extra: ["viejo-mod-1.0.jar"], same: 98 }),
+    server_copy: async (id, chosen) => ({ ok: true, copied: 2 + chosen.length, failed: [], server: "Servidor con Ana", backup: null }),
     // Pasar a otra versión de ejemplo (sin red).
     migrate_check: async target => {
       await new Promise(r => setTimeout(r, 300));
