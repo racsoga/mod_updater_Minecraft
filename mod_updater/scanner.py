@@ -50,6 +50,25 @@ class ModFile:
     def display_name(self) -> str:
         return self.mod_name or self.mod_id or self.file_name
 
+    @property
+    def disabled(self) -> bool:
+        """Desactivado: `x.jar.disabled` (convención de Prism, CurseForge y Modrinth App)."""
+        return self.file_name.lower().endswith(DISABLED_SUFFIX)
+
+    @property
+    def enabled_name(self) -> str:
+        """Nombre del jar activo (sin `.disabled`)."""
+        return self.file_name[: -len(DISABLED_SUFFIX)] if self.disabled else self.file_name
+
+
+DISABLED_SUFFIX = ".disabled"
+
+
+def is_mod_file(name: str) -> bool:
+    """`.jar` o `.jar.disabled` (sin distinguir mayúsculas); nada de dobles sufijos."""
+    low = name.lower()
+    return low.endswith(".jar") or (low.endswith(".jar" + DISABLED_SUFFIX) and low.count(DISABLED_SUFFIX) == 1)
+
 
 # --------------------------------------------------------------------------- hashes
 
@@ -269,13 +288,15 @@ def scan_folder(
     new_cache: dict = {}
     result: list[ModFile] = []
 
-    jars = sorted(p for p in mods_dir.iterdir() if p.is_file() and p.suffix.lower() == ".jar")
+    jars = sorted(p for p in mods_dir.iterdir() if p.is_file() and is_mod_file(p.name))
     for i, path in enumerate(jars, 1):
         if on_item:
             on_item(i, len(jars), path)
         try:
             st = path.stat()
-            key = f"{path.name}|{st.st_size}|{st.st_mtime_ns}"
+            # Sin ".disabled": activar o desactivar no obliga a recalcular los hashes.
+            name = path.name[: -len(DISABLED_SUFFIX)] if path.name.lower().endswith(DISABLED_SUFFIX) else path.name
+            key = f"{name}|{st.st_size}|{st.st_mtime_ns}"
             info = cache.get(key)
             if info is None:
                 if progress:

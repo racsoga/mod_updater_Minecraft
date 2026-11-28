@@ -29,6 +29,8 @@ NO_ENCONTRADO = "no_encontrado"
 UPDATE = "update"  # un jar instalado (se actualice o no)
 INSTALL = "install"  # una dependencia nueva que no está en la carpeta
 REMOVE = "remove"  # quitar un jar instalado (se mueve a la copia de seguridad)
+ENABLE = "enable"  # x.jar.disabled -> x.jar
+DISABLE = "disable"  # x.jar -> x.jar.disabled
 
 CF = "curseforge"
 MR = "modrinth"
