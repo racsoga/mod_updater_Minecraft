@@ -36,6 +36,7 @@ Mod Updater checks your Minecraft `mods` folder, recognises each mod by its fing
 - **Profiles**: several folders or instances (official launcher, CurseForge, Prism, MultiMC, Modrinth App), each with its own version and loader.
 - **Share your mod list**: export and import the list (or a `.mrpack`) so someone else gets exactly the same mods.
 - **Suggestions for your game**: what to remove, review, keep and add based on how you play, always with the reason.
+- **Enable and disable mods** without deleting them (they become `.jar.disabled`, as in Prism, CurseForge and Modrinth App), one by one or several at once. If you disable a library other mods use, it warns you.
 - **See the changes before updating**: the notes of every version between yours and the new one, highlighting possible world-breaking changes.
 
 <p align="center">

@@ -42,7 +42,8 @@
     up("Accessories", "1.1.0-beta.52", "1.1.0-beta.54", "948/913/256/256/638436487112587498.png", "Versión beta: ya usas la beta de este mod"),
     up("Curios API", "9.5.1", "9.6.0", "195/772/256/256/636881112930494939.png"),
     ok("Just Enough Items (JEI)", "19.71.0.475"), ok("Create", "6.0.10"), ok("Sodium", "0.8.13"),
-  ].map((r, i) => ({ ...r, id: i }));
+    { ...ok("JourneyMap", "6.0.0"), off: true },
+  ].map((r, i) => ({ ...r, id: i, file: r.s === "dep" ? null : `${r.name.replace(/\W+/g, "")}.jar${r.off ? ".disabled" : ""}`, off: !!r.off }));
 
   const emit = (e, p) => window.onBackend(e, p);
   window.pywebview = { api: {
@@ -92,6 +93,21 @@
         }, 900);
       };
       tick(); return true;
+    },
+    // Activar/desactivar: Curios API la necesita Accessories (para ver el aviso de librería).
+    mods_set_enabled: async (ids, enabled, mode = "ask") => {
+      if (params.has("mcopen")) return { ok: false, reason: "minecraft", message: "Minecraft está abierto con esta carpeta. Ciérralo y vuelve a pulsar el botón." };
+      const S = await strings(settings.language);
+      const fill = (key, p = {}) => S[key].replace(/\{(\w+)\}/g, (m, k) => p[k] ?? m);
+      let targets = rows.filter(r => ids.includes(r.id) && r.file && r.off === enabled);
+      const curios = targets.find(r => r.name === "Curios API"), acc = rows.find(r => r.name === "Accessories");
+      if (!enabled && curios && !acc.off && !targets.includes(acc)) {
+        if (mode === "ask") return { ok: false, reason: "dependents", names: [acc.name],
+          message: fill("toggle.dependents_one", { name: curios.name, names: acc.name }) };
+        if (mode === "with") targets = [...targets, acc];
+      }
+      for (const r of targets) r.off = !enabled;
+      return { ok: true, rows: targets.map(r => ({ id: r.id, off: r.off })), also: [], failed: [] };
     },
     apply: async ids => {
       if (params.has("mcopen")) return { ok: false, reason: "minecraft", message: "Minecraft está abierto con esta carpeta. Ciérralo y vuelve a pulsar el botón." };

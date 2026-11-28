@@ -6,6 +6,13 @@ La sección de cada versión es la que se publica como notas de la Release al cr
 
 ## [0.4.0] - sin publicar
 
+### Añadido
+- **Activar y desactivar mods** desde *Mis mods*: interruptor en cada fila y modo *Activar o desactivar varios*. Desactivar renombra `mod.jar` a `mod.jar.disabled` (la convención de Prism, CurseForge y Modrinth App); nunca se borra nada. Filtro *Desactivados*.
+  - Antes de desactivar una librería que usan mods activos, avisa ("Si desactivas Balm, dejarán de cargar Waystones…") y deja desactivar también esos o solo la librería. Al activar un mod se activan también las librerías desactivadas que necesita.
+  - Los desactivados se siguen identificando y actualizando; al actualizarse siguen desactivados.
+  - Cada cambio queda en la copia de seguridad (`cambios.json` y `cambios.txt`) y se puede **Deshacer**. No se hace con Minecraft abierto.
+  - *Análisis* no los cuenta (lo indica), el `.mrpack` los deja fuera y el `.modlist.json` los marca con `"activo": false`.
+
 ### Corregido
 - **Sugerencias** ya no quita un mod que necesita otro que vas a añadir o que se queda (p. ej. Balm si añades Waystones), ni sus dependencias indirectas. Lo explica en una frase en la revisión del plan. Lo mismo al importar una lista y quitar lo que sobra ([#12](https://github.com/racsoga/mod_updater_Minecraft/issues/12)).
 

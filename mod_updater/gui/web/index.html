@@ -188,6 +188,7 @@
         <input id="q" type="search" autocomplete="off" aria-keyshortcuts="/" data-i18n-placeholder="ui.search">
         <kbd class="key-hint" aria-hidden="true">/</kbd>
       </label>
+      <button class="btn-small" type="button" id="btn-pick" aria-pressed="false" data-i18n="ui.pick"></button>
     </div>
     <main class="list" id="list" data-i18n-aria-label="ui.list_label"></main>
     <details class="details" id="details" hidden>
@@ -339,6 +340,17 @@
   <div class="summary" id="summary" aria-live="polite"></div>
   <button class="btn-primary" type="button" id="go" aria-keyshortcuts="Control+Enter" data-i18n-title="ui.go_shortcut"></button>
   <button class="btn-primary" type="button" id="btn-recheck" hidden data-i18n="ui.check_again"></button>
+</div>
+
+<!-- Activar o desactivar varios -->
+<div class="actionbar" role="region" data-i18n-aria-label="ui.pick" id="pickbar" hidden>
+  <div class="summary" aria-live="polite">
+    <span class="count" id="pick-count"></span>
+    <span class="safe" data-i18n="ui.pick_hint"></span>
+  </div>
+  <button class="btn-secondary" type="button" id="pick-cancel" data-i18n="ui.cancel"></button>
+  <button class="btn-secondary" type="button" id="pick-enable" data-i18n="ui.pick_enable"></button>
+  <button class="btn-primary" type="button" id="pick-disable" data-i18n="ui.pick_disable"></button>
 </div>
 
 <!-- Cesta de Explorar -->
