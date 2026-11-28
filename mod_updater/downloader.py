@@ -473,6 +473,10 @@ class UndoResult:
     errors: list[str] = field(default_factory=list)
 
 
+def write_changelog_json(backup_dir: Path, data: dict) -> None:
+    _write_json(backup_dir / "cambios.json", data)
+
+
 def read_changelog(backup_dir: Path) -> dict | None:
     try:
         return json.loads((backup_dir / "cambios.json").read_text(encoding="utf-8"))

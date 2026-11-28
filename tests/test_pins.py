@@ -125,7 +125,7 @@ def test_pin_is_saved_per_profile(tmp_path):
     a, d, r = make_api(tmp_path)
     assert a.pin_set(0, True, "  el server va en 1.0  ")["ok"]
     s = load_settings(a._settings_file)
-    assert s.pins == {"modrinth:pj": {"name": "Mod", "version": "1.0", "reason": "el server va en 1.0"}}
+    assert s.pins == {"modrinth:pj": {"name": "Mod", "version": "1.0", "reason": "el server va en 1.0", "ids": ["modrinth:pj"]}}
     assert s.profiles[0]["pins"] == s.pins
     assert a.pin_set(0, False)["ok"] and load_settings(a._settings_file).pins == {}
 
@@ -221,3 +221,112 @@ def test_cli_report_shows_pinned():
     a = res("Mod", "pj", status=ACTUALIZABLE, new_version="3.0")
     a.pinned = True
     assert status_label(a) == "Fijado"
+
+
+# ---------------------------------------------------------------- revisión final
+
+def test_pin_survives_when_only_the_other_source_identifies_the_mod(tmp_path):
+    from mod_updater.settings import load_settings
+    a, d, r = make_api(tmp_path)
+    r.source, r.project_id, r.known_ids = CF, "328085", {(CF, "328085"), (MR, "LNytGWDc")}
+    a.pin_set(0, True)
+    only_mr = res("Mod", "LNytGWDc")  # CurseForge caído: solo lo identifica Modrinth
+    apply_pins([only_mr], load_settings(a._settings_file).pins)
+    assert only_mr.pinned
+
+
+def test_unpin_removes_every_matching_entry(tmp_path):
+    from mod_updater.settings import load_settings, save_settings
+    a, d, r = make_api(tmp_path)
+    r.known_ids = {(MR, "pj"), (CF, "9")}
+    s = load_settings(a._settings_file)
+    s.pins = {"modrinth:pj": {"name": "Mod", "version": "1.0", "reason": ""},
+              "curseforge:9": {"name": "Mod", "version": "1.0", "reason": ""}}
+    save_settings(s, a._settings_file)
+    a.pin_set(0, False)
+    assert load_settings(a._settings_file).pins == {}
+
+
+def test_versions_current_flag_follows_the_installed_file(tmp_path):
+    a, d, r = make_api(tmp_path)
+    assert [v["current"] for v in a.versions_for(0)["versions"]] == [False, False, True]
+    r.current_file_id, r.mod.sha1 = "v2", "sv2"  # tras volver a 2.0 y revisar de nuevo
+    assert [v["current"] for v in a.versions_for(0)["versions"]] == [False, True, False]
+    assert a.rollback(0, "v1")["ok"]  # 1.0 vuelve a ser instalable
+
+
+def test_undo_of_a_rollback_removes_the_pin_it_added(tmp_path, monkeypatch):
+    from mod_updater import downloader
+    from mod_updater.settings import load_settings
+    a, d, r = make_api(tmp_path)
+    monkeypatch.setattr(downloader, "download_verified", lambda res, dest, sf: make_jar(dest, "mod"))
+    a.rollback(0, "v2")
+    assert "modrinth:pj" in load_settings(a._settings_file).pins
+    assert a.undo_last()["ok"] and files(d) == ["mod-1.0.jar"]
+    assert load_settings(a._settings_file).pins == {}
+
+
+def test_undo_of_a_rollback_restores_the_previous_pin(tmp_path, monkeypatch):
+    from mod_updater import downloader
+    from mod_updater.settings import load_settings
+    a, d, r = make_api(tmp_path)
+    a.pin_set(0, True, "motivo de antes")
+    before = load_settings(a._settings_file).pins
+    monkeypatch.setattr(downloader, "download_verified", lambda res, dest, sf: make_jar(dest, "mod"))
+    a.rollback(0, "v2")
+    a.undo_last()
+    assert load_settings(a._settings_file).pins == before
+
+
+def test_versions_for_offline_still_reports_the_pin(tmp_path):
+    from mod_updater.net import ApiError
+    a, d, r = make_api(tmp_path)
+    a.pin_set(0, True, "x")
+
+    class Offline(FakeMr):
+        def project_versions(self, *x):
+            raise ApiError("sin red", kind="offline")
+
+    a._mr_factory = Offline
+    out = a.versions_for(0)
+    assert out["ok"] is False and out["pinned"] is True and out["reason"] == "x" and out["current"] == "1.0"
+
+
+def test_broken_pinned_mod_still_needs_attention():
+    from mod_updater.deps import Broken
+    from mod_updater.gui.api import serialize
+    a = res("Create", "1", status=ACTUALIZABLE, new_version="6.0.8")
+    a.pinned = True
+    row = serialize([a], DepPlan(items=[], broken=[Broken(a, "le falta Flywheel")]), allow_beta=False)["rows"][0]
+    assert row["s"] == "manual"
+
+
+def test_curseforge_versions_without_hash_are_not_installable(tmp_path):
+    from mod_updater.curseforge import CfFile
+    a, d, r = make_api(tmp_path)
+    r.source, r.project_id, r.current_file_id = CF, "5", "1"
+    f = lambda i, sha: CfFile(id=str(i), mod_id=5, display_name=f"v{i}", file_name=f"m{i}.jar", date_published=f"2026-0{i}-01",  # noqa: E731
+                              version_type="release", download_url=f"https://edge.forgecdn.net/{i}.jar", sha1=sha, fingerprint=None)
+
+    class Cf:
+        def __init__(self, key):
+            pass
+
+        def mod_files(self, *x):
+            return [f(1, "a"), f(2, None)]
+
+    a._cf_factory, a._get_key = Cf, lambda: ("k", "keyring")
+    vs = {v["version"]: v for v in a.versions_for(0)["versions"]}
+    assert vs["v2"]["manual"] is True and vs["v1"]["current"] is True
+
+
+def test_import_does_not_overwrite_an_existing_pin_reason(tmp_path, monkeypatch):
+    from mod_updater import modlist as modlist_mod
+    from mod_updater.settings import load_settings
+    a, d, r = make_api(tmp_path)
+    a.pin_set(0, True, "mi motivo")
+    a._import = {"add": [], "update": [], "unavailable": [], "remove": [], "mismatch": None,
+                 "same": [{"nombre": "Mod", "fuente": "modrinth", "proyecto": "pj", "version": "1.0", "fijado": True}]}
+    monkeypatch.setattr(modlist_mod, "resolve_exact", lambda *x, **k: ([], []))
+    a.modlist_import_start(False)
+    assert load_settings(a._settings_file).pins["modrinth:pj"]["reason"] == "mi motivo"

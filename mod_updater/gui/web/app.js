@@ -656,7 +656,7 @@ async function loadVersions(id, seq) {
 
 function renderPin(id, res) {
   const box = $("#cl-pin");
-  if (!res.ok) { box.innerHTML = ""; return; }
+  if (!("pinned" in res)) { box.innerHTML = ""; return; }  // sin red también se puede fijar o soltar
   box.innerHTML = res.pinned
     ? `<div class="pin-box"><p class="pin-state"><b>${esc(t("pin.pinned_info", { version: res.current || "?" }))}</b>${res.reason ? ` ${esc(res.reason)}` : ""}</p>
         <button class="btn-small" type="button" id="pin-off">${esc(t("pin.off"))}</button></div>`
@@ -680,6 +680,7 @@ async function rollbackTo(btn) {
   const res = await api().rollback(clId, btn.dataset.rollback);
   if (!res.ok) {
     btn.disabled = false;
+    $("#cl-versions .cl-error")?.remove();  // un solo aviso, el último
     $("#cl-versions").insertAdjacentHTML("afterbegin", `<p class="cl-error">${esc(res.message)}</p>`);
     return;
   }

@@ -1,7 +1,9 @@
 """Mods fijados ("No actualizar este"), por perfil.
 
 Se guardan en los ajustes del perfil (`Settings.pins`) como
-`{"<fuente>:<id de proyecto>": {"name", "version", "reason"}}`. Un mod fijado no entra en
+`{"<fuente>:<id de proyecto>": {"name", "version", "reason", "ids"}}`, donde `ids` son todos los
+IDs con los que se conocía el mod al fijarlo (CurseForge y Modrinth): así la fijación sigue
+valiendo aunque un día solo responda una de las dos webs. Un mod fijado no entra en
 "Actualizar todo" ni lo actualiza la CLI, y si otro mod necesita una versión más nueva de él,
 ese otro mod se bloquea con un aviso en vez de actualizar el fijado.
 """
@@ -25,21 +27,29 @@ def _keys(res: Resolution) -> set[str]:
     return {f"{src}:{pid}" for src, pid in res.known_ids} | ({pin_key(res)} - {None})
 
 
+def _entry_keys(key: str, entry: dict) -> set[str]:
+    return {key} | {str(k) for k in (entry.get("ids") or [])}
+
+
+def pin_entry(res: Resolution, *, version: str | None, reason: str) -> dict:
+    return {"name": res.name, "version": version or "", "reason": reason, "ids": sorted(_keys(res))}
+
+
+def find_pins(res: Resolution, pins: dict) -> list[str]:
+    """Todas las claves de `pins` que corresponden a `res` (puede haber más de una)."""
+    mine = _keys(res)
+    return [k for k, v in pins.items() if mine & _entry_keys(k, v if isinstance(v, dict) else {})]
+
+
 def apply_pins(results: list[Resolution], pins: dict) -> None:
-    """Marca como fijados los mods de `results` que estén en `pins` (por cualquiera de sus IDs,
-    así una fijación hecha con CurseForge vale aunque hoy se identifique por Modrinth)."""
+    """Marca como fijados los mods de `results` que estén en `pins` (por cualquiera de sus IDs)."""
     for r in results:
         if r.mod is None:
             continue
-        hit = next((pins[k] for k in _keys(r) if k in pins), None)
-        if hit is not None:
+        hits = find_pins(r, pins)
+        if hits:
             r.pinned = True
-            r.pin_reason = str(hit.get("reason") or "")
-
-
-def find_pin(res: Resolution, pins: dict) -> str | None:
-    """La clave con la que está fijado `res` (o None)."""
-    return next((k for k in _keys(res) if k in pins), None)
+            r.pin_reason = str(pins[hits[0]].get("reason") or "")
 
 
 def pins_for_folder(mods_dir: Path, settings_file: Path | None = None) -> dict:
