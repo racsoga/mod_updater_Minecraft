@@ -110,3 +110,82 @@ def test_compare_with_last_result():
     assert compare_with_last(now, {"target": TARGET, "ready": ["curseforge:1"]}) == 2
     assert compare_with_last(now, {"target": "1.21.3", "ready": []}) is None
     assert compare_with_last(now, None) is None
+
+
+# ---------------------------------------------------------------- API
+
+def make_api(tmp_path, monkeypatch, fake_result):
+    from mod_updater import migrate as migrate_mod
+    from mod_updater.gui.api import Api
+    from mod_updater.settings import Settings, save_settings
+    from test_toggle import make_jar, res_for
+    d = tmp_path / "juego" / "mods"
+    d.mkdir(parents=True)
+    make_jar(d / "listo.jar", "listo")
+    f = tmp_path / "s.json"
+    save_settings(Settings(mods_dir=str(d), setup_done=True, minecraft_version="1.21.1"), f)
+    a = Api(f, get_key=lambda: (None, None), run_async=lambda fn: fn(), cache_dir=tmp_path / "c", running=lambda g: [])
+    r = res_for(d / "listo.jar")
+    r.source, r.project_id, r.project_name = CF, "1", "Listo"
+    a._results, a._rows, a._row_s = [r], [r], ["ok"]
+    calls = []
+    monkeypatch.setattr(migrate_mod, "check", lambda results, **k: (calls.append(k["target"]), fake_result(k["target"]))[1])
+    return a, d, calls
+
+
+def fake(target, ready=("curseforge:1",)):
+    from mod_updater.resolver import ACTUALIZABLE, INSTALL
+    inst_ = Resolution(mod=None, kind=INSTALL, status=ACTUALIZABLE, source=CF, project_id="1", project_name="Listo",
+                       new_version="2.0", new_file_name="listo-2.0.jar", download_url="https://edge.forgecdn.net/l.jar",
+                       new_sha1="s")
+    return {"target": target, "ready": [{"name": "Listo", "key": k} for k in ready], "alternative": [], "missing": [],
+            "libs": [], "total": len(ready), "ready_count": len(ready), "no_curseforge": False, "install": [inst_]}
+
+
+def test_api_check_saves_the_result_and_compares_next_time(tmp_path, monkeypatch):
+    from mod_updater.settings import load_settings
+    results = iter([fake(TARGET, ready=("curseforge:1",)), fake(TARGET, ready=("curseforge:1", "curseforge:2", "modrinth:z"))])
+    a, d, calls = make_api(tmp_path, monkeypatch, lambda target: next(results))
+    first = a.migrate_check(TARGET)
+    assert first["ok"] and first["ready_count"] == 1 and first["delta"] is None and "install" not in first
+    assert load_settings(a._settings_file).migration_last["ready"] == ["curseforge:1"]
+    assert a.migrate_check(TARGET)["delta"] == 2
+
+
+def test_api_check_rejects_the_current_version_and_needs_a_scan(tmp_path, monkeypatch):
+    a, d, calls = make_api(tmp_path, monkeypatch, fake)
+    assert not a.migrate_check("1.21.1")["ok"]
+    a._results = []
+    assert not a.migrate_check(TARGET)["ok"] and calls == []
+
+
+def test_api_create_profile_downloads_into_a_new_folder_without_touching_the_current(tmp_path, monkeypatch):
+    from mod_updater import downloader
+    from mod_updater.settings import load_settings
+    from test_toggle import make_jar
+    a, d, calls = make_api(tmp_path, monkeypatch, fake)
+    a.migrate_check(TARGET)
+    before = sorted(p.name for p in d.iterdir())
+    new_game = tmp_path / "nueva"
+    a._folder_dialog = lambda: str(new_game)
+    monkeypatch.setattr(downloader, "download_verified", lambda res, dest, sf: make_jar(dest, "listo"))
+    out = a.migrate_create()
+    assert out["ok"] and out["rows"]
+    assert sorted(p.name for p in (new_game / "mods").iterdir()) == ["listo-2.0.jar"]
+    assert sorted(p.name for p in d.iterdir()) == before  # el perfil actual no se toca
+    s = load_settings(a._settings_file)
+    new = next(p for p in s.profiles if p["mods_dir"] == str(new_game / "mods"))
+    assert new["minecraft_version"] == TARGET and s.mods_dir == str(d)  # sigue activo el de antes
+
+
+def test_api_create_refuses_a_folder_with_mods(tmp_path, monkeypatch):
+    from test_toggle import make_jar
+    a, d, calls = make_api(tmp_path, monkeypatch, fake)
+    a.migrate_check(TARGET)
+    busy = tmp_path / "ocupada"
+    (busy / "mods").mkdir(parents=True)
+    make_jar(busy / "mods" / "x.jar", "x")
+    a._folder_dialog = lambda: str(busy)
+    assert not a.migrate_create()["ok"]
+    a._folder_dialog = lambda: str(d)  # ni la carpeta del perfil actual
+    assert not a.migrate_create()["ok"]
