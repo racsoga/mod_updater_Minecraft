@@ -59,11 +59,20 @@ Mod Updater checks your Minecraft `mods` folder, recognises each mod by its fing
 ## Download
 
 1. Download [**ModUpdater.exe**](https://github.com/racsoga/mod_updater_Minecraft/releases/latest/download/ModUpdater.exe) (latest version; also under [*Releases*](https://github.com/racsoga/mod_updater_Minecraft/releases/latest), with the notes and the SHA-256).
-2. Open it. Nothing to install.
+2. Open it. Nothing to install. If Windows shows a warning, see [right below](#if-windows-warns-you-when-opening-it).
 
 > **Make a copy of your `mods` folder the first time.** The app keeps backups and lets you undo, but your own copy never hurts.
 
 **Requirements:** 64-bit Windows 10 or 11, an internet connection and Microsoft's WebView2 component (included in Windows 11 and in up-to-date Windows 10).
+
+### If Windows warns you when opening it
+
+- **SmartScreen** ("Windows protected your PC"): press **More info → Run anyway**.
+- **Microsoft Defender blocks it or quarantines it**: open *Windows Security → Virus & threat protection → Protection history*, expand the `ModUpdater.exe` entry and choose **Actions → Allow on device**. Then download it again if it was deleted.
+
+**Why it happens:** it's a `.exe` built with Python (PyInstaller) and **not digitally signed** (the certificate costs money). Windows doesn't know it yet, and some antivirus engines confuse it with malicious programs packaged the same way. It's a false positive: version 0.3.0 is flagged by 3 of VirusTotal's 68 engines (Bkav, SecureAge and Microsoft, with a generic machine-learning detection, `Wacatac.C!ml`) ([see report](https://www.virustotal.com/gui/file/0ef3739ed7676be34873107f1c2f580e76e542784049a0a194e38406e40201db)).
+
+**Check it yourself:** your file's SHA-256 must match the one in the Release (see *How do I check the .exe is the original?* in the [FAQ](#faq)), and each Release's notes link to the VirusTotal scan of that exact file. The full source code is in this repository.
 
 ## First run
 
@@ -92,7 +101,7 @@ It appears because the executable isn't signed with a paid certificate, not beca
 <details>
 <summary><b>My antivirus says the <code>.exe</code> is suspicious</b></summary>
 
-A minor antivirus may give a **false positive**. It happens to many programs built with PyInstaller, because from the outside they resemble others that really are malicious. For example, version 0.2.0 is clean on Microsoft Defender, Kaspersky, ESET, Bitdefender, Avast and Google, and only 2 of VirusTotal's 71 engines flag it: Bkav Pro and SecureAge ([see report](https://www.virustotal.com/gui/file/38d4924c8ecba8ba1712a1582d5410ea4360926e2d53d0fb40b096c0fcbfd9e4)).
+It's a **false positive**. It happens to many programs built with PyInstaller, because from the outside they resemble others that really are malicious. Version 0.3.0 is flagged by 3 of VirusTotal's 68 engines: Bkav, SecureAge and Microsoft Defender (generic detection `Wacatac.C!ml`) ([see report](https://www.virustotal.com/gui/file/0ef3739ed7676be34873107f1c2f580e76e542784049a0a194e38406e40201db)). If Defender blocks it, see [If Windows warns you when opening it](#if-windows-warns-you-when-opening-it).
 
 - Each Release's notes link to the **VirusTotal scan** of the exact file, so you can see for yourself.
 - Check your file is the original (see the next question).
