@@ -22,7 +22,7 @@ from pathlib import Path
 from .i18n import t
 from .murmur2 import curseforge_fingerprint
 
-CACHE_VERSION = 4  # 2: añade loader y mc_range; 3: requires y side; 4: optional
+CACHE_VERSION = 5  # 2: añade loader y mc_range; 3: requires y side; 4: optional; 5: incompatible y packages
 
 # Dependencias que no son mods (el juego, el cargador, Java): no cuentan como "requeridas".
 _PLATFORM_IDS = {"minecraft", "neoforge", "forge", "java", "fabricloader", "fabric", "quilt_loader"}
@@ -44,6 +44,8 @@ class ModFile:
     mc_range: str | None = None
     requires: list[str] = field(default_factory=list)  # modIds obligatorios según el propio jar
     optional: list[str] = field(default_factory=list)  # modIds que usa si están (opcionales)
+    incompatible: list[str] = field(default_factory=list)  # modIds que declara incompatibles
+    packages: list[str] = field(default_factory=list)  # paquetes Java del jar (para el diagnóstico)
     side: str | None = None  # "client" / "server" / "both" si el jar lo declara (Fabric)
 
     @property
@@ -142,6 +144,45 @@ def _toml_deps(data: dict) -> tuple[list[str], list[str]]:
     return required, [m for m in optional if m not in required]
 
 
+def _incompatible(data: dict) -> list[str]:
+    out: list[str] = []
+    deps = data.get("dependencies") or {}
+    for group in deps.values() if isinstance(deps, dict) else []:
+        for d in group if isinstance(group, list) else []:
+            if isinstance(d, dict) and isinstance(d.get("modId"), str) and str(d.get("type", "")).lower() == "incompatible":
+                if d["modId"] not in out:
+                    out.append(d["modId"])
+    return out
+
+
+MAX_PACKAGES = 40
+
+
+def _packages(names) -> list[str]:
+    """Paquetes Java del jar, resumidos: por cada grupo de dos primeros segmentos
+    (`net.caffeinemc`), el prefijo común de sus paquetes (`net.caffeinemc.mods.sodium`).
+    Sirve para saber de qué mod es una clase que sale en un crash report."""
+    groups: dict[tuple, list[list[str]]] = {}
+    for n in names:
+        if not n.endswith(".class") or "/" not in n or n.startswith("META-INF/"):
+            continue
+        parts = n.split("/")[:-1]
+        if len(parts) < 2:
+            continue
+        groups.setdefault(tuple(parts[:2]), []).append(parts)
+    out = []
+    for key in sorted(groups):
+        pkgs = groups[key]
+        common = pkgs[0]
+        for p in pkgs[1:]:
+            i = 0
+            while i < min(len(common), len(p)) and common[i] == p[i]:
+                i += 1
+            common = common[:i]
+        out.append(".".join(common))
+    return out[:MAX_PACKAGES]
+
+
 def _own_deps(data: dict, mods: list) -> dict:
     own = {x.get("modId") for x in mods if isinstance(x, dict)}  # un jar puede traer varios mods
     required, optional = _toml_deps(data)
@@ -187,6 +228,8 @@ def read_metadata(jar: zipfile.ZipFile) -> dict:
         "version": version if isinstance(version, str) else None,
         "extra_mod_ids": [m.get("modId") for m in mods[1:] if isinstance(m, dict) and m.get("modId")],
         "mc_range": _mc_range(data, first.get("modId")),
+        "incompatible": _incompatible(data),
+        "packages": _packages(names),
         **_own_deps(data, mods),
     }
 
@@ -323,6 +366,8 @@ def scan_folder(
                 mc_range=info.get("mc_range"),
                 requires=info.get("requires", []),
                 optional=info.get("optional", []),
+                incompatible=info.get("incompatible", []),
+                packages=info.get("packages", []),
                 side=info.get("side"),
             )
         )
