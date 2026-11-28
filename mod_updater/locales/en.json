@@ -59,6 +59,7 @@
   "bs.result_none": "It doesn't look like a mod",
   "bs.result_none_deck": "It kept failing whichever half was disabled: it may be the config, the world, the launcher or the game itself.",
   "bs.restored": "All your mods are back to how they were at the start.",
+  "bs.combo_hint": "If you need this mod, the crash may come from how it combines with another one. Try updating both or look at their versions.",
   "bs.versions": "See versions of {name}",
   "bs.back": "Back to Diagnosis",
   "bs.busy": "A half-split search is in progress. Finish or cancel it in Diagnosis before changing mods.",

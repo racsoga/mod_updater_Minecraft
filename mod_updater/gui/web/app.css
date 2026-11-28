@@ -250,6 +250,7 @@ a:hover { text-decoration: underline; }
 .bs-list li { color: var(--muted-strong); font-size: 14px; overflow-wrap: anywhere; }
 #screen-bisect .dg-actions { margin-bottom: 14px; }
 /* Las dos respuestas pesan lo mismo: mismo estilo (secundario) y mismo tamaño, sin botón principal. */
+.lede .bs-combo { margin-top: 14px; font-size: 16px; line-height: 1.45; color: var(--muted-strong); max-width: 70ch; }
 .btn-answer { height: 44px; min-width: 170px; padding: 0 22px; font-size: 15px; }
 #bs-cancel { padding-left: 0; padding-right: 0; }  /* alineado con el texto de encima */
 

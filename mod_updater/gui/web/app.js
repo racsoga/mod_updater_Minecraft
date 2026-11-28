@@ -1722,6 +1722,7 @@ async function openBisect() {
   const st = await api().bisect_status();
   if (st && st.active) { renderBisect(st); return; }
   $("#bs-kicker").hidden = true;
+  $("#bs-combo").hidden = true;
   $("#bs-title").textContent = t("bs.title");
   $("#bs-deck").textContent = t("bs.deck");
   bsShow("intro");
@@ -1755,6 +1756,8 @@ function renderBisect(st) {
       : t("bs.result_group", { names: joinList(st.result) });
     $("#bs-deck").textContent = st.problems.length ? t("bs.restore_failed", { names: joinList(st.problems) })
       : st.result.length ? t("bs.restored") : `${t("bs.result_none_deck")} ${t("bs.restored")}`;
+    // Puede que el fallo sea una combinación con otro mod: la búsqueda señala a uno de los dos.
+    $("#bs-combo").hidden = !st.result.length;
     const acts = [];
     if (st.result_rows.length) acts.push(`<button class="btn-primary" type="button" id="bs-disable">${esc(t("dg.act_disable", { names: joinList(st.result) }))}</button>`);
     if (one && st.result_rows.length && MODS[st.result_rows[0]] && MODS[st.result_rows[0]].vers)
@@ -1771,6 +1774,7 @@ function renderBisect(st) {
     return;
   }
   $("#bs-kicker").hidden = false;
+  $("#bs-combo").hidden = true;
   $("#bs-kicker").textContent = t("bs.round", { round: st.round, total: st.round - 1 + st.left });
   $("#bs-title").textContent = t("bs.round_title");
   // Primera vuelta: "Buscamos entre N sospechosos"; después, "Quedan N".
@@ -1800,6 +1804,7 @@ async function bisectAnswer(fails) {
 // La vuelta no se pudo preparar: la búsqueda se canceló y todo está como al empezar.
 function renderBisectAborted(message) {
   bisectActive = false;
+  $("#bs-combo").hidden = true;
   $("#bs-kicker").hidden = true;
   $("#bs-title").textContent = t("bs.title");
   $("#bs-deck").textContent = message;

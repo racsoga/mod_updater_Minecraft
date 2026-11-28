@@ -59,6 +59,7 @@
   "bs.result_none": "No parece cosa de un mod",
   "bs.result_none_deck": "Siguió fallando con cualquier mitad desactivada: puede ser la configuración, el mundo, el launcher o el propio juego.",
   "bs.restored": "Todos tus mods vuelven a estar como al empezar.",
+  "bs.combo_hint": "Si necesitas este mod, puede que el fallo venga de cómo se combina con otro. Prueba a actualizar los dos o mira sus versiones.",
   "bs.versions": "Ver versiones de {name}",
   "bs.back": "Volver a Diagnóstico",
   "bs.busy": "Hay una búsqueda por mitades en curso. Termínala o cancélala en Diagnóstico antes de cambiar mods.",
