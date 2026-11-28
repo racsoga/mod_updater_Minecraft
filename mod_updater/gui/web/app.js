@@ -224,6 +224,7 @@ const isAttention = m => m.s === "manual" || m.s === "missing" || m.s === "unrea
 const GROUPS = [
   { key: "attention", title: "ui.group_attention", match: isAttention },
   { key: "changes", title: "ui.group_changes", match: selectable },
+  { key: "pin", title: "ui.group_pin", match: m => m.s === "pin" },
   { key: "ok", title: "ui.group_ok", match: m => m.s === "ok", collapsible: true },
 ];
 const FILTERS = [
@@ -231,6 +232,7 @@ const FILTERS = [
   { key: "changes", label: "ui.filter_changes", match: selectable },
   { key: "ok", label: "ui.filter_ok", match: m => m.s === "ok" },
   { key: "attention", label: "ui.filter_attention", match: isAttention },
+  { key: "pin", label: "ui.filter_pin", match: m => m.s === "pin", hideEmpty: true },
   { key: "off", label: "ui.filter_off", match: m => m.off, hideEmpty: true },
 ];
 const toggleable = m => !!m.file && m.s !== "unreadable";  // instalado y legible: se puede activar/desactivar
@@ -285,7 +287,9 @@ function betaTag(m) {
 }
 
 function versions(m) {
-  if (!m.to) return `<div class="ver"><span class="new" title="${esc(m.from)}">${esc(m.from || "?")}</span>${betaTag(m)}</div>`;
+  const vbtn = m.vers && !m.cl
+    ? `<button class="linkbtn cl-btn" type="button" data-cl="${m.id}" aria-haspopup="dialog">${esc(t("cl.versions_btn"))}</button>` : "";
+  if (!m.to) return `<div class="ver"><span class="new" title="${esc(m.from)}">${esc(m.from || "?")}</span>${betaTag(m)}${vbtn}</div>`;
   const from = m.from ? `<span class="old" title="${esc(m.from)}">${esc(m.from)}</span>` : `<span class="old">${esc(t("ui.not_installed"))}</span>`;
   const cl = m.cl ? `<button class="linkbtn cl-btn" type="button" data-cl="${m.id}" aria-haspopup="dialog">${esc(t("cl.open"))}</button>` : "";
   return `<div class="ver">${from}${arrow}<span class="sr-only">${esc(t("ui.to"))}</span><span class="new" title="${esc(m.to)}">${esc(m.to)}</span>${betaTag(m)}${cl}</div>`;
@@ -338,6 +342,7 @@ function render() {
     || ("ok" in ds && "[data-ok]") || ("all" in ds && "[data-all]") || ("clear" in ds && "#q") || null;
 
   if (filter === "off" && !MODS.some(m => m.off)) filter = "all";  // ya no queda ninguno desactivado
+  if (filter === "pin" && !MODS.some(m => m.s === "pin")) filter = "all";
   $("#filters").innerHTML = FILTERS.map(f => {
     const n = MODS.filter(f.match).length;
     if (f.hideEmpty && !n) return "";
@@ -611,24 +616,79 @@ document.addEventListener("keydown", e => {
 
 let clReturn = null;   // botón al que vuelve el foco al cerrar
 let clSeq = 0;         // descarta respuestas de una petición anterior (red lenta)
+let clId = null;       // fila abierta en el panel
 
 async function openChangelog(id, trigger) {
   const m = MODS[id];
   clReturn = trigger;
-  $("#cl-title").textContent = t("cl.title", { name: m.name });
-  $("#cl-range").textContent = `${m.from || ""} → ${m.to || ""}`;
-  $("#cl-body").innerHTML = `<p class="cl-loading">${esc(t("cl.loading"))}</p>`;
+  clId = id;
+  $("#cl-title").textContent = t(m.cl ? "cl.title" : "cl.versions_of", { name: m.name });
+  $("#cl-range").textContent = m.to ? `${m.from || ""} → ${m.to}` : (m.from || "");
+  $("#cl-body").innerHTML = `<div id="cl-pin"></div><div id="cl-notes">${m.cl ? `<p class="cl-loading">${esc(t("cl.loading"))}</p>` : ""}</div><div id="cl-versions"></div>`;
   $("#cl-backdrop").hidden = $("#cl-drawer").hidden = false;
   document.body.classList.add("drawer-open");
   $("#cl-close").focus();
   const seq = ++clSeq;
+  if (m.vers) loadVersions(id, seq);
+  if (!m.cl) return;
   const res = await api().changelog(id);
   if ($("#cl-drawer").hidden || seq !== clSeq) return;  // se cerró o se abrió otro mientras cargaba
   renderChangelog(res);
 }
 
+// Fijar ("No actualizar este") y volver a una versión anterior, en el mismo panel.
+async function loadVersions(id, seq) {
+  const box = $("#cl-versions");
+  box.innerHTML = `<p class="cl-loading">${esc(t("cl.loading"))}</p>`;
+  const res = await api().versions_for(id);
+  if ($("#cl-drawer").hidden || seq !== clSeq) return;
+  renderPin(id, res);
+  if (!res.ok) { box.innerHTML = `<p class="cl-error">${esc(res.message)}</p>`; return; }
+  const tag = v => (v.channel !== "release" ? ` <span class="tag">${esc(t(v.channel === "alpha" ? "ui.alpha" : "ui.beta"))}</span>` : "");
+  const action = v => v.current ? `<span class="vr-current">${esc(t("cl.installed"))}</span>`
+    : v.manual ? `<span class="an-note">${esc(t("pin.manual"))}</span>`
+    : `<button class="btn-small" type="button" data-rollback="${esc(v.id)}" aria-label="${esc(t("cl.install_x", { version: v.version }))}">${esc(t("cl.install_this"))}</button>`;
+  const items = res.versions.map(v => `<li class="vr-item"><span class="an-name">${esc(v.version)}${tag(v)}<span class="an-note">${esc(formatDay(v.date))}</span></span>${action(v)}</li>`).join("");
+  box.innerHTML = `<h3 class="ex-h">${esc(t("cl.versions_title"))}</h3>`
+    + (items ? `<ul class="an-list vr-list">${items}</ul><p class="an-hint">${esc(t("cl.rollback_hint"))}</p>`
+             : `<p class="cl-empty">${esc(t("cl.versions_none"))}</p>`);
+}
+
+function renderPin(id, res) {
+  const box = $("#cl-pin");
+  if (!res.ok) { box.innerHTML = ""; return; }
+  box.innerHTML = res.pinned
+    ? `<div class="pin-box"><p class="pin-state"><b>${esc(t("pin.pinned_info", { version: res.current || "?" }))}</b>${res.reason ? ` ${esc(res.reason)}` : ""}</p>
+        <button class="btn-small" type="button" id="pin-off">${esc(t("pin.off"))}</button></div>`
+    : `<div class="pin-box"><h3 class="ex-h">${esc(t("pin.title"))}</h3><p class="an-hint">${esc(t("pin.hint"))}</p>
+        <label class="pin-label" for="pin-reason">${esc(t("pin.reason_label"))}</label>
+        <div class="pin-row"><input class="input" id="pin-reason" maxlength="200" autocomplete="off" placeholder="${esc(t("pin.reason_ph"))}">
+        <button class="btn-small" type="button" id="pin-on">${esc(t("pin.on", { version: res.current || "?" }))}</button></div></div>`;
+  $("#pin-on")?.addEventListener("click", () => setPin(id, true, $("#pin-reason").value));
+  $("#pin-off")?.addEventListener("click", () => setPin(id, false));
+}
+
+async function setPin(id, on, reason = "") {
+  const res = await api().pin_set(id, on, reason);
+  if (!res.ok) { $("#cl-pin").insertAdjacentHTML("beforeend", `<p class="cl-error">${esc(res.message)}</p>`); return; }
+  closeChangelog();
+  startScan();  // el plan cambia: un mod fijado sale de "Actualizar todo" (y vuelve al soltarlo)
+}
+
+async function rollbackTo(btn) {
+  btn.disabled = true;
+  const res = await api().rollback(clId, btn.dataset.rollback);
+  if (!res.ok) {
+    btn.disabled = false;
+    $("#cl-versions").insertAdjacentHTML("afterbegin", `<p class="cl-error">${esc(res.message)}</p>`);
+    return;
+  }
+  closeChangelog();
+  startApplyRows(res.rows);
+}
+
 function renderChangelog(res) {
-  const body = $("#cl-body");
+  const body = $("#cl-notes");
   if (!res.ok) { body.innerHTML = `<p class="cl-error">${esc(res.message)}</p>`; return; }
   const link = res.url ? `<a href="${esc(res.url)}" data-external>${esc(t("cl.page"))}</a>` : "";
   if (!res.versions.length) { body.innerHTML = `<p class="cl-empty">${esc(t("cl.none"))} ${link}</p>`; return; }
@@ -657,11 +717,12 @@ function closeChangelog() {
 function wireChangelog() {
   $("#cl-close").addEventListener("click", closeChangelog);
   $("#cl-backdrop").addEventListener("click", closeChangelog);
+  $("#cl-body").addEventListener("click", e => { const b = e.target.closest("[data-rollback]"); if (b) rollbackTo(b); });
   $("#cl-drawer").addEventListener("keydown", e => {
     if (e.key === "Escape") { e.preventDefault(); closeChangelog(); return; }
     if (e.key !== "Tab") return;
     // Foco atrapado dentro del panel mientras está abierto.
-    const items = [...$("#cl-drawer").querySelectorAll("button, a[href], [tabindex]:not([tabindex='-1'])")];
+    const items = [...$("#cl-drawer").querySelectorAll("button:not(:disabled), a[href], input, [tabindex]:not([tabindex='-1'])")];
     if (!items.length) return;
     const first = items[0], last = items[items.length - 1];
     if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }

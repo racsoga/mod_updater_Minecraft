@@ -19,7 +19,11 @@ STATUS_ORDER = {ACTUALIZABLE: 0, DESCARGA_MANUAL: 1, NO_ENCONTRADO: 2, AL_DIA: 3
 
 def status_label(r: Resolution) -> str:
     """Texto visible del estado ("Al día", "Nueva dependencia"...)."""
-    return t("status.dep") if r.kind == INSTALL else t(f"status.{STATUS_KEY.get(r.status, 'missing')}")
+    if r.kind == INSTALL:
+        return t("status.dep")
+    if r.pinned:
+        return t("status.pin")
+    return t(f"status.{STATUS_KEY.get(r.status, 'missing')}")
 
 
 def _channel(ch: str | None) -> str:
@@ -59,10 +63,12 @@ def print_report(
                 note = "; ".join(filter(None, [note, t("row.newer_beta", version=r.newer_prerelease)]))
             if r.status == NO_ENCONTRADO and r.mod:
                 note = f"{note}  ({r.mod.file_name})"
+            if r.pinned:
+                style, note = "dim", "; ".join(filter(None, [r.pin_reason, note]))
         table.add_row(
             escape(r.name),
             "—" if r.kind == INSTALL else escape(r.current_version or "?") + _channel(r.current_channel),
-            f"[green]{new}[/]" if r.status == ACTUALIZABLE else new,
+            f"[green]{new}[/]" if r.status == ACTUALIZABLE and not r.pinned else new,
             f"[{style}]{status_label(r)}[/]",
             r.source or "-",
             escape(note),

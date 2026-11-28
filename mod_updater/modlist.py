@@ -45,6 +45,8 @@ def build(results: list[Resolution], *, minecraft: str, loader: str, app: str) -
                          "version": r.current_version, "sha1": r.mod.sha1})
         if r.mod.disabled:
             mods[-1]["activo"] = False
+        if r.pinned:
+            mods[-1]["fijado"] = True
     return {"formato": FORMAT, "app": app, "minecraft": minecraft, "cargador": loader, "mods": mods}
 
 

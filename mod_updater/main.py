@@ -21,6 +21,7 @@ from .downloader import apply_updates, backup_info, backup_root, friendly_error,
 from .i18n import t
 from .modrinth import ModrinthClient
 from .net import ApiError
+from .pins import apply_pins, pins_for_folder
 from .procs import minecraft_running
 from .report import print_report
 from .resolver import INSTALL, resolve_all
@@ -162,6 +163,8 @@ def main(argv: list[str] | None = None) -> int:
         if "modrinth" in failed:
             console.print(f"[yellow]{escape(t('notice.mr_down'))}[/]")
 
+        # Los mods fijados en la app (perfil con esta carpeta) tampoco se actualizan desde aquí.
+        apply_pins(results, pins_for_folder(Path(cfg.mods_dir)))
         shown = results
         if args.only:
             filters = [f.strip().lower() for f in args.only.split(",") if f.strip()]

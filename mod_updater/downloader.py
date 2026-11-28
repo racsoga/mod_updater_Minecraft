@@ -233,7 +233,7 @@ def toggle_one(res: Resolution, before_change=None) -> Outcome:
 def updatable(results: list[Resolution]) -> tuple[list[Resolution], list[Resolution]]:
     """Separa los actualizables aplicables de los que hay que saltar
     (proyectos duplicados en la carpeta: actualizarlos chocaría)."""
-    cands = [r for r in results if r.status == ACTUALIZABLE]
+    cands = [r for r in results if r.status == ACTUALIZABLE and not r.pinned]  # fijado: no se toca
     count = Counter((r.source, r.project_id) for r in cands)
     active = Counter((r.source, r.project_id) for r in cands if not (r.mod and r.mod.disabled))
 

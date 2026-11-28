@@ -13,6 +13,11 @@ La sección de cada versión es la que se publica como notas de la Release al cr
   - Solo se renombra: no crea copia de seguridad ni cuenta para el límite de copias; para deshacerlo, se vuelve a activar. No se hace con Minecraft abierto.
   - *Análisis* no los cuenta (lo indica), el `.mrpack` los deja fuera y el `.modlist.json` los marca con `"activo": false`. Al importar una lista, los mods nuevos marcados así se instalan desactivados.
 
+- **Fijar versión** ("No actualizar este"): desde *Ver cambios* o *Versiones* en cada fila, con un motivo opcional. El mod sale como *Fijado*, en su propio grupo y filtro, y no entra en "Actualizar todo" (tampoco en la CLI, que lee las fijaciones del perfil con esa carpeta). Se guarda por perfil.
+  - Si otro mod necesita una versión más nueva de uno fijado, ese otro no se actualiza y se explica por qué.
+  - **Volver a una versión anterior**: el mismo panel lista las versiones publicadas para tu Minecraft y cargador; elegir una la instala (con copia de seguridad y Deshacer) y la deja fijada.
+  - Exportar e importar listas respeta las fijaciones (`"fijado": true` en `.modlist.json`).
+
 ### Cambiado
 - Las notas de cada Release enlazan la **política de firma de código** (*Code signing policy*, SignPath Foundation).
 
