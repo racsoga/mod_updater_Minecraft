@@ -112,3 +112,75 @@ def test_restore_never_overwrites(tmp_path):
     jar(tmp_path / gone)  # alguien puso otra copia con el mismo nombre
     problems = restore(tmp_path, b)
     assert problems == [gone] and (tmp_path / f"{gone}.disabled").exists()
+
+
+# ---------------------------------------------------------------- API
+
+def make_api(tmp_path, names, needs=None, running=()):
+    from mod_updater.gui.api import Api
+    from mod_updater.resolver import CF, Dep
+    from mod_updater.settings import Settings, save_settings
+    from test_toggle import make_jar, res_for
+    d = tmp_path / ".minecraft" / "mods"
+    d.mkdir(parents=True)
+    f = tmp_path / "s.json"
+    save_settings(Settings(mods_dir=str(d), setup_done=True), f)
+    a = Api(f, get_key=lambda: (None, None), run_async=lambda fn: fn(), cache_dir=tmp_path / "c",
+            running=lambda g: list(running))
+    results = []
+    for n in names:
+        make_jar(d / n, n.split(".")[0])
+        r = res_for(d / n)
+        r.project_name, r.project_id, r.known_ids = n.split(".")[0].capitalize(), n, {(CF, n)}
+        r.current_deps = [Dep(CF, x) for x in (needs or {}).get(n, [])]
+        results.append(r)
+    a._results, a._rows, a._row_s = results, list(results), ["ok"] * len(results)
+    return a, d
+
+
+NAMES = [f"m{i}.jar" for i in range(8)]
+
+
+def test_api_full_search_restores_everything(tmp_path):
+    a, d = make_api(tmp_path, NAMES)
+    st = a.bisect_start([])
+    assert st["ok"] and st["round"] == 1 and st["max"] == 4 and len(st["testing"]) == 4
+    assert sum(f.endswith(".disabled") for f in files(d)) == 4
+    culprit = "m6.jar"
+    while not st["done"]:
+        st = a.bisect_answer((d / culprit).exists())  # falla mientras el culpable siga activo
+    assert st["result"] == ["M6"] and st["result_rows"] == [6]
+    assert files(d) == NAMES and a.bisect_status() is None
+
+
+def test_api_dependencies_stay_together(tmp_path):
+    a, d = make_api(tmp_path, ["lib.jar", "a.jar", "b.jar", "c.jar"], needs={"a.jar": ["lib.jar"]})
+    st = a.bisect_start([])
+    off = {f[: -len(".disabled")] for f in files(d) if f.endswith(".disabled")}
+    assert not ("lib.jar" in off and "a.jar" not in off)  # a.jar nunca queda activo sin lib.jar
+
+
+def test_api_resume_after_closing_and_cancel(tmp_path):
+    from mod_updater.gui.api import Api
+    a, d = make_api(tmp_path, NAMES)
+    a.bisect_start([0, 1])  # "seguro que no es este"
+    again = Api(a._settings_file, get_key=lambda: (None, None), run_async=lambda fn: fn(),
+                cache_dir=tmp_path / "c", running=lambda g: [])
+    st = again.bisect_status()
+    assert st["active"] and st["round"] == 1 and st["suspects"] == 6
+    assert again.bisect_cancel()["ok"] and files(d) == NAMES and again.bisect_status() is None
+
+
+def test_api_blocks_with_minecraft_open_and_other_changes_while_searching(tmp_path):
+    a, d = make_api(tmp_path, NAMES, running=[1])
+    assert a.bisect_start([])["reason"] == "minecraft" and files(d) == NAMES
+    a, d = make_api(tmp_path / "b", NAMES)
+    a.bisect_start([])
+    res = a.mods_set_enabled([0], False)
+    assert not res["ok"] and res["reason"] == "bisect"
+
+
+def test_api_needs_a_scan(tmp_path):
+    a, d = make_api(tmp_path, NAMES)
+    a._results = []
+    assert not a.bisect_start([])["ok"]
