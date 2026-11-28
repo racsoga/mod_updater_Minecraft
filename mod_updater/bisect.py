@@ -74,13 +74,35 @@ class Bisect:
         if len(self.suspects) == 1:  # comprobar el último: ¿deja de fallar sin él?
             self._plan(self.suspects)
             return
-        half = len(self.suspects) // 2
-        for part in (self.suspects[:half], self.suspects[half:]):
-            test = self._closure(part)
-            if not set(self.suspects) <= test:
-                self._plan(part)
-                return
-        self._finish(self.suspects) if self.proven else self._plan(self.suspects)
+        part = self._balanced_part()
+        if part:
+            self._plan(part)
+        else:  # no se puede separar (dependencias en círculo): es el grupo entero
+            self._finish(self.suspects) if self.proven else self._plan(self.suspects)
+
+    def _balanced_part(self) -> list[str]:
+        """La parte cuya prueba (ella y lo que la necesita) deja a los sospechosos lo más cerca
+        posible de la mitad. Primero los que arrastran menos dependientes."""
+        sus = set(self.suspects)
+        order = sorted(self.suspects, key=lambda x: (len(self._closure([x]) & sus), x))
+        best, part = None, []
+        for x in order:
+            part.append(x)
+            size = len(self._closure(part) & sus)
+            if size >= len(sus):
+                break
+            score = abs(size - len(sus) / 2)
+            if best is None or score < best[0]:
+                best = (score, list(part))
+        return best[1] if best else []
+
+    @property
+    def rounds_left(self) -> int:
+        """Vueltas que quedan, aproximadas (con dependencias las mitades no siempre son iguales)."""
+        if self.done:
+            return 0
+        k = len(self.suspects)
+        return (math.ceil(math.log2(k)) if k > 1 else 0) + (0 if self.proven else 1)
 
     def _plan(self, part: list[str]) -> None:
         self.testing = sorted(self._closure(part))
@@ -114,7 +136,31 @@ class Bisect:
         return cls(**{k: data[k] for k in cls.__dataclass_fields__ if k in data})
 
 
-# --------------------------------------------------------------------------- disco
+# --------------------------------------------------------------------------- disco y estado
+
+def state_file(cache_dir: Path, profile_id: str | None) -> Path:
+    """Archivo con la búsqueda en curso de un perfil (en la caché de la app)."""
+    pid = "".join(c if c.isalnum() or c in "-_" else f"~{ord(c):x}" for c in (profile_id or "principal").lower())
+    return Path(cache_dir) / f"bisect-{pid}.json"
+
+
+def active_for_folder(mods_dir: Path, settings_file: Path | None = None) -> bool:
+    """¿Hay una búsqueda por mitades en curso en esa carpeta? (para que la CLI no toque nada)."""
+    import json
+
+    from .settings import app_dir, load_settings  # aquí para no crear un import circular
+
+    s = load_settings(settings_file)
+    norm = lambda p: os.path.normcase(os.path.normpath(str(p)))  # noqa: E731
+    for p in s.profiles:
+        f = state_file(app_dir() / "cache", p.get("id"))
+        try:
+            data = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if norm(data.get("mods_dir", "")) == norm(mods_dir):
+            return True
+    return False
 
 def _rename(src: Path, dst: Path) -> bool:
     if dst.exists():  # nunca se sobrescribe nada

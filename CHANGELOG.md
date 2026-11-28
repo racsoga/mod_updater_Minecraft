@@ -22,7 +22,7 @@ La sección de cada versión es la que se publica como notas de la Release al cr
   - Acciones de un clic que no crean problemas nuevos: instalar lo que falta, cambiar un mod por otro cuando chocan ("Cambiar Embeddium por Sodium" arregla a la vez la dependencia y la incompatibilidad), activar, desactivar (nombrando también a los que dependen), actualizar o volver a una versión anterior. "Actualizar" solo se propone si hay versión más nueva.
   - Aviso en la pestaña y en *Mis mods* cuando hay un crash report nuevo. *Copiar resumen* para pegarlo en el issue del mod, sin tu usuario de Windows ni de Minecraft.
 
-- **Buscar el mod culpable por mitades** (desde *Diagnóstico*): desactiva la mitad de los sospechosos, abres Minecraft y dices si sigue fallando; repite hasta dar con él y al terminar lo deja todo como estaba. Nunca deja un mod activo sin su librería, permite descartar mods de antemano, dice cuántas vueltas hacen falta como mucho (con 150 mods, 9) y, si se cierra la app a medias, ofrece continuar o restaurar. Mientras dura, no se pueden cambiar mods desde otro sitio.
+- **Buscar el mod culpable por mitades** (desde *Diagnóstico*): desactiva la mitad de los sospechosos, abres Minecraft y dices si sigue fallando; repite hasta dar con él y al terminar lo deja todo como estaba. Nunca deja un mod activo sin su librería, permite descartar mods de antemano, dice cuántas vueltas quedan, más o menos, y, si se cierra la app a medias, ofrece continuar o restaurar. Si una vuelta no se puede preparar, cancela y lo deja todo como estaba. Mientras dura, no se pueden cambiar mods desde otro sitio (ni desde la CLI).
 
 ### Cambiado
 - Las notas de cada Release enlazan la **política de firma de código** (*Code signing policy*, SignPath Foundation).

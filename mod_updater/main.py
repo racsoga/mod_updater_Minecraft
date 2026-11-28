@@ -195,6 +195,10 @@ def main(argv: list[str] | None = None) -> int:
     if not args.apply:
         console.print(f"[dim]{t('cli.dry_run')}[/]")
         return 0
+    from .bisect import active_for_folder  # aquí: solo hace falta al aplicar
+    if active_for_folder(Path(cfg.mods_dir)):  # la app está buscando un mod por mitades en esta carpeta
+        console.print(f"[yellow]{escape(t('bs.busy'))}[/]")
+        return 1
     return run_apply(plan, cfg.mods_dir, modrinth, curseforge, console,
                      assume_yes=args.yes, keep_backups=cfg.backups_to_keep)
 

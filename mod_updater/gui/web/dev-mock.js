@@ -51,7 +51,7 @@
   const emit = (e, p) => window.onBackend(e, p);
   let diagSeen = false;
   let bs = null;
-  const bsView = () => ({ ok: true, active: !bs.done, done: bs.done, round: bs.round, max: bs.max, suspects: bs.suspects.length,
+  const bsView = () => ({ ok: true, active: !bs.done, done: bs.done, round: bs.round, left: bs.done ? 0 : Math.max(1, Math.ceil(Math.log2(Math.max(bs.suspects.length, 1))) + (bs.proven ? 0 : 1)), suspects: bs.suspects.length,
     testing: bs.testing, result: bs.result, result_rows: bs.result.map(n => rows.find(r => r.name === n).id), problems: [] });
   const bsNext = () => {
     if (!bs.suspects.length) { bs.done = true; bs.result = []; return; }

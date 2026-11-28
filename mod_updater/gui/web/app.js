@@ -765,7 +765,10 @@ async function revertLanguagePreview() {
   applyStrings(s.lang, s.strings);
 }
 
+let modsStale = false;  // la búsqueda por mitades cambió archivos: Mis mods se vuelve a revisar
+
 function goMods() {
+  if (modsStale) { modsStale = false; startScan(); return; }
   if (modsScreen && modsScreen !== "apply") show(modsScreen);
   else if (DATA) showResults(DATA);
   else startScan();
@@ -1727,7 +1730,9 @@ async function openBisect() {
 
 function renderBisect(st) {
   show("bisect");
+  modsStale = true;
   if (st.done) {
+    $("#bs-pending-notice")?.remove();
     $("#bs-kicker").hidden = true;
     bsShow("result");
     const one = st.result.length === 1;
@@ -1751,7 +1756,7 @@ function renderBisect(st) {
     return;
   }
   $("#bs-kicker").hidden = false;
-  $("#bs-kicker").textContent = t("bs.round", { round: st.round, max: st.max });
+  $("#bs-kicker").textContent = `${t("bs.round", { round: st.round })} · ${t("bs.left", { count: st.left })}`;
   $("#bs-title").textContent = t("bs.round_title");
   $("#bs-deck").textContent = t("bs.round_deck", { count: st.testing.length, suspects: st.suspects });
   $("#bs-off-summary").textContent = t("bs.off_list", { count: st.testing.length });
@@ -1760,12 +1765,31 @@ function renderBisect(st) {
   if (st.problems && st.problems.length) bsError(t("bs.restore_failed", { names: joinList(st.problems) }));
 }
 
+const bsButtons = () => [$("#bs-fails"), $("#bs-works"), $("#bs-cancel"), $("#bs-start")];
+
+async function bsCall(fn) {
+  bsButtons().forEach(b => { b.disabled = true; });  // una sola llamada a la vez
+  try { return await fn(); } finally { bsButtons().forEach(b => { b.disabled = false; }); }
+}
+
 async function bisectAnswer(fails) {
-  for (const b of [$("#bs-fails"), $("#bs-works")]) b.disabled = true;
-  const st = await api().bisect_answer(fails);
-  for (const b of [$("#bs-fails"), $("#bs-works")]) b.disabled = false;
-  if (!st.ok) { bsError(st.message); return; }
+  const st = await bsCall(() => api().bisect_answer(fails));
+  if (!st.ok) {
+    if (st.reason !== "minecraft" && !(await api().bisect_status())) { modsStale = true; renderBisectAborted(st.message); return; }
+    bsError(st.message); return;
+  }
   renderBisect(st);
+}
+
+// La vuelta no se pudo preparar: la búsqueda se canceló y todo está como al empezar.
+function renderBisectAborted(message) {
+  $("#bs-kicker").hidden = true;
+  $("#bs-title").textContent = t("bs.title");
+  $("#bs-deck").textContent = message;
+  $("#bs-result-actions").innerHTML = `<button class="btn-secondary" type="button" id="bs-done">${esc(t("bs.back"))}</button>`;
+  $("#bs-done").addEventListener("click", openDiag);
+  bsShow("result");
+  $("#bs-pending-notice")?.remove();
 }
 
 function wireBisect() {
@@ -1774,15 +1798,17 @@ function wireBisect() {
   $("#bs-back").addEventListener("click", openDiag);
   $("#bs-start").addEventListener("click", async () => {
     const excluded = [...document.querySelectorAll("#bs-exclude-list input:checked")].map(i => Number(i.value));
-    const st = await api().bisect_start(excluded);
+    const st = await bsCall(() => api().bisect_start(excluded));
     if (!st.ok) { bsError(st.message); return; }
     renderBisect(st);
   });
   $("#bs-fails").addEventListener("click", () => bisectAnswer(true));
   $("#bs-works").addEventListener("click", () => bisectAnswer(false));
   $("#bs-cancel").addEventListener("click", async () => {
-    const res = await api().bisect_cancel();
+    const res = await bsCall(() => api().bisect_cancel());
     if (!res.ok) { bsError(res.message); return; }
+    modsStale = true;
+    $("#bs-pending-notice")?.remove();
     openDiag();
   });
 }

@@ -144,7 +144,7 @@ NAMES = [f"m{i}.jar" for i in range(8)]
 def test_api_full_search_restores_everything(tmp_path):
     a, d = make_api(tmp_path, NAMES)
     st = a.bisect_start([])
-    assert st["ok"] and st["round"] == 1 and st["max"] == 4 and len(st["testing"]) == 4
+    assert st["ok"] and st["round"] == 1 and st["left"] == 4 and len(st["testing"]) == 4
     assert sum(f.endswith(".disabled") for f in files(d)) == 4
     culprit = "m6.jar"
     while not st["done"]:
@@ -184,3 +184,96 @@ def test_api_needs_a_scan(tmp_path):
     a, d = make_api(tmp_path, NAMES)
     a._results = []
     assert not a.bisect_start([])["ok"]
+
+
+# ---------------------------------------------------------------- revisión final
+
+def test_balanced_rounds_with_many_dependencies():
+    import random
+    rng = random.Random(7)
+    libs = [f"lib{i:02}.jar" for i in range(15)]
+    mods = [f"mod{i:03}.jar" for i in range(135)]
+    names = libs + mods
+    needs = {m: rng.sample(libs, 3) for m in mods if rng.random() < 0.6}
+    worst = 0
+    for culprit in rng.sample(names, 40):
+        b, rounds = run_to_end(names, culprit, needs)
+        assert culprit in b.result
+        worst = max(worst, rounds)
+    assert worst <= 12  # sin repartir bien las mitades llegaba a 19
+
+
+def test_rounds_left_is_recomputed():
+    b = Bisect.start([f"m{i}.jar" for i in range(16)], {})
+    assert b.rounds_left == 5
+    b.answer(fails=False)
+    assert b.rounds_left == 3  # ya se vio que deja de fallar: no hace falta la vuelta de comprobación
+
+
+def test_api_rows_follow_the_disk_after_resume_and_finish(tmp_path):
+    from mod_updater.gui.api import Api
+    a, d = make_api(tmp_path, NAMES)
+    st = a.bisect_start([])
+    off = [n for n in NAMES if not (d / n).exists()]
+    # Se cierra la app y se vuelve a abrir: la revisión ve los de esta vuelta como desactivados.
+    again = Api(a._settings_file, get_key=lambda: (None, None), run_async=lambda fn: fn(),
+                cache_dir=tmp_path / "c", running=lambda g: [])
+    again._results, again._rows, again._row_s = a._results, a._rows, a._row_s
+    for r in again._results:
+        if r.mod.file_name in off:
+            r.mod.path, r.mod.file_name = r.mod.path.with_name(r.mod.file_name + ".disabled"), r.mod.file_name + ".disabled"
+    culprit = off[0]
+    st = again.bisect_status()
+    while not st["done"]:
+        st = again.bisect_answer((d / culprit).exists())
+    assert files(d) == NAMES and all(not r.mod.disabled and r.mod.path.exists() for r in again._results)
+    assert again.mods_set_enabled(st["result_rows"], False)["ok"] and not (d / culprit).exists()
+
+
+def test_api_undo_and_import_are_blocked_during_a_search(tmp_path):
+    a, d = make_api(tmp_path, NAMES)
+    a.bisect_start([])
+    assert a.undo_last()["reason"] == "bisect" and a.restore_interrupted()["reason"] == "bisect"
+    a._import = {"add": [], "update": [], "same": [], "unavailable": [], "remove": [], "mismatch": None}
+    assert a.modlist_import_start(False)["reason"] == "bisect"
+
+
+def test_api_round_that_cannot_disable_is_cancelled(tmp_path):
+    a, d = make_api(tmp_path, NAMES)
+    from test_toggle import make_jar
+    for n in NAMES[:4]:  # la primera mitad no se puede desactivar: ya hay un .disabled con ese nombre
+        make_jar(d / f"{n}.disabled", "otro")
+    st = a.bisect_start([])
+    assert st["ok"] is False and "M0" in st["message"] and a.bisect_status() is None
+    assert all((d / n).exists() for n in NAMES)
+
+
+def test_api_folder_change_and_profile_removal_are_refused_during_a_search(tmp_path):
+    a, d = make_api(tmp_path, NAMES)
+    a.bisect_start([])
+    s = a._settings()
+    res = a.save_setup({"mods_dir": str(tmp_path / "otra"), "minecraft_version": s.minecraft_version, "loader": s.loader,
+                        "use_curseforge": False, "allow_beta": False, "backups_to_keep": 1, "language": "es"})
+    assert res["ok"] is False and res.get("reason") == "bisect"
+    assert a.profile_remove(s.active_profile)["ok"] is False
+
+
+def test_cli_refuses_to_apply_during_a_search(tmp_path, monkeypatch):
+    from mod_updater.bisect import active_for_folder
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+    from mod_updater.gui.api import Api
+    from mod_updater.settings import Settings, save_settings
+    from test_toggle import make_jar
+    d = tmp_path / ".minecraft" / "mods"
+    d.mkdir(parents=True)
+    save_settings(Settings(mods_dir=str(d), setup_done=True))
+    a = Api(None, get_key=lambda: (None, None), run_async=lambda fn: fn(), running=lambda g: [])
+    assert active_for_folder(d) is False
+    a._results, a._rows = [], []
+    from test_toggle import res_for
+    for n in NAMES[:4]:
+        make_jar(d / n, n[:-4])
+        a._results.append(res_for(d / n))
+    a._rows = list(a._results)
+    a.bisect_start([])
+    assert active_for_folder(d) is True
