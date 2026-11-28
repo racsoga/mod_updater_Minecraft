@@ -38,6 +38,7 @@ Mod Updater revisa la carpeta `mods` de tu Minecraft, reconoce cada mod por su h
 - **Sugerencias para tu partida**: qué quitar, revisar, mantener y añadir según cómo juegas, siempre con el motivo.
 - **Activar y desactivar mods** sin borrarlos (pasan a `.jar.disabled`, como en Prism, CurseForge y Modrinth App), uno a uno o varios a la vez. Si desactivas una librería que usan otros mods, te avisa.
 - **Fijar la versión** de un mod para que no se actualice (con un motivo, por ejemplo "el servidor usa esta") y **volver a una versión anterior** si la nueva da problemas.
+- **Diagnóstico de crasheos**: lee el informe de error de Minecraft en tu PC y te dice qué mod sospechar, con la línea que lo demuestra y un botón para arreglarlo (instalar lo que falta, cambiar un mod incompatible, desactivar o volver a una versión anterior).
 - **Ver los cambios antes de actualizar**: las notas de todas las versiones entre la tuya y la nueva, con avisos de posibles cambios que rompen partidas.
 
 <p align="center">

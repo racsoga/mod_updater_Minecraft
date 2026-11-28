@@ -119,3 +119,11 @@ def test_duplicate_disables_the_older_file():
 def test_without_scan_there_are_explanations_but_no_actions():
     cards = cards_for("fml_sodium.txt", [])
     assert cards and all(c.actions == [] for c in cards)
+
+
+def test_version_ranges_are_translated():
+    from mod_updater.diagnose import readable_range
+    assert readable_range("0.6.9 or above") == "0.6.9 o superior"
+    assert readable_range("1.20.1") == "1.20.1"
+    cards = cards_for("fml_sodium.txt", SODIUM_CASE, lookup=lambda m: candidate("Sodium", SODIUM_MR) if m == "sodium" else None)
+    assert "Sodium 0.6.9 o superior" in cards[0].why and "or above" not in cards[0].why

@@ -231,6 +231,18 @@ class Card:
     targets: set = field(default_factory=set)  # modIds que esta tarjeta desactiva o sustituye
 
 
+def readable_range(text: str) -> str:
+    """Rango de versiones de FML en el idioma de la interfaz ("0.6.9 or above" → "0.6.9 o superior")."""
+    text = (text or "").strip()
+    m = re.fullmatch(r"(\S+) or above", text)
+    if m:
+        return t("dg.range_min", version=m.group(1))
+    m = re.fullmatch(r"(\S+) or below", text)
+    if m:
+        return t("dg.range_max", version=m.group(1))
+    return text
+
+
 def _project_ids(entry: dict) -> set:
     ids = set()
     if entry.get("curseforge"):
@@ -300,7 +312,7 @@ def plan_cards(findings: list[Finding], results: list, *, lookup, knowledge: dic
             dep_name = name(f.target)
             c = Card("missing", t("dg.k_missing"), t("dg.t_missing", name=dep_name),
                      t("dg.w_missing", count=len(f.mods), names=_join([name(m) for m in f.mods]), dep=dep_name,
-                       range=f.detail.get("range", "")), ev, subject=dep_name)
+                       range=readable_range(f.detail.get("range", ""))), ev, subject=dep_name)
             if installed:
                 have = by_id.get(f.target, [])
                 if have and all(r.mod.disabled for r in have):
@@ -313,7 +325,7 @@ def plan_cards(findings: list[Finding], results: list, *, lookup, knowledge: dic
                         dep_name = cand.name
                         c.title = t("dg.t_missing", name=dep_name)
                         c.why = t("dg.w_missing", count=len(f.mods), names=_join([name(m) for m in f.mods]), dep=dep_name,
-                                  range=f.detail.get("range", ""))
+                                  range=readable_range(f.detail.get("range", "")))
                         clash = conflicts(cand, f.target)
                         if not clash:
                             c.actions.append(Action("install", t("dg.act_install", name=cand.name), install=cand))
@@ -331,7 +343,7 @@ def plan_cards(findings: list[Finding], results: list, *, lookup, knowledge: dic
             mod = name(f.mods[0])
             key = "dg.w_wrong_mc" if f.target == "minecraft" else "dg.w_old_loader"
             c = Card("platform", t("dg.k_platform"), t("dg.t_platform", name=mod),
-                     t(key, name=mod, range=f.detail["range"], have=f.detail["have"]), ev, subject=mod)
+                     t(key, name=mod, range=readable_range(f.detail["range"]), have=f.detail["have"]), ev, subject=mod)
             a = disable(by_id.get(f.mods[0], []))
             if a:
                 c.actions.append(a)
@@ -339,7 +351,7 @@ def plan_cards(findings: list[Finding], results: list, *, lookup, knowledge: dic
         elif f.kind == "version":
             mod, dep = name(f.mods[0]), name(f.target)
             c = Card("version", t("dg.k_version"), t("dg.t_version", name=dep),
-                     t("dg.w_version", name=mod, dep=dep, range=f.detail["range"], have=f.detail["have"]), ev, subject=dep)
+                     t("dg.w_version", name=mod, dep=dep, range=readable_range(f.detail["range"]), have=f.detail["have"]), ev, subject=dep)
             if installed:
                 target = (by_id.get(f.target) or [None])[0]
                 up = update(target)

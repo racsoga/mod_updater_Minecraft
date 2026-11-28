@@ -1311,3 +1311,11 @@ class Api:
         # (os.startfile puede dejarla detrás de la app).
         subprocess.Popen(["explorer.exe", str(path.resolve())], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         return True
+
+    def diag_open_folder(self) -> bool:
+        """Abre la carpeta crash-reports de la partida del perfil activo."""
+        path = self._game_dir(self._settings()) / "crash-reports"
+        if not path.is_dir() or os.name != "nt":
+            return False
+        subprocess.Popen(["explorer.exe", str(path.resolve())], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        return True
