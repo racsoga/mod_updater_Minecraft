@@ -31,6 +31,8 @@ Si tu antivirus bloquea el `.exe` (falso positivo habitual en programas hechos c
 
 Para comprobar tu descarga, en PowerShell: `Get-FileHash .\\ModUpdater.exe -Algorithm SHA256`. El resultado debe coincidir con el de arriba.
 
+**Firma de código:** [Code signing policy](https://github.com/racsoga/mod_updater_Minecraft/blob/main/CODE_SIGNING_POLICY.md). Firma gratuita de [SignPath.io](https://about.signpath.io) con certificado de [SignPath Foundation](https://signpath.org) (solicitud en curso: hasta que la aprueben, el `.exe` no está firmado).
+
 Proyecto no oficial: no está afiliado a Mojang Studios, Microsoft, CurseForge ni Modrinth.
 """
 

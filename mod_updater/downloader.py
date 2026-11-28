@@ -146,7 +146,7 @@ def apply_one(
     if res.kind == REMOVE:
         return _remove_one(res, backup_dir, before_change)
     if res.kind in (ENABLE, DISABLE):
-        return _toggle_one(res, mods_dir, before_change)
+        return toggle_one(res, before_change)
     old = res.mod.path if res.mod is not None else None
     new_name = res.new_file_name or ""
     if not res.download_url or not new_name:
@@ -156,7 +156,8 @@ def apply_one(
     if old is not None and not old.exists():
         return Outcome(res, False, t("dl.old_missing"))
 
-    if res.mod is not None and res.mod.disabled:  # un mod desactivado sigue desactivado al actualizarlo
+    # Un mod desactivado sigue desactivado al actualizarlo; uno de una lista con "activo": false se instala así.
+    if (res.mod is not None and res.mod.disabled) or (res.mod is None and res.install_disabled):
         new_name += DISABLED_SUFFIX
     final = mods_dir / new_name
     if final.exists() and (old is None or final.resolve() != old.resolve()):
@@ -211,7 +212,7 @@ def _remove_one(res: Resolution, backup_dir: Path, before_change=None) -> Outcom
     return Outcome(res, True, t("dl.removed"), backup_path=backup)
 
 
-def _toggle_one(res: Resolution, mods_dir: Path, before_change=None) -> Outcome:
+def toggle_one(res: Resolution, before_change=None) -> Outcome:
     """Activa o desactiva renombrando (`x.jar` <-> `x.jar.disabled`). Nunca sobrescribe."""
     old = res.mod.path if res.mod is not None else None
     if old is None or not old.exists():

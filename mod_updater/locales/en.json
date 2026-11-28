@@ -44,7 +44,7 @@
   "toggle.title": "Also disable the mods that depend on it?",
   "toggle.only": "Only {name}",
   "toggle.with": "Disable those too",
-  "toggle.hint": "Disabling deletes nothing: the file becomes .jar.disabled and you can enable it again or undo it in Settings.",
+  "toggle.hint": "Disabling deletes nothing: the file becomes .jar.disabled and you can enable it again whenever you want.",
   "toggle.also_one": "{names} was enabled too, because it's needed to load.",
   "toggle.also_other": "{names} were enabled too, because they're needed to load.",
   "toggle.failed": "Couldn't change {name}: {message}",

@@ -890,7 +890,7 @@ async function importList() {
   const warn = res.mismatch ? `<p class="ex-note warn">${esc(t("ml.mismatch", { file_mc: res.mismatch.minecraft, file_loader: res.mismatch.loader,
     mc: res.profile.minecraft, loader: res.profile.loader }))}</p>` : "";
   $("#ex-d-body").innerHTML = warn
-    + list(t("ml.will_add", { count: res.add.length }), res.add.map(m => li(m.name, m.version || "")))
+    + list(t("ml.will_add", { count: res.add.length }), res.add.map(m => li(m.name, [m.version, m.off ? t("ui.state_off") : ""].filter(Boolean).join(" · "))))
     + list(t("ml.will_change", { count: res.update.length }), res.update.map(m => li(m.name, `${m.have || "?"} → ${m.version || "?"}`)))
     + list(t("ml.unavailable", { count: res.unavailable.length }), res.unavailable.map(m => li(m.name, t("ml.unavailable_hint"))))
     + (res.remove.length ? `<h3 class="ex-h">${esc(t("ml.extra", { count: res.remove.length }))}</h3>

@@ -86,6 +86,7 @@ class Resolution:
     note: str = ""
     duplicate: bool = False  # el mismo proyecto aparece varias veces en la carpeta
     only_prerelease: bool = False  # instalación: no existe ninguna versión estable
+    install_disabled: bool = False  # instalación desde una lista con "activo": false (queda .jar.disabled)
     newer_prerelease: str | None = None  # al día, pero hay una beta/alpha más nueva (no se propone)
     cf_gone: bool = False  # CurseForge reconoce el archivo pero el proyecto ya no existe
     unreadable: bool = False  # el jar no se pudo leer (permisos, OneDrive sin descargar...)

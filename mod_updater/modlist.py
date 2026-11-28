@@ -201,5 +201,6 @@ def resolve_exact(changes: dict, installed: list[Resolution], *, curseforge, mod
             project_id=str(m["proyecto"]), project_name=m["nombre"], project_url=page,
             current_version=have.current_version if have else None, new_version=version,  # la del archivo, no la de la lista
             new_file_name=file_name, download_url=url, new_sha1=sha1, new_sha512=sha512, new_size=size,
-            known_ids={(m["fuente"], str(m["proyecto"]))}))
+            known_ids={(m["fuente"], str(m["proyecto"]))},
+            install_disabled=have is None and m.get("activo") is False))  # una actualización conserva tu estado
     return out, manual

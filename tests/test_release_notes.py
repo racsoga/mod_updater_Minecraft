@@ -50,3 +50,5 @@ def test_main_output_includes_footer(tmp_path, capsys):
     assert "https://www.virustotal.com/gui/file/abc123" in out
     assert "https://www.virustotal.com/gui/file/def456" in out
     assert "{hashes}" not in out
+    assert "[Code signing policy](https://github.com/racsoga/mod_updater_Minecraft/blob/main/CODE_SIGNING_POLICY.md)" in out
+    assert "SignPath Foundation" in out
