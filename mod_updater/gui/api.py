@@ -49,6 +49,7 @@ from ..pins import apply_pins, find_pins, pin_entry, pin_key
 from .. import diagnose as diag
 from .. import bisect as bis
 from .. import migrate as migrate_mod
+from .. import server as server_mod
 from ..deps import _current_deps, _needs
 from .. import net
 from ..downloader import (
@@ -205,6 +206,7 @@ class Api:
         self._changelogs: dict = {}         # changelogs ya descargados (por mod y rango de versiones)
         self._version_lists: dict = {}      # versiones publicadas de cada mod (para volver atrás)
         self._migration: dict | None = None  # última comprobación de "pasar a otra versión"
+        self._server_plan: tuple | None = None  # (id del perfil servidor, plan) de la última comparación
         self._diag_reports: list = []       # informes de la pestaña Diagnóstico (id = posición)
         self._diag_actions: dict = {}       # acciones propuestas por el diagnóstico (id -> diag.Action)
         self._diag_cards: dict = {}         # tarjetas del último diagnóstico de cada informe (para copiar)
@@ -295,6 +297,7 @@ class Api:
         self._install = []
         self._import = None
         self._migration = None  # la comprobación de otra versión era del perfil anterior
+        self._server_plan = None
 
     def profile_switch(self, profile_id: str) -> dict:
         if not self._busy.acquire(blocking=False):
@@ -1465,6 +1468,72 @@ class Api:
             if not started:
                 self._busy.release()
         return {"ok": True, "rows": rows, "profile": name, "folder": str(mods_dir), "state": self.get_state()}
+
+    # ------------------------------------------------------------------ preparar el servidor
+
+    def profile_set_server(self, profile_id: str, on: bool) -> dict:
+        """Marca (o desmarca) un perfil como servidor (su carpeta mods es la del servidor)."""
+        s = self._settings()
+        p = profiles.get(s, str(profile_id))
+        if p is None:
+            return self.get_state() | {"error": t("profile.not_found")}
+        p["server"] = bool(on)
+        save_settings(s, self._settings_file)
+        return self.get_state()
+
+    def _server_profile(self, s: Settings, server_id: str) -> dict | None:
+        p = profiles.get(s, str(server_id))
+        return p if p is not None and p.get("id") != s.active_profile and p.get("mods_dir") else None
+
+    @_never_hang
+    def server_compare(self, server_id: str) -> dict:
+        """Cliente (perfil activo, ya revisado) frente al servidor: qué se copia, qué se actualiza
+        en el servidor (con las dos versiones), qué es solo de cliente, qué tiene lado desconocido y
+        qué sobra en el servidor. Sin red."""
+        if not self._results:
+            return {"ok": False, "message": t("ex.need_scan")}
+        s = self._settings()
+        p = self._server_profile(s, server_id)
+        if p is None:
+            return {"ok": False, "message": t("profile.not_found")}
+        server_dir = Path(p["mods_dir"])
+        try:
+            server_mods = scan_folder(server_dir, cache_path=self._scan_cache(server_dir))
+        except FileNotFoundError:
+            return {"ok": False, "message": t("ml.err_compare_folder")}
+        plan = server_mod.plan_copy(self._results, server_mods)
+        self._server_plan = (p["id"], plan)
+        public = lambda items: [{k: v for k, v in i.items() if k != "src"} for i in items]  # noqa: E731
+        return {"ok": True, "client": self._active_name(s), "server": p.get("name"),
+                **{k: public(plan[k]) for k in ("copy", "update", "client_only", "unknown")},
+                "same": plan["same"], "extra": plan["extra"]}
+
+    def server_copy(self, server_id: str, chosen_unknown: list | None = None) -> dict:
+        """Copia al servidor lo que hace falta (con copia de seguridad en la carpeta del servidor)."""
+        if not self._server_plan or self._server_plan[0] != str(server_id):
+            return {"ok": False, "message": t("sv.err_compare_first")}
+        s = self._settings()
+        p = self._server_profile(s, server_id)
+        if p is None:
+            return {"ok": False, "message": t("profile.not_found")}
+        server_dir = Path(p["mods_dir"])
+        if server_mod.server_running(server_dir.parent, lister=server_mod.list_java_processes):
+            return {"ok": False, "reason": "server", "message": t("sv.running")}
+        if not self._busy.acquire(blocking=False):
+            return {"ok": False, "message": t("apply.busy")}
+        try:
+            backup_dir, outcomes = server_mod.copy_into(self._server_plan[1], [str(f) for f in chosen_unknown or []], server_dir)
+            ok = [o for o in outcomes if o.ok]
+            if ok:
+                prune_backups(server_dir, int(p.get("backups_to_keep") or 1))
+        except OSError as exc:
+            return {"ok": False, "message": t("sv.failed", error=friendly_error(exc))}
+        finally:
+            self._busy.release()
+        self._server_plan = None  # el servidor ha cambiado: hay que volver a comparar
+        failed = [{"name": o.resolution.name, "message": o.message} for o in outcomes if not o.ok]
+        return {"ok": not failed, "copied": len(ok), "failed": failed, "server": p.get("name"),
+                "backup": backup_info(backup_dir) if backup_dir.exists() and ok else None}
 
     # ------------------------------------------------------------------ análisis
 

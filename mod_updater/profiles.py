@@ -116,5 +116,6 @@ def listing(s) -> list[dict]:
     sync_active(s)
     return [{"id": p["id"], "name": p.get("name", "?"), "mods_dir": p.get("mods_dir", ""),
              "minecraft_version": p.get("minecraft_version"), "loader": p.get("loader"),
-             "active": p["id"] == s.active_profile, "exists": Path(p.get("mods_dir") or "").is_dir()}
+             "active": p["id"] == s.active_profile, "exists": Path(p.get("mods_dir") or "").is_dir(),
+             "server": bool(p.get("server"))}
             for p in s.profiles]
