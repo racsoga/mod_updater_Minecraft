@@ -33,6 +33,7 @@ class Settings:
     answers: dict = field(default_factory=dict)  # cuestionario de Sugerencias (por perfil)
     pins: dict = field(default_factory=dict)  # mods fijados (por perfil): {"fuente:proyecto": {name, version, reason, ids}}
     diag_seen: float = 0  # fecha del crash report más nuevo ya visto en Diagnóstico (por perfil)
+    migration_last: dict = field(default_factory=dict)  # última comprobación de "pasar a otra versión" (por perfil)
     profiles: list = field(default_factory=list)  # [{id, name, mods_dir, minecraft_version, loader, ...}]
     active_profile: str = ""  # id del perfil activo (sus campos se reflejan arriba)
 

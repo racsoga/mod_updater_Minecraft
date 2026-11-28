@@ -208,6 +208,23 @@
         backup: { path: "C:\\…\\mods_backup\\2026-11-21_1600", date: "2026-11-21T16:00:00", changes: 1, undone: false, undoable: true } }), 800);
       return { ok: true, total: 1 };
     },
+    // Pasar a otra versión de ejemplo (sin red).
+    migrate_check: async target => {
+      await new Promise(r => setTimeout(r, 300));
+      return { ok: true, target, loader: "NeoForge", current: "1.21.1", total: 5, ready_count: 3, install_mods: 4, install_libs: 1,
+        no_curseforge: false, delta: null, last_date: null,
+        ready: [{ name: "Create" }, { name: "Just Enough Items (JEI)" }, { name: "Sodium", beta: true }],
+        missing: [{ name: "Mod de ejemplo", date: "2025-03-10T00:00:00Z", why: "" }],
+        alternative: [{ name: "Accessories", via: "Modrinth", instead: null }, { name: "JourneyMap", via: null, instead: "Xaero's Minimap", optional: "curseforge:263420" }],
+        wont_have: ["JourneyMap", "Mod de ejemplo"] };
+    },
+    migrate_create: async opts => {
+      setTimeout(() => emit("apply_progress", { id: 400000, state: "done", done: 1, total: 4 }), 300);
+      setTimeout(() => emit("apply_done", { updated: 0, installed: 1, added: 4, failed: [], pruned: 0, backup: null, no_undo: true,
+        created: { name: "Principal (1.21.11)", folder: "D:\Juegos\mc-1.21.11\mods" } }), 700);
+      return { ok: true, profile: "Principal (1.21.4)", folder: "D:\\Juegos\\mc-1.21.4\\mods",
+        rows: ["Create", "Just Enough Items (JEI)", "Sodium", "Accessories"].map((n, i) => ({ id: 400000 + i, s: "dep", name: n, to: "nueva", neededBy: [] })) };
+    },
     // Búsqueda por mitades de ejemplo: el culpable es Accessories (?bspending: una búsqueda a medias).
     bisect_status: async () => (bs && !bs.done ? bsView() : null),
     bisect_start: async excluded => {

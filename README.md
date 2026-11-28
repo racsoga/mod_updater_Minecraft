@@ -40,6 +40,7 @@ Mod Updater revisa la carpeta `mods` de tu Minecraft, reconoce cada mod por su h
 - **Fijar la versión** de un mod para que no se actualice (con un motivo, por ejemplo "el servidor usa esta") y **volver a una versión anterior** si la nueva da problemas.
 - **Diagnóstico de crasheos**: lee el informe de error de Minecraft en tu PC y te dice qué mod sospechar, con la línea que lo demuestra y un botón para arreglarlo (instalar lo que falta, cambiar un mod incompatible, desactivar o volver a una versión anterior).
 - **Buscar el mod que rompe la partida por mitades**, si el diagnóstico no lo deja claro: tú solo abres Minecraft y dices si sigue fallando.
+- **¿Puedo pasar a otra versión de Minecraft?**: cuántos de tus mods existen ya para ella y, si te convence, un perfil nuevo para esa versión sin tocar el actual.
 - **Ver los cambios antes de actualizar**: las notas de todas las versiones entre la tuya y la nueva, con avisos de posibles cambios que rompen partidas.
 
 <p align="center">

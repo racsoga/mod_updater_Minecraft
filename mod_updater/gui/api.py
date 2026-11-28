@@ -48,6 +48,7 @@ from ..resolver import DISABLE, ENABLE, REMOVE, UPDATE, Dep
 from ..pins import apply_pins, find_pins, pin_entry, pin_key
 from .. import diagnose as diag
 from .. import bisect as bis
+from .. import migrate as migrate_mod
 from ..deps import _current_deps, _needs
 from .. import net
 from ..downloader import (
@@ -156,6 +157,7 @@ def serialize(results: list[Resolution], plan: DepPlan, *, allow_beta: bool = Fa
 
 MAX_VERSION_LIST = 40  # versiones que se ofrecen para volver atrás
 DIAG_NEW_DAYS = 14  # un crash report más viejo no se avisa como nuevo
+MIGRATE_ROW = 400000  # ids de las filas de la pantalla de aplicar al crear un perfil para otra versión
 ROLLBACK_ROW = 300000  # id de la fila en la pantalla de aplicar
 
 
@@ -202,6 +204,7 @@ class Api:
         self._applying = False              # hay una actualización en curso (aviso al cerrar)
         self._changelogs: dict = {}         # changelogs ya descargados (por mod y rango de versiones)
         self._version_lists: dict = {}      # versiones publicadas de cada mod (para volver atrás)
+        self._migration: dict | None = None  # última comprobación de "pasar a otra versión"
         self._diag_reports: list = []       # informes de la pestaña Diagnóstico (id = posición)
         self._diag_actions: dict = {}       # acciones propuestas por el diagnóstico (id -> diag.Action)
         self._diag_cards: dict = {}         # tarjetas del último diagnóstico de cada informe (para copiar)
@@ -291,6 +294,7 @@ class Api:
         self._changelogs.clear()
         self._install = []
         self._import = None
+        self._migration = None  # la comprobación de otra versión era del perfil anterior
 
     def profile_switch(self, profile_id: str) -> dict:
         if not self._busy.acquire(blocking=False):
@@ -548,7 +552,11 @@ class Api:
         self._run_async(lambda: self._apply(chosen, s))
         return {"ok": True, "total": len(chosen)}
 
-    def _apply(self, chosen: list[Resolution], s: Settings, index: dict | None = None, after=None) -> list[Outcome]:
+    def _apply(self, chosen: list[Resolution], s: Settings, index: dict | None = None, after=None,
+               created: dict | None = None) -> list[Outcome]:
+        """`created`: se está llenando un perfil nuevo en otra carpeta (pasar a otra versión). Entonces
+        la revisión del perfil activo sigue valiendo y la pantalla final no ofrece Deshacer (que
+        actuaría sobre el perfil activo, no sobre el nuevo)."""
         index = index or {id(r): i for i, r in enumerate(self._rows)}
         result: list[Outcome] = []
         total, done = len(chosen), 0
@@ -582,9 +590,11 @@ class Api:
             if after is not None:  # p. ej. fijar tras volver a una versión anterior (con el bloqueo puesto)
                 after(outcomes)
             pruned = prune_backups(s.mods_path, s.backups_to_keep) if ok else []
-            self._plan = None  # la revisión ya no refleja la carpeta: hay que volver a revisar
-            self._results = []
+            if created is None:
+                self._plan = None  # la revisión ya no refleja la carpeta: hay que volver a revisar
+                self._results = []
             self._emit("apply_done", {
+                "no_undo": created is not None, "created": created,
                 "updated": sum(1 for o in ok if o.resolution.kind not in (INSTALL, REMOVE)),
                 "removed": sum(1 for o in ok if o.resolution.kind == REMOVE),
                 "installed": sum(1 for o in ok if o.resolution.kind == INSTALL and o.resolution.required_by),
@@ -1362,6 +1372,99 @@ class Api:
             self._busy.release()
         return {"ok": not problems, "problems": [b.display(j) for j in problems],
                 "message": t("bs.restore_failed", names=_join([b.display(j) for j in problems])) if problems else ""}
+
+    # ------------------------------------------------------------------ pasar a otra versión de Minecraft
+
+    def _folder_dialog(self) -> str | None:
+        """Elegir una carpeta (sustituible en los tests)."""
+        if self._window is None:
+            return None
+        import webview  # solo con ventana real
+
+        picked = self._window.create_file_dialog(webview.FOLDER_DIALOG)
+        if not picked:
+            return None
+        return picked[0] if isinstance(picked, (list, tuple)) else picked
+
+    @_never_hang
+    def migrate_check(self, target: str) -> dict:
+        """¿Qué mods del perfil hay para `target` (mismo cargador)? Guarda el resultado para
+        compararlo la próxima vez ("desde la última vez, N más listos")."""
+        target = str(target or "").strip()
+        s = self._settings()
+        if not target or target == s.minecraft_version:
+            return {"ok": False, "message": t("mg.err_target")}
+        if not self._results:
+            return {"ok": False, "message": t("ex.need_scan")}
+        cf, mr = self._clients(s)
+        try:
+            out = migrate_mod.check(self._results, target=target, loader=s.loader, curseforge=cf, modrinth=mr)
+        except ApiError as exc:
+            return {"ok": False, "message": t("scan.err_offline") if exc.kind == "offline" else t("ex.err_network")}
+        now = {"target": target, "ready": [i["key"] for i in out["ready"]], "date": datetime.now().isoformat(timespec="minutes")}
+        delta = migrate_mod.compare_with_last(now, s.migration_last or None)
+        last_date = (s.migration_last or {}).get("date") if delta is not None else None
+        s.migration_last = now
+        save_settings(s, self._settings_file)
+        self._migration = out
+        return {"ok": True, **{k: v for k, v in out.items() if k not in ("install", "optional")}, "delta": delta,
+                "last_date": last_date, "loader": LOADER_LABEL.get(s.loader, s.loader), "current": s.minecraft_version}
+
+    @_never_hang
+    def migrate_create(self, optional: list | None = None) -> dict:
+        """Crea un perfil nuevo para la versión comprobada, en una carpeta nueva, y descarga en ella
+        lo que está listo (con las librerías que necesita) y las alternativas que se marquen. El
+        perfil actual no se toca (ni se cambia de perfil)."""
+        m = self._migration
+        if not m or not m.get("install"):
+            return {"ok": False, "message": t("mg.err_nothing")}
+        picked = self._folder_dialog()
+        if not picked:
+            return {"ok": False, "cancelled": True}
+        game = Path(picked)
+        mods_dir = game if game.name.lower() == "mods" else game / "mods"
+        s = self._settings()
+        try:
+            same = os.path.normcase(str(mods_dir.resolve())) == os.path.normcase(str(s.mods_path.resolve()))
+            used = mods_dir.is_dir() and any(p.is_file() and p.suffix.lower() in (".jar", ".disabled") for p in mods_dir.iterdir())
+        except OSError as exc:
+            return {"ok": False, "message": t("mg.err_folder", error=friendly_error(exc))}
+        if same:
+            return {"ok": False, "message": t("mg.err_same_folder")}
+        if used:
+            return {"ok": False, "message": t("mg.err_folder_used", path=str(mods_dir))}
+        install = list(m["install"])
+        extra = [r for k in optional or [] for r in m["optional"].get(str(k), [])]
+        if extra:  # alternativas elegidas: con sus propias dependencias para esa versión
+            cf, mr = self._clients(s)
+            finder = DependencyFinder(cf, mr, loader=s.loader, game_version=m["target"])
+            try:
+                install, _ = migrate_mod.with_optional(install, extra, finder)
+            except ApiError as exc:
+                return {"ok": False, "message": t("scan.err_offline") if exc.kind == "offline" else t("ex.err_network")}
+        if not self._busy.acquire(blocking=False):
+            return {"ok": False, "message": t("apply.busy")}
+        started = False
+        try:
+            mods_dir.mkdir(parents=True, exist_ok=True)
+            name = t("mg.profile_name", name=self._active_name(s), version=m["target"])
+            profiles.add(s, name=name, mods_dir=str(mods_dir), minecraft_version=m["target"], loader=s.loader)
+            save_settings(s, self._settings_file)
+            items = [replace(r, required_by=list(r.required_by)) for r in install]
+            index = {id(r): MIGRATE_ROW + i for i, r in enumerate(items)}
+            rows = [{"id": MIGRATE_ROW + i, "s": "dep", "name": r.name, "icon": r.icon_url, "from": None, "to": r.new_version,
+                     "beta": r.new_channel not in (None, "release"), "neededBy": list(r.required_by)}
+                    for i, r in enumerate(items)]
+            target_settings = replace(s, mods_dir=str(mods_dir), minecraft_version=m["target"])
+            created = {"name": name, "folder": str(mods_dir)}
+            self._run_async(lambda: self._apply(items, target_settings, index, created=created))  # suelta el bloqueo
+            started = True
+        except OSError as exc:
+            return {"ok": False, "message": t("mg.err_folder", error=friendly_error(exc))}
+        finally:
+            if not started:
+                self._busy.release()
+        return {"ok": True, "rows": rows, "profile": name, "folder": str(mods_dir), "state": self.get_state()}
 
     # ------------------------------------------------------------------ análisis
 
