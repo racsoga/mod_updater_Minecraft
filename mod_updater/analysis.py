@@ -79,7 +79,8 @@ def _old(iso: str | None, now: float) -> bool:
 def analyze(results: list[Resolution], *, include_libraries: bool = False, now: float | None = None,
             game_version: str | None = None) -> dict:
     now = time.time() if now is None else now
-    installed = [r for r in results if r.mod is not None]
+    disabled = [r for r in results if r.mod is not None and r.mod.disabled]
+    installed = [r for r in results if r.mod is not None and not r.mod.disabled]  # Minecraft no carga los desactivados
 
     groups: dict[str, list[str]] = {}
     for r in installed:
@@ -97,6 +98,7 @@ def analyze(results: list[Resolution], *, include_libraries: bool = False, now: 
     totals = {
         "mods": len(installed),
         "libraries": sum(r.is_library for r in installed),
+        "disabled": len(disabled),
         "size": sum(r.mod.size for r in installed),
         "up_to_date": sum(r.status == AL_DIA for r in installed),
         "updates": sum(r.status in (ACTUALIZABLE, DESCARGA_MANUAL) for r in installed),

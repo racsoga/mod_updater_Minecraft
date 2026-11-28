@@ -272,3 +272,33 @@ def test_rows_include_off_and_file(tmp_path):
     off = fake("Apagado", "2", disabled=True)
     row = serialize([off], DepPlan(items=[]), allow_beta=False)["rows"][0]
     assert row["off"] is True and row["file"] == "Apagado.jar.disabled"
+
+
+# ---------------------------------------------------------------- Análisis y exportar
+
+def test_analysis_counts_disabled_apart():
+    from mod_updater.analysis import analyze
+    on, off = fake("Activo", "1"), fake("Apagado", "2", disabled=True)
+    data = analyze([on, off])
+    assert data["totals"]["mods"] == 1 and data["totals"]["disabled"] == 1
+    assert [m for b in data["by_category"] for m in b["mods"]] == ["Activo"]
+
+
+def test_mrpack_leaves_out_disabled():
+    import io
+    import json
+    from types import SimpleNamespace
+    from mod_updater.modlist import build_mrpack
+    on, off = fake("Activo", "1"), fake("Apagado", "2", disabled=True)
+    f = lambda n: SimpleNamespace(sha1=n, sha512="x", url=f"https://cdn.modrinth.com/{n}.jar", filename=f"{n}.jar", size=1)  # noqa: E731
+    by_sha = {n: SimpleNamespace(files=[f(n)], primary_file=f(n)) for n in ("Activo", "Apagado")}
+    blob, excluded = build_mrpack([on, off], by_sha, name="x", minecraft="1.21.1", loader="neoforge", loader_version=None)
+    index = json.loads(zipfile.ZipFile(io.BytesIO(blob)).read("modrinth.index.json"))
+    assert [x["path"] for x in index["files"]] == ["mods/Activo.jar"] and excluded == []
+
+
+def test_modlist_marks_disabled():
+    from mod_updater.modlist import build
+    on, off = fake("Activo", "1"), fake("Apagado", "2", disabled=True)
+    mods = {m["nombre"]: m for m in build([on, off], minecraft="1.21.1", loader="neoforge", app="t")["mods"]}
+    assert mods["Apagado"]["activo"] is False and "activo" not in mods["Activo"]
