@@ -133,7 +133,8 @@ def plan_with_dependencies(results: list[Resolution], selected: list[Resolution]
             for k in r.known_ids:
                 installs[k] = r
     queue: list[tuple[Resolution, list[Dep]]] = [(r, r.new_deps) for r in selected]
-    queue += [(r, r.current_deps) for r in results if r.mod is not None and id(r) not in in_plan]
+    # Los desactivados no cargan: sus dependencias actuales no hacen falta (ni se avisa de que falten).
+    queue += [(r, r.current_deps) for r in results if r.mod is not None and id(r) not in in_plan and not r.mod.disabled]
 
     while queue:
         parent, deps = queue.pop(0)
@@ -222,6 +223,37 @@ def _mod_ids(res: Resolution) -> set[str]:
     return ({res.mod.mod_id, *res.mod.extra_mod_ids} - {None}) if res.mod else set()
 
 
+def _needs(deps: tuple[set, set], x: Resolution) -> bool:
+    """¿Unas dependencias (claves de la API, modIds del mods.toml) incluyen a `x`?"""
+    keys, requires = deps
+    return bool((x.known_ids & keys) or (_mod_ids(x) & requires))
+
+
+def _current_deps(r: Resolution) -> tuple[set, set]:
+    return {d.key for d in r.current_deps}, set(r.mod.requires) if r.mod is not None else set()
+
+
+def _disabled(r: Resolution) -> bool:
+    return r.mod is not None and r.mod.disabled
+
+
+def dependents_of(results: list[Resolution], targets: list[Resolution]) -> list[Resolution]:
+    """Mods activos que dejarían de cargar si se desactivan `targets` (también los indirectos:
+    si Waystones necesita Balm y otro mod necesita Waystones, caen los dos)."""
+    gone = list(targets)
+    out: list[Resolution] = []
+    candidates = [r for r in results if r.mod is not None and not _disabled(r) and r not in targets]
+    changed = True
+    while changed:
+        changed = False
+        for r in candidates:
+            if r not in out and any(_needs(_current_deps(r), x) for x in gone):
+                out.append(r)
+                gone.append(r)
+                changed = True
+    return out
+
+
 def keep_needed(results: list[Resolution], removals: list[Resolution],
                 plan: list[Resolution] = ()) -> tuple[list[Resolution], list[str]]:
     """Quita de `removals` lo que necesita algo que se queda o se añade (issue #12, S3).
@@ -248,12 +280,12 @@ def keep_needed(results: list[Resolution], removals: list[Resolution],
     while check:
         r = check.pop(0)
         keys, requires = deps_of(r)
-        for x in [x for x in pending if (x.known_ids & keys) or (_mod_ids(x) & requires)]:
+        for x in [x for x in pending if _needs((keys, requires), x)]:
             pending.remove(x)  # se queda: ahora también cuentan sus propias dependencias
             kept[id(x)] = [r]
             check.append(x)
         for x in removals:  # más mods que necesitan uno que ya se queda (solo para el aviso)
-            if id(x) in kept and r not in kept[id(x)] and ((x.known_ids & keys) or (_mod_ids(x) & requires)):
+            if id(x) in kept and r not in kept[id(x)] and _needs((keys, requires), x):
                 kept[id(x)].append(r)
     notes = []
     by_id = {id(x): x for x in removals}

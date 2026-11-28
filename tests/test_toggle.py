@@ -137,3 +137,51 @@ def test_updating_a_disabled_mod_keeps_it_disabled(tmp_path, monkeypatch):
     assert read_changelog(backup)["changes"][0]["new_file"] == "m-2.0.jar.disabled"
     undo_backup(backup)
     assert sorted(p.name for p in d.iterdir()) == ["m-1.0.jar.disabled"]
+
+
+# ---------------------------------------------------------------- dependientes
+
+from mod_updater.deps import dependents_of, plan_with_dependencies  # noqa: E402
+from mod_updater.resolver import Dep  # noqa: E402
+from mod_updater.scanner import ModFile  # noqa: E402
+
+
+def fake(name, pid, *, deps=(), requires=(), disabled=False, mod_id=None):
+    file_name = f"{name}.jar" + (".disabled" if disabled else "")
+    mod = ModFile(path=Path(file_name), file_name=file_name, size=1, sha1=name, sha512="", cf_fingerprint=0,
+                  mod_id=mod_id or name.lower(), requires=list(requires))
+    return Resolution(mod=mod, status=AL_DIA, source=CF, project_id=pid, project_name=name,
+                      current_deps=list(deps), known_ids={(CF, pid)})
+
+
+def test_dependents_of_a_library():
+    balm = fake("Balm", "1")
+    users = [fake(n, str(i), deps=[Dep(CF, "1")]) for i, n in enumerate(["Waystones", "A", "B", "C"], 10)]
+    other = fake("Otro", "99")
+    assert sorted(r.name for r in dependents_of([balm, *users, other], [balm])) == ["A", "B", "C", "Waystones"]
+
+
+def test_dependents_are_recursive_and_use_mods_toml():
+    lib = fake("Lib", "1", mod_id="lib")
+    mid = fake("Medio", "2", requires=["lib"])
+    top = fake("Arriba", "3", deps=[Dep(CF, "2")])
+    assert sorted(r.name for r in dependents_of([lib, mid, top], [lib])) == ["Arriba", "Medio"]
+
+
+def test_disabled_mods_are_not_dependents():
+    lib = fake("Lib", "1")
+    off = fake("Apagado", "2", deps=[Dep(CF, "1")], disabled=True)
+    assert dependents_of([lib, off], [lib]) == []
+
+
+def test_disabled_mod_does_not_pull_or_break_dependencies():
+    class NoFinder:
+        def find(self, dep):
+            pytest.fail("no debería buscar dependencias de un mod desactivado")
+
+        def version_date(self, dep):
+            return None
+
+    off = fake("Apagado", "2", deps=[Dep(CF, "404")], disabled=True)
+    plan = plan_with_dependencies([off], [], NoFinder())
+    assert plan.items == [] and plan.broken == [] and plan.ignored == []
