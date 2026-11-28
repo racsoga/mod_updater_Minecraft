@@ -36,6 +36,7 @@ Mod Updater revisa la carpeta `mods` de tu Minecraft, reconoce cada mod por su h
 - **Perfiles**: varias carpetas o instancias (launcher oficial, CurseForge, Prism, MultiMC, Modrinth App), cada una con su versión y cargador.
 - **Compartir tu lista de mods**: exporta e importa la lista (o un `.mrpack`) para que otra persona tenga exactamente los mismos mods.
 - **Sugerencias para tu partida**: qué quitar, revisar, mantener y añadir según cómo juegas, siempre con el motivo.
+- **Activar y desactivar mods** sin borrarlos (pasan a `.jar.disabled`, como en Prism, CurseForge y Modrinth App), uno a uno o varios a la vez. Si desactivas una librería que usan otros mods, te avisa.
 - **Ver los cambios antes de actualizar**: las notas de todas las versiones entre la tuya y la nueva, con avisos de posibles cambios que rompen partidas.
 
 <p align="center">

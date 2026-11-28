@@ -41,8 +41,8 @@ from ..changelog import changelog_for
 from ..explore import PAGE_SIZE, _installed_index, detail as explore_detail_of, search as explore_search_in
 from ..config import DEFAULT_USER_AGENT, default_mods_dir
 from ..curseforge import LOADER_TYPES, CurseForgeAuthError, CurseForgeClient
-from ..deps import DependencyFinder, DepPlan, keep_needed, plan_with_dependencies
-from ..resolver import REMOVE, Dep
+from ..deps import DependencyFinder, DepPlan, dependents_of, keep_needed, plan_with_dependencies, required_disabled
+from ..resolver import DISABLE, ENABLE, REMOVE, Dep
 from .. import net
 from ..downloader import (
     Outcome,
@@ -130,10 +130,17 @@ def serialize(results: list[Resolution], plan: DepPlan, *, allow_beta: bool = Fa
             "cat": r.categories[0] if r.categories else None,  # categoría principal (categories.py)
             "cats": list(r.categories),
             "lib": r.is_library,
+            "off": bool(r.mod is not None and r.mod.disabled),
+            "file": r.mod.file_name if r.mod is not None else None,
             "cl": r.kind != INSTALL and bool(r.new_version) and r.status in (ACTUALIZABLE, DESCARGA_MANUAL)
                   and r.source in (CF, MR),
         })
     return {"rows": rows, "details": list(plan.ignored), "warnings": list(plan.conflicts)}
+
+
+def _join(names: list[str]) -> str:
+    """"A, B y C" en el idioma de la interfaz."""
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + t("ui.and") + names[-1]
 
 
 def _never_hang(method):
@@ -935,6 +942,58 @@ class Api:
         return {"ok": not r.errors, "restored": r.restored, "removed": r.removed, "errors": r.errors,
                 "message": t("undo.done", count=r.restored, removed=r.removed) if r.restored
                 else t("undo.done_removed", count=r.removed)}
+
+    # ------------------------------------------------------------------ activar y desactivar
+
+    @_never_hang
+    def mods_set_enabled(self, ids: list, enabled: bool, dependents: str = "ask") -> dict:
+        """Activa o desactiva mods renombrando `x.jar` <-> `x.jar.disabled` (nunca borra nada).
+
+        Al desactivar algo que necesitan mods activos: con `dependents="ask"` no cambia nada y
+        devuelve el aviso; con "with" desactiva también esos; con "only", solo lo elegido. Al
+        activar, activa también las librerías desactivadas que hagan falta. Queda en el historial
+        (cambios.json) y se puede deshacer como una actualización.
+        """
+        s = self._settings()
+        rows = {id(r): i for i, r in enumerate(self._rows)}
+        picked = [self._rows[i] for i in sorted({int(i) for i in ids or []}) if 0 <= i < len(self._rows)]
+        targets = [r for r in picked if r.mod is not None and not r.unreadable and r.mod.disabled == enabled]
+        if not targets:
+            return {"ok": True, "rows": [], "also": [], "failed": []}
+        if any(r.mod.path.parent.resolve() != s.mods_path.resolve() for r in targets):
+            return {"ok": False, "message": t("apply.no_scan")}  # revisión de otra carpeta (otro perfil)
+        if self._running(s.mods_path.parent):
+            return {"ok": False, "reason": "minecraft", "message": t("apply.minecraft_open")}
+        also: list[Resolution] = []
+        if enabled:
+            also = required_disabled(self._results, targets)
+        else:
+            needers = dependents_of(self._results, targets)
+            if needers and dependents == "ask":
+                names = sorted((r.name for r in needers), key=str.lower)
+                return {"ok": False, "reason": "dependents", "names": names,
+                        "message": t("toggle.dependents", count=len(names), name=_join([r.name for r in targets]),
+                                     names=_join(names))}
+            if dependents == "with":
+                also = needers
+        if not self._busy.acquire(blocking=False):
+            return {"ok": False, "message": t("apply.busy")}
+        try:
+            chosen = [replace(r, kind=ENABLE if enabled else DISABLE) for r in targets + also]
+            backup_dir, outcomes = apply_updates(chosen, s.mods_path, modrinth_session=None, curseforge_session=None)
+            done = []
+            for o, original in zip(outcomes, targets + also):
+                if o.ok and o.new_path is not None:  # la fila sigue valiendo: solo cambia el nombre
+                    original.mod.path, original.mod.file_name = o.new_path, o.new_path.name
+                    done.append(original)
+            if done:
+                prune_backups(s.mods_path, s.backups_to_keep)
+        finally:
+            self._busy.release()
+        failed = [{"name": o.resolution.name, "message": o.message} for o in outcomes if not o.ok]
+        return {"ok": not failed, "rows": [{"id": rows[id(r)], "off": r.mod.disabled} for r in done if id(r) in rows],
+                "also": [r.name for r in also if r in done], "failed": failed,
+                "backup": backup_info(backup_dir) if backup_dir.exists() else None}
 
     def clear_backups(self) -> dict:
         if not self._busy.acquire(blocking=False):

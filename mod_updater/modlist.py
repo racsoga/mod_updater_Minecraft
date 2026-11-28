@@ -43,6 +43,8 @@ def build(results: list[Resolution], *, minecraft: str, loader: str, app: str) -
         else:  # mod que ninguna fuente reconoce: solo se anota (no se puede descargar)
             mods.append({"nombre": r.name, "fuente": None, "nombre_archivo": r.mod.file_name,
                          "version": r.current_version, "sha1": r.mod.sha1})
+        if r.mod.disabled:
+            mods[-1]["activo"] = False
     return {"formato": FORMAT, "app": app, "minecraft": minecraft, "cargador": loader, "mods": mods}
 
 
@@ -145,7 +147,7 @@ def build_mrpack(results: list[Resolution], mr_by_sha1: dict, *, name: str, mine
     Devuelve (bytes del zip, nombres que no se han podido incluir)."""
     files, excluded = [], []
     for r in results:
-        if r.mod is None:
+        if r.mod is None or r.mod.disabled:  # el paquete es lo que se juega: sin los desactivados
             continue
         v = mr_by_sha1.get(r.mod.sha1)
         f = next((x for x in (v.files if v else []) if x.sha1 == r.mod.sha1), None) or (v.primary_file if v else None)

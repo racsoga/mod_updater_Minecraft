@@ -223,7 +223,7 @@ a:hover { text-decoration: underline; }
 .master { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted-strong); cursor: pointer; }
 .row {
   display: grid; align-items: center;
-  grid-template-columns: 20px 32px minmax(180px, 1fr) minmax(0, 300px) 152px 96px;
+  grid-template-columns: 20px 32px minmax(180px, 1fr) minmax(0, 300px) 152px 96px 40px;
   column-gap: 16px; min-height: 56px; padding: 8px 28px; border-top: 1px solid var(--rule);
 }
 .group-head + .row { border-top-color: transparent; }
@@ -234,6 +234,22 @@ a:hover { text-decoration: underline; }
 .logo.mono { display: grid; place-items: center; font-size: 13px; font-weight: 600; color: var(--muted-strong); border: 1px solid var(--rule); }
 .name { min-width: 0; }
 .name .title { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.name .title .tag { margin-left: 8px; vertical-align: 1px; }
+/* Mod desactivado (.jar.disabled): logo apagado y nombre en gris; sin bajar la opacidad del texto
+   (el secundario quedaría por debajo de 4.5:1). */
+.row.is-off .logo { opacity: 0.45; filter: grayscale(1); }
+.row.is-off .title-text { color: var(--muted-strong); }
+.switch {
+  position: relative; width: 36px; height: 22px; padding: 0; border: 0; border-radius: 11px; cursor: pointer;
+  background: var(--accent); transition: background-color 150ms ease;
+}
+.switch > span {
+  position: absolute; top: 3px; left: 17px; width: 16px; height: 16px; border-radius: 50%; background: var(--text);
+  transition: left 150ms ease;
+}
+.switch[aria-checked="false"] { background: var(--edge); }
+.switch[aria-checked="false"] > span { left: 3px; background: var(--muted-strong); }
+.switch:hover { filter: brightness(1.12); }
 .name .sub { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .name .sub.warn { color: var(--warn); white-space: normal; }
 .ver { display: flex; align-items: center; gap: 8px; font-size: 14px; min-width: 0; }
@@ -565,6 +581,8 @@ mark.cl-flag { background: rgba(242, 181, 68, 0.18); color: var(--warn); border-
   .row .ver { grid-column: 3 / 5; grid-row: 2; }
   .row .badge { grid-column: 3; grid-row: 3; }
   .row .source { grid-column: 4; grid-row: 3; }
+  .row .switch { grid-column: 4; grid-row: 1; justify-self: end; }
+  .row:has(.switch) .name { grid-column: 3; }
   .row:not(.manual) .source { display: none; }
   .apply-row { grid-template-columns: 32px minmax(0, 1fr) auto; }
   .an-grid { grid-template-columns: minmax(0, 1fr); }

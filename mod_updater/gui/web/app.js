@@ -55,7 +55,8 @@ function show(screen) {
   renderProfileSelect(screen);
   selectTab({ setup: "settings", analysis: "analysis", explore: "explore", suggest: "suggest" }[screen] || "mods");
   $("#btn-rescan").hidden = screen !== "results";
-  $("#actionbar").hidden = screen !== "results";
+  $("#actionbar").hidden = screen !== "results" || picking;
+  $("#pickbar").hidden = screen !== "results" || !picking;
   for (const chip of [$("#chip-folder"), $("#chip-env")]) chip.hidden = screen === "setup" || !chip.textContent.trim();
   window.scrollTo(0, 0);
 }
@@ -230,13 +231,18 @@ const FILTERS = [
   { key: "changes", label: "ui.filter_changes", match: selectable },
   { key: "ok", label: "ui.filter_ok", match: m => m.s === "ok" },
   { key: "attention", label: "ui.filter_attention", match: isAttention },
+  { key: "off", label: "ui.filter_off", match: m => m.off, hideEmpty: true },
 ];
+const toggleable = m => !!m.file && m.s !== "unreadable";  // instalado y legible: se puede activar/desactivar
+let picking = false;
+const PICK = new Set();  // ids marcados en el modo "Activar o desactivar varios"
 const arrow = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4.2 1.8 8.4 6l-4.2 4.2-1-1L6.4 6 3.2 2.8z"/></svg>';
 
 let DATA = null, MODS = [], byName = {};
 let filter = "all", query = "", okOpen = false;
 
 function showResults(data) {
+  picking = false; PICK.clear();  // las filas cambian: lo marcado antes apuntaría a otros mods
   DATA = data;
   MODS = data.rows;
   byName = Object.fromEntries(MODS.filter(m => m.s !== "dep").map(m => [m.name, m]));
@@ -297,17 +303,25 @@ function sub(m) {
 function row(m) {
   const helpId = `help-${m.id}`;
   const action = m.s === "dep" ? t("ui.install_x", { name: m.name }) : t("ui.update_x", { name: m.name });
-  const cb = selectable(m)
+  const cb = picking
+    ? (toggleable(m) ? `<input class="check" type="checkbox" data-pick="${m.id}" ${PICK.has(m.id) ? "checked" : ""} aria-label="${esc(t("ui.pick_x", { name: m.name }))}">`
+      : `<span class="slot" aria-hidden="true"></span>`)
+    : selectable(m)
     ? `<input class="check" type="checkbox" data-id="${m.id}" ${m.checked ? "checked" : ""} aria-label="${esc(action)}" aria-describedby="${helpId}">`
     : `<span class="slot" aria-hidden="true"></span>`;
   const source = m.s === "manual" && m.url ? `<a href="${esc(m.url)}" data-external>${esc(t("ui.open_page"))}</a>` : esc(m.src);
   const help = t(`status_help.${m.s}`);
-  return `<div class="row ${m.s}">
+  const sw = toggleable(m)
+    ? `<button class="switch" type="button" role="switch" aria-checked="${!m.off}" data-toggle="${m.id}" aria-label="${esc(t("ui.toggle_label", { name: m.name }))}"><span aria-hidden="true"></span></button>`
+    : `<span aria-hidden="true"></span>`;
+  const off = m.off ? `<span class="tag off">${esc(t("ui.state_off"))}</span>` : "";
+  return `<div class="row ${m.s}${m.off ? " is-off" : ""}">
     ${cb}${logo(m)}
-    <div class="name"><div class="title" title="${esc(m.name)}">${esc(m.name)}</div>${sub(m)}</div>
+    <div class="name"><div class="title" title="${esc(m.name)}"><span class="title-text">${esc(m.name)}</span>${off}</div>${sub(m)}</div>
     ${versions(m)}
     <span class="badge ${m.s}" data-tip="${esc(help)}"><span class="dot" aria-hidden="true"></span>${esc(t(`status.${m.s}`))}<span class="sr-only" id="${helpId}">. ${esc(help)}</span></span>
     <span class="source">${source}</span>
+    ${sw}
   </div>`;
 }
 
@@ -320,10 +334,13 @@ function render() {
   const a = document.activeElement;
   const ds = (a && a.dataset) || {};
   const focusKey = (ds.f && `[data-f="${ds.f}"]`) || (ds.id && `[data-id="${ds.id}"]`)
+    || (ds.toggle && `[data-toggle="${ds.toggle}"]`) || (ds.pick && `[data-pick="${ds.pick}"]`)
     || ("ok" in ds && "[data-ok]") || ("all" in ds && "[data-all]") || ("clear" in ds && "#q") || null;
 
+  if (filter === "off" && !MODS.some(m => m.off)) filter = "all";  // ya no queda ninguno desactivado
   $("#filters").innerHTML = FILTERS.map(f => {
     const n = MODS.filter(f.match).length;
+    if (f.hideEmpty && !n) return "";
     return `<button type="button" data-f="${f.key}" aria-pressed="${f.key === filter}">${esc(t(f.label))} <span class="n">${n}</span></button>`;
   }).join("");
 
@@ -331,10 +348,10 @@ function render() {
   for (const g of GROUPS) {
     const items = MODS.filter(m => g.match(m) && visible(m));
     if (!items.length) continue;
-    const forced = filter === "ok" || query;
+    const forced = filter === "ok" || filter === "off" || query;
     const open = !g.collapsible || okOpen || forced;
     let extra = "";
-    if (g.key === "changes") {
+    if (g.key === "changes" && !picking) {
       const n = items.filter(m => m.checked).length;
       extra = `<label class="master"><input class="check" type="checkbox" data-all ${n === items.length ? "checked" : ""}> ${esc(t("ui.select_all"))}</label>`;
     } else if (g.collapsible && !forced) {
@@ -355,6 +372,73 @@ function render() {
   }
   if (focusKey) document.querySelector(focusKey)?.focus();
   summary();
+  renderPickbar();
+}
+
+/* ---------------------------------------------------------------- activar y desactivar */
+
+function flashNotice(text, bad = false) {
+  $("#notices").insertAdjacentHTML("afterbegin", `<li${bad ? ' class="bad"' : ""}>${esc(text)}</li>`);
+}
+
+// Activa o desactiva (renombra a .jar.disabled). Si una librería la usan mods activos, pregunta antes.
+async function setEnabled(ids, enabled, mode = "ask") {
+  const res = await api().mods_set_enabled(ids, enabled, mode);
+  if (res.reason === "dependents") { askDependents(ids, res); return false; }
+  if (!res.ok && res.message) { flashNotice(res.message, true); return false; }
+  for (const r of res.rows || []) if (MODS[r.id]) MODS[r.id].off = r.off;
+  if (res.also && res.also.length) flashNotice(t("toggle.also", { count: res.also.length, names: joinList(res.also) }));
+  for (const f of res.failed || []) flashNotice(t("toggle.failed", { name: f.name, message: f.message }), true);
+  render();
+  return true;
+}
+
+function askDependents(ids, res) {
+  const names = ids.map(i => MODS[i] && MODS[i].name).filter(Boolean);
+  openExDrawer(t("toggle.title"), joinList(names));
+  $("#ex-d-body").innerHTML = `<p class="ex-note warn">${esc(res.message)}</p>`
+    + `<ul class="an-list">${res.names.map(n => `<li><span class="an-name">${esc(n)}</span></li>`).join("")}</ul>`
+    + `<p class="an-hint">${esc(t("toggle.hint"))}</p>`;
+  $("#ex-d-foot").innerHTML = `<button class="btn-secondary" type="button" id="tg-cancel">${esc(t("ui.cancel"))}</button>
+    <button class="btn-secondary" type="button" id="tg-only">${esc(t("toggle.only", { name: joinList(names) }))}</button>
+    <button class="btn-primary" type="button" id="tg-with">${esc(t("toggle.with"))}</button>`;
+  $("#tg-cancel").addEventListener("click", closeExDrawer);
+  for (const [id, mode] of [["#tg-only", "only"], ["#tg-with", "with"]]) {
+    $(id).addEventListener("click", async () => { closeExDrawer(); if (await setEnabled(ids, false, mode)) endPicking(); });
+  }
+}
+
+function startPicking() {
+  picking = true; PICK.clear();
+  $("#actionbar").hidden = true;
+  render();
+  document.querySelector("[data-pick]")?.focus();
+}
+
+function endPicking() {
+  if (!picking) return;
+  picking = false; PICK.clear();
+  $("#actionbar").hidden = $("#screen-results").hidden;
+  render();
+}
+
+function renderPickbar() {
+  const bar = $("#pickbar");
+  bar.hidden = !picking || $("#screen-results").hidden;
+  $("#btn-pick").setAttribute("aria-pressed", String(picking));
+  if (!picking) return;
+  const marked = [...PICK].map(i => MODS[i]).filter(Boolean);
+  const on = marked.filter(m => !m.off), off = marked.filter(m => m.off);
+  $("#pick-count").textContent = t("ui.pick_count", { count: marked.length });
+  $("#pick-enable").disabled = !off.length;
+  $("#pick-disable").disabled = !on.length;
+  $("#pick-enable").textContent = off.length ? `${t("ui.pick_enable")} ${off.length}` : t("ui.pick_enable");
+  $("#pick-disable").textContent = on.length ? `${t("ui.pick_disable")} ${on.length}` : t("ui.pick_disable");
+}
+
+async function pickApply(enabled) {
+  const ids = [...PICK].filter(i => MODS[i] && MODS[i].off === enabled);
+  if (ids.length && await setEnabled(ids, enabled)) endPicking();
 }
 
 function summary() {
@@ -512,6 +596,8 @@ document.addEventListener("click", async e => {
   if (el.closest("[data-go-settings]")) { openSetup("settings"); return; }
   const cl = el.closest("[data-cl]");
   if (cl) { openChangelog(Number(cl.dataset.cl), cl); return; }
+  const sw = el.closest("[data-toggle]");
+  if (sw) { const m = MODS[Number(sw.dataset.toggle)]; if (m) setEnabled([m.id], m.off); return; }
 });
 
 /* ================================================================ changelog */
@@ -591,6 +677,7 @@ document.addEventListener("change", e => {
     render(); return;
   }
   if (el.dataset.id !== undefined && el.classList.contains("check")) { setChecked(MODS[el.dataset.id], el.checked); render(); }
+  if (el.dataset.pick !== undefined) { const i = Number(el.dataset.pick); el.checked ? PICK.add(i) : PICK.delete(i); renderPickbar(); }
 });
 
 document.addEventListener("keydown", e => {
@@ -660,7 +747,7 @@ async function switchProfile(id) {
   if (!res.ok) { $("#prof-help").className = "help bad"; $("#prof-help").textContent = res.message; renderProfileSelect(); return; }
   setState(res.state);
   // Lo revisado, analizado y buscado era del perfil anterior.
-  DATA = null; MODS = []; modsScreen = null; anSelected = null;
+  DATA = null; MODS = []; modsScreen = null; anSelected = null; picking = false; PICK.clear();
   EX.cards = []; EX.started = false; BASKET.clear(); renderBasket();
   $("#ex-results").innerHTML = ""; $("#ex-status").textContent = ""; $("#ex-more").hidden = true;
   SG = { loaded: false, result: null };
@@ -1200,6 +1287,7 @@ function renderAnalysis(d) {
   if (!ready) return;
   anData = d;
   const T = d.totals;
+  if (T.disabled) $("#an-deck").textContent = `${t("an.deck")} ${t("an.disabled", { count: T.disabled })}`;
 
   $("#an-cards").innerHTML = [
     anCard(t("an.card_total"), t("an.files", { count: T.mods }),
@@ -1303,7 +1391,15 @@ function wireTabs() {
   });
 }
 
+function wirePick() {
+  $("#btn-pick").addEventListener("click", () => (picking ? endPicking() : startPicking()));
+  $("#pick-cancel").addEventListener("click", endPicking);
+  $("#pick-enable").addEventListener("click", () => pickApply(true));
+  $("#pick-disable").addEventListener("click", () => pickApply(false));
+}
+
 function wire() {
+  wirePick();
   wireTabs();
   wireSuggest();
   wireModlist();
